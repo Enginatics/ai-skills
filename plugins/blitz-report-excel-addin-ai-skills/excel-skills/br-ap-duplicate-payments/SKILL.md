@@ -1,0 +1,408 @@
+---
+name: br-ap-duplicate-payments
+description: >
+  Find duplicate and overpaid Oracle EBS Accounts Payable invoices/payments in Excel: have the
+  br-run-reports skill extract the AP invoice universe, fuzzy-match it for duplicate-entry
+  patterns (same supplier + amount, re-keyed invoice numbers, transposed digits, duplicate vendor
+  masters, cross-OU double entry), separate recoverable (both paid) from preventable (one still
+  open), and build a ranked recovery worklist with $-at-risk. Use when the user asks to find
+  duplicate payments, duplicate invoices, overpayments, recover overpaid cash, or an AP recovery audit.
+# Trigger: Slash command + auto
+---
+
+# AP Duplicate Payment Recovery (br-ap-duplicate-payments)
+
+> 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude "no Oracle EBS / Blitz connector is set up" (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill("br-run-reports")`.
+
+
+> **Performance:** Read `br-analytics-standards` at the start of every run
+> (`read_skill("br-analytics-standards")`). All pipeline steps must follow those rules.
+> Target runtime: **Standard run under 6 minutes**. There is no Step-0 depth prompt here: the only
+> optional work is **Step 5** (payment confirmation — an extra extract), which is already opt-in, so
+> just don't volunteer it. **The real cost driver is the lookback window**, because pair generation is
+> quadratic within a supplier group — doubling the window roughly quadruples the matching. Surface
+> that lever *after* Step 1b, when you know the actual universe size (see Step 1b).
+
+Produce an AP duplicate-payment recovery worklist in one Excel workbook. You own the orchestration,
+the match logic, the recoverable-vs-preventable split, and the written recommendations; the
+specialist skills do the extraction and the dashboard build. Run steps **in order**, on separate
+turns, keeping every intermediate sheet so the user can audit each candidate pair.
+
+**Requires:** br-run-reports (extraction). **Optional:** br-anomaly-detection (duplicate-scan
+engine — if it doesn't fire, run the match rules inline per Step 3); br-data-dashboard (dashboard
+build — if it doesn't fire, build inline per Step 6).
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is performed by the **br-run-reports**
+skill, which owns add-in connection, authentication, asynchronous execution, completion polling, and
+deterministic cell population.
+- Never call `br_*` add-in functions directly.
+- Never rename the result sheet, read its values, sum a column, or start any analysis **until
+  extraction is confirmed complete** — touching the workbook while the add-in's run is still in
+  flight can stall it and the run will never finish.
+- Your job is only: (1) ask br-run-reports to fetch the data, then (2) once it has fully landed,
+  match, score, and present it.
+
+**This skill is read-and-recommend only.** It does NOT execute any fix — it does not place a hold,
+raise a supplier credit, void a payment, or file a claim. It produces an evidenced candidate list
+and the recommended action per candidate; recovering the cash is a separate, human-approved step
+(closed-loop is on the roadmap).
+
+> **Disposition discipline:** a flagged pair is a **candidate**, not a confirmed duplicate. Oracle
+> Payables blocks an identical (supplier, invoice number) re-entry, so *true* exact duplicates are
+> rare — the leak is **near**-duplicates (re-keyed numbers, transposed digits, duplicate vendor
+> masters, cross-OU entry). Always present the evidence (both invoice ids, the rule, the $) and let
+> a human confirm before any recovery. Never assert "this was paid twice" — say "candidate, rule Rn".
+
+## When to use
+"Find duplicate payments", "did we pay any invoice twice", "duplicate invoice detection", "AP
+overpayment / recovery audit", "are we about to pay a duplicate", "recover overpaid cash from
+suppliers". For a single AP report with no matching/analysis, use br-run-reports directly.
+
+## Inputs (collect up front)
+- **Operating Unit** *or* **Ledger** (required) — ask if not supplied.
+- **Lookback window** — an Invoice Date From/To range (default: the last 24 months). A wider window
+  finds more but runs slower; let the user widen it.
+- *Optional:* Supplier filter (scope to one vendor); materiality threshold (default **$100** — pairs
+  whose exposure is below this are suppressed from the headline worklist).
+- *Optional:* "also confirm which were actually paid" → run the paid-confirmation report (Step 5).
+
+## Reports used  (authoritative names — do NOT broad-search for them)
+These exact report names are known. When you ask br-run-reports to run one, pass the **documented
+name directly** — do NOT run a `br_report_list_external` discovery search first. Inspect parameters
+only if you need an exact LOV spelling. **Fallback:** only if a run returns `#BLITZ_REPORT_NOT_FOUND`
+(the instance renamed it, or the module isn't installed) do a name search. If a run returns a bare
+`ERROR: ERROR`, the param names didn't match — have br-run-reports inspect params
+(`br_report_params_external`) and adapt, then retry; do NOT abandon the run.
+
+| Report (exact name) | Run with | Role |
+|---|---|---|
+| `AP Invoices and Lines` | **Operating Unit** (or Ledger) + **Invoice Date From/To** (the lookback) + **Display Level = Headers** (the default → one row per invoice). Leave Payment Status blank so **both open and paid** invoices come back (we need both to tell recoverable from preventable). | **The candidate universe** — the match runs over this. Payables (always present) |
+| `AP Invoice Payments` *(optional, Step 5)* | **Operating Unit** (or Ledger) + Payment Date / Accounting Date range overlapping the lookback | Confirms a candidate was **actually disbursed** (→ recoverable $); also carries **`PAYMENTS_PER_INVOICE`** (a built-in same-invoice-paid-twice signal) and **`DOCUMENT_NUMBER`** (the check/payment number to cite). |
+
+> **Run with `Display Level = Headers` (the report's default)** → `AP Invoices and Lines` returns
+> **one row per invoice** (header grain), so no manual line-collapse is needed. Verified output columns
+> (r12, parsed): `SUPPLIER`, `SUPPLIER_NUMBER`, `SUPPLIER_SITE`, `INVOICE_NUM`, `INVOICE_DATE`,
+> `INVOICE_AMOUNT`, `AMOUNT_PAID`, `INVOICE_CURRENCY_CODE`, `INVOICE_PAYMENT_STATUS`, `INVOICE_STATUS`,
+> `INVOICE_TYPE`, `INVOICE_CANCELLED_DATE` / `INVOICE_CANCELLED_AMOUNT`, `OPERATING_UNIT`, `INVOICE_ID`.
+> (If a customer instance defaults Display Level to a line level, collapse to one row per `INVOICE_ID`
+> before matching.)
+
+---
+
+## CONFIG  — edit to match the customer; logic below reads from here
+
+### Normalisation (compute once, before matching)
+Per invoice (header grain), derive — using the verified columns:
+- **`supplier_key`** = **`SUPPLIER_NUMBER`** (the unique vendor number) when present, else
+  `UPPER(TRIM(SUPPLIER))`. `SUPPLIER_NUMBER` is the reliable key; the name fallback lets R5 catch the
+  *same* vendor split across two supplier records.
+- **`norm_invnum`** = **`INVOICE_NUM`** uppercased, with spaces and punctuation (`-`, `/`, `.`, `#`)
+  removed and **leading zeros** stripped. Strip a leading/trailing alpha token **only when the numeric
+  core left behind is still ≥ 4 digits** (`INV0012345` → `12345`, `0012345` → `12345`, `12345-A` →
+  `12345`). **🚨 Never strip the alpha when it would leave a tiny core** — `STA-01`, `STAP-01`,
+  `STAADJJUL-01`, `STAADJAUG-01` must stay **distinct** (their numeric core is just `01`), NOT all
+  collapse to `01`; over-collapsing makes recurring monthly adjustments look like duplicates (a real
+  false-positive seen in a run). Keep the genuine identifying core so a re-keyed number matches **without
+  over-collapsing distinct invoices**.
+- **`amount`** = **`INVOICE_AMOUNT`** (header) in a single currency. **Only compare amounts within the
+  same `INVOICE_CURRENCY_CODE`** — never match across currencies. Keep the sign so a credit memo
+  (negative) is never matched as a duplicate of a positive invoice.
+
+### Match rules → confidence  (each candidate PAIR carries the highest rule it matches)
+Generate **pairs** within the same `supplier_key` (and, for R6, across OUs). A pair is two **distinct
+invoice ids**.
+| Rule | Match condition (same currency throughout) | Confidence |
+|---|---|---|
+| **R1** | same `supplier_key` + same `amount` + same **invoice date** + **different** invoice id | **Very high** |
+| **R2** | same `supplier_key` + same `amount` + invoice dates within **N days** (default 7) + different invoice id | **High** |
+| **R3** | same `supplier_key` + same **`norm_invnum`** + different invoice id (amount may differ — re-keyed/partial) | **High** |
+| **R4** | same `supplier_key` + same `amount` + invoice numbers a **typo/transposition apart** (Levenshtein ≤ 2 on `norm_invnum`) | **Medium** |
+| **R5** | **different** supplier record but same normalised supplier name/tax id + same `amount` + same `norm_invnum` (duplicate **vendor master**) | **Medium** |
+| **R6** | same `amount` + same `norm_invnum` + same invoice date across **different Operating Units** (cross-OU double entry) | **Medium** |
+Anything matching several rules takes the **highest** confidence; record every rule it hit.
+
+### Recoverable vs preventable
+**🚨 The "Paid" signal is `AMOUNT_PAID`, NOT the `INVOICE_STATUS` column.** `INVOICE_STATUS` is the
+**validation** status (`Validated` / `Never Validated` / `Cancelled`) — it is **never** the literal value
+"Paid", so testing `INVOICE_STATUS === 'Paid'` classifies *every* invoice as Open and forces **all** pairs
+to Preventable (a real bug seen in a run: 0 recoverable on a universe that contained paid invoices). Many
+instances' `AP Invoices and Lines` output carries **no payment-status column at all** — derive Paid from
+the amounts: an invoice is **Paid** when `AMOUNT_PAID ≥ INVOICE_AMOUNT` (fully paid), **Open** otherwise.
+Use `INVOICE_PAYMENT_STATUS` only if the report actually returned that column.
+- **Recoverable** — **both** invoices in the pair are **Paid** (`AMOUNT_PAID ≥ INVOICE_AMOUNT`, or
+  `INVOICE_PAYMENT_STATUS` = Paid when that column is present). Real cash is out the door → recovery
+  (supplier credit / refund claim). `$ exposure` = the **lesser** of the two paid amounts.
+- **Preventable** — at least one invoice is still **Open/Unpaid** (`AMOUNT_PAID < INVOICE_AMOUNT`).
+  No loss yet → **place a hold** before the second payment leaves. `$ exposure` = the open invoice's amount.
+- **Already-resolved** — one of the pair is **cancelled** (`INVOICE_CANCELLED_DATE` set /
+  `INVOICE_CANCELLED_AMOUNT`) or fully credited/voided (net ≈ 0) → exclude from the worklist (note the count).
+- **🚨 Headline $ = DISTINCT invoices, never Σ over pairs.** When you total Recoverable $ / Preventable $
+  for the dashboard, dedupe by `INVOICE_ID` and sum each flagged **invoice once** — NOT the per-pair
+  `$ exposure` added up. In a same-amount cluster one invoice appears in many pairs, so summing per-pair
+  exposure **multiplies** it (a 50-invoice cluster → 1,225 pairs → ~24× overstatement); the live run's
+  $120.9M was inflated exactly this way. The pair list still shows every relationship; the **$ rolls up
+  once per invoice** (see `distinctInvoiceExposure` below).
+
+### False-positive guards (apply BEFORE ranking — demote, don't delete)
+- **🚨 Same-amount cluster (ERS / auto-invoicing) — the #1 false-positive source.** When a
+  `supplier_key` + currency + `amount` group has **≥3** members, it is a **systematic** pattern
+  (Evaluated-Receipt-Settlement auto-invoicing, installments, or a recurring charge), **NOT** a pile of
+  duplicates → tag `Same-amount cluster`, demote **all** its amount-rule pairs (R1/R2/R4) to an audit
+  tab, keep them out of the headline. **🚨 Do NOT gate this on an even cadence / date-variance test** —
+  ERS invoices for repeated identical deliveries land on the **same day** (date gaps ≈ 0), so a cadence
+  test silently lets them through. That exact hole produced a **$120.9M / 1,321-pair false-positive
+  headline** in a live run (supplier "Advanced Network Devices", invoice numbers `ERS-13578-224817`,
+  `ERS-13588-224994`, …). **Group size ≥ 3 is the trigger, period.** A genuine duplicate is the
+  **2-member** same-amount pair, or an *extra* hit that breaks an otherwise-clean cluster — present
+  those; demote the clusters. (For the amount rules this subsumes the recurring guard below.)
+- **🚨 ERS-vs-ERS amount pair (the 2-member ERS hole the ≥3 cluster guard misses).** Evaluated-Receipt
+  -Settlement invoices carry **auto-generated numbers** like `ERS-23693-224957`. Two *distinct* ERS
+  numbers are two distinct **receipts**, so an **amount-rule (R1/R2/R4)** pair of two distinct ERS
+  numbers is a false positive **by construction** — demote it to the audit tab. The cluster guard above
+  only catches groups of **3+**, so a **2-member** ERS pair (`ERS-…224957` vs `ERS-…224958`, consecutive
+  auto-numbers, same amount → caught by R4) slips through and pollutes the Preventable headline (a live
+  run surfaced **76** of these reaching the orchestrator cross-check). **Demote R1/R2/R4 ERS-vs-ERS
+  pairs; keep R3** (an *exact* same normalised number even on ERS is a real concern). Use `ersAmountPair`
+  (CONFIG JS). This is a targeted auto-numbering signature, not a blanket invoice-number-prefix
+  heuristic — handle it **here**, upstream, not as an ad-hoc split at cross-check time.
+- **Recurring / installment series:** same `supplier_key` + same `amount` with **≥3** occurrences
+  (rent, lease, subscription, payroll-style) → tag `Recurring pattern`, drop from the duplicate
+  worklist (keep on an audit tab). An even cadence is a strong *hint* but is **NOT** required (and never
+  add a variance/cadence gate — a same-day cluster would slip through it; see the same-amount cluster
+  guard above). A genuine duplicate is an *extra* hit off-pattern. **🚨 Apply this guard to ALL rules
+  INCLUDING R3 — do NOT exempt R3.** Recurring monthly invoices commonly share a normalised number
+  (each month's `…-01`), so R3 is exactly the rule that catches them; exempting R3 mislabels every
+  monthly series as a duplicate (a real false-positive seen in a run with Staples `STAADJJUL-01` /
+  `STAADJAUG-01`).
+- **Partial payments / split invoices:** same invoice paid in instalments is one liability — R3 with
+  amounts that **sum** to a single sibling invoice is a split, not a duplicate.
+- **Credit memos / debit memos:** negative-amount docs **net** against their positive twin — never a
+  duplicate.
+- **Materiality:** pairs with `$ exposure` < the threshold drop off the headline worklist (kept on
+  the full tab).
+- **🚨 Plausibility gate — present, don't assert.** If the flagged candidate pairs exceed **~10% of the
+  invoice universe**, the matcher is surfacing a systematic pattern, not a duplicate epidemic — report
+  "high candidate volume ({n} pairs over {universe} invoices) — likely ERS/recurring, review before
+  treating as duplicates" and do **NOT** headline a confident "$X about to be paid twice". A real
+  duplicate rate is well under 1%; the live run's 1,321 pairs were ~36% of the universe.
+
+### Canonical JS — COPY THESE VERBATIM (don't re-derive)
+These are the JS ports of the offline-tested primitives in
+`tools/skill_tests/skill_logic.py`. The bugs that cost the most (disposition on the
+wrong column, `norm_invnum` over-collapse, the ERS same-amount blowup, the per-pair
+exposure double-count) all came from re-deriving this logic live — copy these instead.
+```js
+// Normalised invoice number: strip a leading/trailing alpha token ONLY when the
+// numeric core left is >= 4 digits, so STA-01 / STAADJJUL-01 stay DISTINCT.
+function normInvNum(s) {
+  if (!s) return "";
+  let n = String(s).toUpperCase().replace(/[\s\-/.#]/g, "");
+  let m = n.match(/^([A-Z]+)(\d+)$/);
+  if (m && m[2].replace(/^0+/, "").length >= 4) n = m[2];
+  m = n.match(/^(\d+)([A-Z]+)$/);
+  if (m && m[1].replace(/^0+/, "").length >= 4) n = m[1];
+  return n.replace(/^0+/, "");
+}
+// Paid signal is AMOUNT_PAID, NOT the validation status column (which is never "Paid").
+function disposition(inv) {
+  if (String(inv.invoiceStatus || "").toUpperCase() === "CANCELLED") return "Cancelled";
+  const amt = Number(inv.invoiceAmount) || 0, paid = Number(inv.amountPaid) || 0;
+  return (amt > 0 && paid >= amt) ? "Paid" : "Open";   // fully paid
+}
+// Same-amount cluster guard: a supplier+currency+amount group of >=3 is SYSTEMATIC
+// (ERS auto-invoicing / installments / recurring), NOT duplicates — demote it.
+// NO cadence/variance test: same-day ERS clusters have date gaps 0 and slip a cadence
+// check (the exact hole behind the live $120.9M / 1,321-pair false positive).
+function sameAmountClusterKeys(invoices) {
+  const g = {};
+  for (const inv of invoices) {
+    const k = inv.supplierKey + "|" + inv.currency + "|" + (Number(inv.invoiceAmount) || 0).toFixed(2);
+    (g[k] = g[k] || []).push(inv);
+  }
+  return new Set(Object.keys(g).filter(k => g[k].length >= 3));
+}
+// In the matcher, before emitting an amount-rule (R1/R2/R4) pair, skip it when its
+// amount group is a cluster:  if (clusters.has(supplierKey+"|"+currency+"|"+amt)) continue;
+// (R3, the number rule, is NOT cluster-gated — it keeps the recurring guard instead.)
+
+// Headline $ at risk = DISTINCT flagged invoices, never the per-pair exposure summed
+// (an invoice in K pairs would be counted K times — the live $120.9M inflation).
+function distinctInvoiceExposure(pairs) {
+  const seen = new Set(); let total = 0;
+  for (const p of pairs) for (const inv of [p.a, p.b])
+    if (!seen.has(inv.invoiceId)) { seen.add(inv.invoiceId); total += Math.abs(Number(inv.invoiceAmount) || 0); }
+  return total;
+}
+// Two DISTINCT ERS auto-numbers = two distinct receipts, so an amount-rule (R1/R2/R4)
+// pair of them is a false positive — demote it (catches the 2-member ERS pairs the
+// >=3 cluster guard misses). KEEP R3 (exact same normalised number even on ERS).
+const isErsNumber = s => /^ERS[-\s]/.test(String(s || "").toUpperCase());
+function ersAmountPair(a, b) {  // call only for amount-rule (R1/R2/R4) pairs
+  const na = String(a.invoiceNum || ""), nb = String(b.invoiceNum || "");
+  return isErsNumber(na) && isErsNumber(nb) && na.toUpperCase() !== nb.toUpperCase();
+}
+```
+
+### Output sheet names & tab order (left to right)
+`AP_Dup_Recovery` (dashboard, first), `Dup_Candidates` (every pair, ranked), `AP_Invoices` (the
+extracted universe — its report name), [`AP_Payments`] (paid-confirmation, if Step 5 ran).
+
+---
+
+## Pipeline
+
+### Step 1 — Extract  (DELEGATE to br-run-reports — do not run it yourself)
+Ask **br-run-reports** to run **"AP Invoices and Lines"** with Operating Unit (or Ledger) = {input}
+and Invoice Date From/To = {lookback}, Payment Status left blank. Pass the exact name directly. While
+it runs, do **nothing** — no add-in calls, no sheet renames, no reads.
+- **Your FIRST add-in action is the run itself — do NOT `br_report_list_external`-search.** "AP
+  Invoices and Lines" is the authoritative name (see Reports used). A discovery search ("AP duplicate
+  invoices…", then "AP invoices") wastes 2+ round-trips; it is only the `#BLITZ_REPORT_NOT_FOUND` fallback.
+- **If the user gave the Operating Unit / Ledger value (e.g. "Vision Operations"), pass it as-is — do
+  NOT look up its LOV first.** Inspect params (`br_report_params_external`) only on a bare `ERROR: ERROR`
+  (param-name mismatch) or to resolve an exact LOV spelling you don't already have.
+- `#BLITZ_NOT_CONNECTED` → relay it, ask the user to connect via the Blitz Report ribbon, retry.
+- **Fallback:** if the hand-off doesn't fire or the data never lands, tell the user to run "AP
+  Invoices and Lines" themselves for the OU + date range, then ask you to analyse it; resume at 1b.
+
+### Step 1b — Anchor  *(single `execute_office_js` call)*
+With `Display Level = Headers` the rows are already one-per-invoice. In one call: locate the columns
+(`SUPPLIER`, `SUPPLIER_NUMBER`, `INVOICE_NUM`, `INVOICE_DATE`, `INVOICE_AMOUNT`, `INVOICE_CURRENCY_CODE`,
+`INVOICE_PAYMENT_STATUS`, `OPERATING_UNIT`, `INVOICE_ID`), record the **invoice count** and **SUM of
+`INVOICE_AMOUNT`** as the reconciliation anchor, and return both. (If the instance returned line grain,
+collapse to one row per `INVOICE_ID` first.) **If zero invoices:** report "no AP invoices for {OU} in
+{window}" and stop.
+- **Report the universe size back to the user and name the window as the lever** — matching is
+  quadratic within a supplier group, so on a large universe say so before Step 3 rather than after a
+  slow run: e.g. "{n} invoices over {window} — matching will take a few minutes; narrow the window if
+  you want a faster first pass." Do **not** silently narrow it yourself: a duplicate 18 months apart
+  is exactly what a 24-month window exists to catch, so shortening it is the user's call.
+- **🚨 `INVOICE_ID` is the FINAL column of `AP Invoices and Lines` — at the far right (~column 170),
+  NOT inside the first ~52 columns.** Read the WHOLE header row (e.g. `A2:GZ2`) and find `Invoice Id`
+  **by name**, then read that column for every invoice. Reading only `A:AZ` misses it. **🚨 NEVER
+  substitute the worksheet row number for `INVOICE_ID`** (`invoiceId: String(rowNum)`): the dup
+  dashboard would still look right, but the orchestrator's cross-check joins the pay-run's REAL
+  `INVOICE_ID`s against these, so a row-index surrogate makes the join match **nothing** and report a
+  false **"CLEAN"** — a real run did exactly this (0 RED when 89 open duplicates were sitting in the
+  pay-run). The id values must be the real Oracle `Invoice Id` (large integers like `242901`), not
+  `3, 4, 5, …`.
+
+### Step 2 — Normalise  *(single `execute_office_js` call)*
+In one call on the header-grain set: add the `supplier_key`, `norm_invnum`, and currency-tagged
+`amount` columns (per CONFIG), writing all headers + the seed formula row + `autoFill` to the last
+row in the same block (br-analytics-standards Rule 4). **Do NOT apply Text ("@") format to formula
+cells** (it stops them evaluating); text-format only literal label cells (Rule "Excel correctness" #1).
+
+### Step 3 — Match  *(single `execute_office_js` call)*  (delegate the scan to br-anomaly-detection if it fires; else inline)
+In one call: **first compute `sameAmountClusterKeys` (CONFIG canonical JS) and demote every
+amount-rule (R1/R2/R4) pair whose amount group has ≥3 members** — without this the ERS clusters
+explode (the $120.9M false positive). **Also demote any amount-rule pair where `ersAmountPair(a,b)`
+is true** (two distinct ERS auto-numbers = two receipts — the 2-member ERS pairs the cluster guard
+misses; keep R3). Then apply R1–R6 within each `supplier_key` (and across OUs for
+R6), build the **candidate pair** array (**`INVOICE_ID` A, `INVOICE_ID` B** — the actual `INVOICE_ID`
+*column values*, NOT the worksheet row index; this is the exact key the orchestrator's cross-check
+joins on — supplier, both invoice numbers, both dates, both amounts, currency, rule(s) hit,
+confidence, `$ exposure`), apply the remaining false-positive guards (tag recurring / split /
+credit-memo, suppress sub-materiality), sort by `$ exposure` descending, create `Dup_Candidates`, and
+write every pair with headers. Return the candidate-pair count and the **distinct-invoice** $ exposure
+(`distinctInvoiceExposure` — NOT the per-pair sum), plus the candidate rate ({pairs}/{universe}) so
+the plausibility gate can fire. Use the same currency on both sides of every comparison.
+- **Build mechanics (learned on a real run — the universe is large, so SPLIT the call):** reading the
+  whole result range (1400+ rows × 50+ cols) into JS *and* writing in one call hits the office-js
+  memory ceiling → `GeneralException` at `Range.values` with no row location. Do it in **two** calls
+  (br-analytics-standards #5): call 1 reads ONLY the columns listed in Step 1b (never `usedRange.values`),
+  builds the candidate-pair array, and `blobs.setJSON("ap_dup_pairs", pairs)`; call 2 `blobs.getJSON`s
+  it and writes `Dup_Candidates` in a single `.values =` (not row-by-row, not chunk-and-sync). **Before
+  the write**, pre-set the invoice-number / `supplier_key` / invoice-id columns to text
+  (`range.numberFormat = "@"`) and apostrophe-prefix any string matching `/^[=+\-@]/` (br-analytics-standards
+  #4) — an invoice number like `"=-"` otherwise throws the whole write and forces a binary-search hunt.
+  **Write the Invoice Date A/B columns as the raw serials + a date `numberFormat`** (br-analytics-standards
+  #8) — do **NOT** `formatDate()`-stringify them (a live run wrote `"13-Mar-2009"` text that can't sort
+  or filter as a date).
+
+### Step 4 — Recoverable vs preventable split  *(part of Step 3's call, or one `execute_office_js` call)*
+Tag each surviving pair **Recoverable** (both Paid), **Preventable** (≥1 Open), or
+**Already-resolved** (one credited/voided → exclude). Use the Payment Status carried from the
+universe. Return the recoverable $ and preventable $ subtotals **as distinct-invoice sums**
+(`distinctInvoiceExposure`), never the per-pair exposure added up (see the distinct-$ rule in CONFIG).
+
+### Step 5 — Confirm the cash actually left  *(OPTIONAL add-on — only if the user asks, or for the top recoverable pairs)*
+Delegate to br-run-reports to run **"AP Invoice Payments"** for the OU + overlapping date range →
+It joins onto `Dup_Candidates`, so **adding it later costs no re-extract of the universe** — verify
+`Dup_Candidates` is unchanged, extract only `AP Invoice Payments`, attach the evidence, then re-run
+Steps 6–8. Never point a dashboard KPI at `AP_Payments` unless this step ran.
+`AP_Payments` (columns include `SUPPLIER_NUMBER`, `INVOICE_NUMBER`, `PAYMENT_DATE`, `DOCUMENT_NUMBER`
+= the check/payment number, `PAYMENT_AMOUNT`, and **`PAYMENTS_PER_INVOICE`**). Join the **Recoverable**
+candidates on `SUPPLIER_NUMBER` + `INVOICE_NUMBER` to attach the **`DOCUMENT_NUMBER` and `PAYMENT_DATE`**
+— the evidence a recovery claim needs. **`PAYMENTS_PER_INVOICE` > 1 is itself a strong
+same-invoice-paid-twice signal** — surface it. A recoverable pair with no matching payment row is
+**downgraded to Preventable** (status said Paid but no disbursement found — investigate). Keep this a
+targeted join on the top pairs, not a full re-scan.
+
+### Step 6 — Dashboard  *(two `execute_office_js` calls: data then charts)*  (delegate to br-data-dashboard if it fires; else inline)
+**Call 1 — all data sections** on a NEW `AP_Dup_Recovery` sheet at **position 0**: a headline KPI
+band (**Total candidate $**, **Recoverable $** + pair count, **Preventable $** + pair count,
+candidates by confidence); a Pareto of `$ exposure` **by rule** (R1–R6); **top suppliers** by
+recoverable $; and the **top-N recovery worklist** (the highest-$ Recoverable pairs with both
+invoice numbers, dates, amounts, rule, and — if Step 5 ran — the check number). Every KPI is a
+formula referencing `Dup_Candidates` (COUNTIFS/SUMIFS) so it refreshes on re-run.
+**Call 2 — charts only:** a bar chart of $ by rule and a bar chart of top suppliers.
+- **Build mechanics (house standard):** build only on the new sheet; do **not** rename the report
+  sheet (KPIs link to it / to `Dup_Candidates`). Do **NOT** use a multi-row `copyToRange` to fill the
+  worklist rows — write each row's formula explicitly. Apply the autofilter with
+  `sheet.autoFilter.apply(headerRange)` — `range.autoFilter()` is not a function and throws. After
+  building, scan **beyond** the dashboard range, clear stray cells, widen amount columns (and the chart
+  source columns) so values don't render as `######`, and size the charts in the **same** charts call so
+  no label is clipped — don't leave a width/sizing fix for a second pass.
+
+### Step 7 — Recommendations & narrative  *(single `set_cell_range` call)*
+Write all ≤6 bullets on `AP_Dup_Recovery` in one call: total recoverable $ and the single biggest
+recoverable pair (supplier + $ + rule); how many preventable pairs are still **open** and should be
+**held now** before the second payment runs; the supplier(s) with the most exposure; any **duplicate
+vendor master** (R5) to merge; how many were demoted as recurring/split (so the user trusts the
+filter); and the recommended next action per bucket (raise a supplier credit/refund claim for
+recoverable; place an AP invoice hold for preventable; merge the duplicate vendor).
+
+Then, in your reply (not on the sheet), if Step 5 was skipped, offer it in one line and say it needs
+no re-extract of the universe — e.g. "Want the check numbers and payment dates attached to the top
+recoverable pairs as claim evidence? I can add that on this data."
+
+### Step 8 — Arrange tabs + final validation  *(single `execute_office_js` call + one read)*
+Reorder tabs to `AP_Dup_Recovery`, `Dup_Candidates`, `AP_Invoices`, [`AP_Payments`]; delete the
+`blitz_` helper sheet; activate `AP_Dup_Recovery`.
+**Then the one permitted verification read:** confirm the dashboard's total candidate $ and pair
+count equal the `Dup_Candidates` totals, and that recoverable + preventable + already-resolved =
+all candidates. This is the only explicit re-read outside Step 1b.
+
+---
+
+## Validation (before declaring done)
+- **Reconcile:** dashboard candidate count/$ = `Dup_Candidates` totals; recoverable + preventable +
+  already-resolved partitions the candidate set exactly.
+- **Distinct-$, not pair-sum:** the headline Recoverable $ / Preventable $ are **distinct-invoice**
+  sums (`distinctInvoiceExposure`), so the total can never exceed the universe's open/paid $.
+- **Plausibility:** candidate pairs are **< ~10% of the universe**; above that, the headline says
+  "high volume — likely systematic, review", not a confident "$X about to be paid twice".
+- **Cluster guard fired:** no `supplier_key`+currency+`amount` group of **≥3** survives as headline
+  amount-rule pairs (they're tagged `Same-amount cluster` on the audit tab).
+- **Pair integrity:** every pair references **two distinct invoice ids** of the **same currency**;
+  no pair is a credit-memo-vs-its-own-positive.
+- **Filter sanity:** spot-check 2–3 demoted `Same-amount cluster` / `Recurring pattern` series (≥3
+  same-amount) and 2–3 top Recoverable pairs by reading their rows — confirm the rule genuinely holds.
+- **Dates are real dates** (serials + date `numberFormat`), not `formatDate()` text strings.
+- **No `######`** and no stray cells outside the dashboard range.
+
+## Re-run / refresh
+Never re-extract when you don't have to:
+- **"Confirm which actually paid" / "get me the check numbers"** (same universe) — run only Step 5
+  (which extracts `AP Invoice Payments` alone), then Steps 6–8. Do NOT re-run `AP Invoices and Lines`.
+- **"Change the materiality threshold"** (same universe) — re-run only Steps 3–4 and 6–8.
+- **"Widen the window" / "check supplier X" / "rebuild"** (new universe) — re-drive from Step 1 with
+  the new scope, rebuilding the same set of sheets the previous run produced.
+
+## Closed-loop (roadmap, not executed here)
+Placing a hold on an open **preventable** invoice is deliverable via a Blitz Upload (AP invoice
+hold); raising the supplier credit / refund claim for a **recoverable** pair, and merging a duplicate
+vendor master, are human-approved actions. This skill produces the evidenced worklist; a human
+recovers the cash.

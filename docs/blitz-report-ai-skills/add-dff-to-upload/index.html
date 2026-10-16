@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Add DFF Handling to an Upload - Blitz Report Development</title><meta name="description" content="Add descriptive flexfield (DFF) handling to a Blitz Upload - context and attribute columns with context-dependent lists of values, segment prompts as column headers, Success SQL, and the PL/SQL that merges untouched segments, validates the DFF and converts display values to ids before the API call.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/add-dff-to-upload/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Add DFF Handling to an Upload - Blitz Report Development"><meta property="og:description" content="Add descriptive flexfield (DFF) handling to a Blitz Upload - context and attribute columns with context-dependent lists of values, segment prompts as column headers, Success SQL, and the PL/SQL that merges untouched segments, validates the DFF and converts display values to ids before the API call."><meta property="og:url" content="https://www.enginatics.com/ai-skills/add-dff-to-upload/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/add-dff-to-upload/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Upload Development</p><h1>Add DFF Handling to an Upload</h1><p class='name'>add-dff-to-upload</p><p class='lead'>Add descriptive flexfield (DFF) handling to a Blitz Upload - context and attribute columns with context-dependent lists of values, segment prompts as column headers, Success SQL, and the PL/SQL that merges untouched segments, validates the DFF and converts display values to ids before the API call.</p><h2>When to use</h2><p>Use when asked to add, validate or fix DFF / attribute columns of an upload, e.g. &quot;add validation for the attribute5 flexfield segment of my upload&quot;.</p><h2>Use</h2><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p>Then ask Claude for the task, or run:</p><pre><code>/blitz-report-ai-skills:add-dff-to-upload</code></pre><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/fnd-lookup-upload/'>FND Lookup Upload</a></li><li><a href='https://www.enginatics.com/reports/inv-manufacturer-upload/'>INV Manufacturer Upload</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/add-dff-to-upload'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-flexfield-facts-sql'>references/flexfield_facts.sql</a><a href='#file-scripts-gen-dff-py'>scripts/gen_dff.py</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Add DFF Handling to a Blitz Upload
+
+Adds one descriptive flexfield to an existing upload the standard Blitz Report way. Users see and enter display values in Excel; the download converts stored values to display values, and the upload procedure validates the whole DFF with the Oracle flexfield engine and converts it back to stored ids. A generator script writes every artefact from the flexfield&#x27;s facts; the steps below say where each one goes. The `upload-development` rules, section E, are the checklist behind it.
+
+## Inputs
+
+- The upload: its XML (exported from the Blitz Report setup form, Tools &gt; Export) and the PL/SQL package of its upload procedure.
+- The flexfield, by name or by the table that carries it, and a short column prefix for the entity (`subinv`, `loc`, `line`).
+- A development instance to deploy and test on, as described in `blitz-environment.md`.
+
+## Step 0 - Check the Blitz Report build
+
+Run the last query of `references/flexfield_facts.sql`. It must return `P_COLUMN_PREFIX`. Otherwise the build predates 18 September 2026, lacks `xxen_upload.parameter_exists` or `p_column_prefix`, and validates DFFs with contexts incorrectly. Stop and ask for an upgrade.
+
+## Step 1 - Collect the flexfield facts
+
+Run queries 1 to 3 of `references/flexfield_facts.sql`:
+
+| Result | Generator argument / use |
+|---|---|
+| `application_id`, `application_short_name`, `descriptive_flexfield_name` | `--app-id`, `--app-short-name`, `--flexfield`. Several DFFs can sit on one table: take the one the Oracle form uses. |
+| `context_column_name` | `--context-column` (not always `ATTRIBUTE_CATEGORY`; `GL_CODE_COMBINATIONS` uses `CONTEXT`) |
+| attribute column family and count (Query 3) | `--family` (default `ATTRIBUTE`; HR uses `PEI_INFORMATION`, `ORG_INFORMATION`, ...), `--count` = number of attribute columns of the table, whether used or not. Query 3 returns one row per schema with a table of that name: take the product schema&#x27;s. |
+| `max_length` (Query 3) | over 150: the procedure&#x27;s record holds 150 bytes per attribute, values above that raise `ORA-06502`; tell the user |
+| `display_flag` `N` (Query 2) | `--hidden` with those columns |
+| `context_user_override_flag` `N` with a `default_context_field_name` | the context follows a reference field: see Special cases |
+
+## Step 2 - Generate the artefacts
+
+```
+python ${CLAUDE_PLUGIN_ROOT}/skills/add-dff-to-upload/scripts/gen_dff.py \
+  --app-id 401 --app-short-name INV --flexfield MTL_SECONDARY_INVENTORIES \
+  --prefix subinv --count 15 --alias msi \
+  --guid &lt;upload GUID&gt; --rule-name &quot;XX Subinventory DFF Attributes&quot; \
+  --first-column &lt;COLUMN_NUMBER of UPLOAD_ROW&gt; --first-sequence &lt;last upload parameter&#x27;s DISPLAY_SEQUENCE + 1&gt; \
+  --template-keys ORGANIZATION_CODE,SUBINVENTORY \
+  --package &lt;upload package&gt; --procedure &lt;upload procedure&gt; \
+  --key-params p_organization_code,p_subinventory \
+  --cursor-from &quot;mtl_parameters mp,mtl_secondary_inventories msi&quot; \
+  --cursor-where &quot;mp.organization_code=p_organization_code and mp.organization_id=msi.organization_id and msi.secondary_inventory_name=p_subinventory&quot; \
+  --out &lt;folder&gt;
+```
+
+- `--first-column`: the DFF columns go before `UPLOAD_ROW`, or before the column you name instead. `--first-sequence`: the procedure&#x27;s new parameters follow its existing ones.
+- `--template-keys`: the upload column names that identify the record, as in the upload XML.
+- `--alias` must be the alias of the flexfield&#x27;s own table (Query 1 `application_table_name`) in the main SQL, not of a view: its rowid resolves dependent value sets.
+- `--param-prefix` / `--context-param` name the procedure parameters (default `p_attribute`, `p_attribute_category`); give each DFF its own when an upload has several.
+- `--dry-run` writes a test build that reports the values the API would receive instead of calling it. Run the tests with it first.
+- Aliases must stay within 30 bytes for databases before 12.2; the script warns.
+
+Output: `main_sql_columns.sql`, `success_sql_columns.sql`, `upload_columns.xml`, `upload_parameters.xml`, `translation_rule.xml`, `template.xml`, `&lt;package&gt;.pks`, `&lt;package&gt;.pkb`.
+
+## Step 3 - Upload definition
+
+1. **Main SQL**: insert `main_sql_columns.sql` after the entity&#x27;s columns, before `upload_row`.
+2. **Upload columns**: insert the `upload_columns.xml` rows and renumber the `COLUMN_NUMBER` of the columns after them, which must follow the select-list order.
+   - Context column: `LOV custom` over `fnd_descr_flex_contexts_vl`, returning context names. Keep it when the DFF has only global segments: its list stays empty until a context is defined, as in the shipped uploads.
+   - Attribute columns: `LOV custom` over `xxen_util.dff_attribute_lov`, with all siblings passed as `:$column$`, the `value~description` split, Validate From List `Y`, and a `select` comment listing the segment per context in the shipped format `(Context) Attribute1: (Global) &lt;prompt&gt;, (&lt;context&gt;) &lt;prompt&gt;`.
+   - Keep the generated LOV text as it is (named arguments, lower case, literals at the start): the framework reads those literals from the first 1,000 characters to give Excel per-context date and number checks.
+3. **Upload parameters**: insert the `upload_parameters.xml` rows in the procedure&#x27;s parameter order and renumber `DISPLAY_SEQUENCE` after them.
+4. **Success SQL**: add `success_sql_columns.sql` at the same position as in the main SQL. The tables sit in an inline view `x` that selects `rowid row_id`, because pre-12c databases allow an outer-joined table to reference only one other table:
+   ```sql
+   from
+   &lt;data view&gt; xu,
+   (
+   select
+   mp.organization_code,
+   msi.rowid row_id,
+   msi.*
+   from
+   mtl_parameters mp,
+   mtl_secondary_inventories msi
+   where
+   mp.organization_id=msi.organization_id
+   ) x
+   where
+   xu.organization_code=x.organization_code(+) and
+   xu.subinventory=x.secondary_inventory_name(+) and
+   xu.status_code_=xxen_upload.status_success
+   ```
+   The data view name is shown on the setup form&#x27;s Upload Results tab.
+5. **Templates**:
+   - Keep the DFF columns out of the default template. An upload without one shows every column: add a default template with the existing columns.
+   - Insert the `template.xml` row into the upload XML&#x27;s `&lt;TEMPLATES&gt;`. It holds the key columns and all DFF columns, as the shipped uploads do, Upload Mode Update, and Site sharing.
+6. **Translation rule**: import `translation_rule.xml` after the upload, as its own file. A rule whose upload does not exist yet is skipped, and rules import before reports in a combined file. It renames the attribute headers to the segment prompts. Developer access can also maintain it under Tools &gt; Dynamic Column Translations.
+
+Import the XML through the setup form (Tools &gt; Import) or `bin/import_xml`. Editing an upload needs System access.
+
+## Step 4 - Upload procedure
+
+Add the generated parameters (`default null`) to the procedure in spec and body. Then merge the generated declarations, helper functions and DFF block into it:
+
+- **Helper functions:**
+  - `modified(p)`: `parameter_exists` plus `value_modified`. A hand-built csv/xlsx counts every parameter as modified, also those its template omits. Test the entity&#x27;s other columns with it too: `xxen_upload.new_value` alone clears a column the csv template omits.
+  - `dff_modified`: true on any DFF change.
+  - `segment_enabled`: whether an enabled segment uses a column.
+  - `merged`: builds the value of each cell:
+    - a changed cell takes the uploaded value;
+    - an untouched cell takes the stored value in display form;
+    - a column without an enabled segment keeps its stored value unconverted;
+    - after a context change, the old context&#x27;s untouched segments are cleared, as in the Oracle form.
+- **Read the stored row** with its `rowid` into `l_stored`, and initialise `l_dff:=l_stored`. The generated code treats a key without a stored row as a create; in an update-only upload, keep the procedure&#x27;s own not-found error ahead of the DFF block.
+- **Merge and validate** only on create or when `dff_modified`: merge, then `validate_dff_attributes` from `&#x27;V&#x27;` to `&#x27;I&#x27;`. On error, set `message_` and raise.
+- **Detect a change** by comparing the converted ids with `l_stored`, and report &quot;No change.&quot; when nothing changed.
+- **Rename consistently:** every parameter name literal (`modified(&#x27;p_attribute5&#x27;)`, the first argument of each `merged` call, the context parameter) must match the declared parameters, or edits are dropped silently.
+- **API call:** replace `xx_my_api.create_or_update` with the entity&#x27;s API and check its return status. A cleared cell is null in the record. How to pass it:
+
+| API family | Null means | Pass |
+|---|---|---|
+| Table handlers, APIs writing every column | clear | the record as is |
+| HR (`hr_*_api`) | clear; omitted = `hr_api.g_varchar2` = keep | the record as is, never `hr_api.g_varchar2` for a cleared cell |
+| TCA (`hz_*_v2pub`) | keep | on update `fnd_api.g_miss_char` for a null attribute, on create null |
+| Interface tables | per import program | its clear marker (WIP Mass Load `fnd_api.g_miss_*`, item revisions `&#x27;!&#x27;`) |
+
+Never convert the stored record with `validate_dff_attributes(&#x27;I&#x27;,&#x27;V&#x27;)`: the conversion is all or nothing, so one invalid stored segment blocks every row.
+
+## Special cases
+
+- **Reference-field context** (override `N`, `default_context_field_name` set): give the context column a `DEFAULT_VALUE` that derives the context name from the reference column, as the FND Lookup Upload does for `FND_COMMON_LOOKUPS`.
+- **Context set by the Oracle form itself**, with neither override nor reference field (`MTL_EAM_ASSET_ATTR_VALUES`): in `&#x27;V&#x27;` mode only global segments are validated, and context segments come back as typed. Convert each segment with `xxen_util.dff_attribute_value_to_id` and validate in `&#x27;I&#x27;` mode. That function converts only segments with a list; convert dates and numbers with `fnd_date`/`fnd_number` yourself.
+- **Non-displayed segments** (`--hidden`): `&#x27;V&#x27;` mode returns them empty, so the generated code copies their stored values back.
+- **Value sets joining `fnd_sessions`** (common in HR): call `hr_integration_utils.add_or_update_session(&lt;effective date&gt;)` at the start of the procedure.
+- **Date segments**:
+  - DFF dates travel as text in the Blitz Report XLSX Date Format profile, or else the ICX date mask, but validation reads them in the ICX mask. Keep the two equal.
+  - Set Blitz Report XLSX Use Long Date Format = Yes when a date can fall outside 1950-2049; otherwise even untouched dates change century.
+- **Several DFFs in one upload**: one prefix, parameter set and translation rule per DFF. Generate each with its own `--prefix`, `--param-prefix` and `--context-param`. Merge the helper functions under per-DFF names, or parametrise them with flexfield, record, rowid and context flag.
+- **One DFF on several records of a row** (the contact points of a party, a site and a contact all carry the same flexfield): the translated headings must start with the record they belong to (`Site Email Email Invoice`), otherwise identical prompts give duplicate column headings. Edit the generated rule&#x27;s translation to put the prefix first and truncate only the prompt, so prefix and prompt fit `xxen_report.max_column_length` (30 bytes before database 12.2).
+
+## Step 5 - Deploy and test
+
+1. Compile the package with `--dry-run` code, import the upload XML, then the rule. Check that the attribute headers show the prompts.
+2. Download with the Descriptive Flexfield template, edit the rows, upload, and check the result workbook. Excel accepts only list values and valid dates, so write the error rows into the file outside Excel (cells as shared strings, Modified Columns listing the changed column positions). A csv maps by position: Action, Status, Message, then the template&#x27;s columns in template order.
+
+| Scenario | Expected |
+|---|---|
+| Change one segment | Success; the other segments keep their stored values |
+| Clear a segment | Success; segment cleared (Excel also empties the row&#x27;s other filled attribute cells: re-enter those that should stay) |
+| No DFF change | &quot;No change.&quot; |
+| Value not in the list / invalid context | `&lt;Column&gt; is invalid` from the list check, naming the column (`Subinv Attribute5`), not the segment prompt; the procedure is not called |
+| Invalid date in a free-text date segment | message from `validate_dff_attributes` |
+| Context change without a required segment of the new context | &quot;The following required field does not have a value: ...&quot; |
+| Context change with values / context emptied | Success; old context segments cleared |
+| Upload with the Default template, and a csv without DFF columns uploaded with it | &quot;No change.&quot; |
+
+3. Replace the dry-run block with the API call, then repeat the tests and check the table.
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| List shows `value~description`, downloaded values rejected | LOV returns `column_value` without the split |
+| Headers still generic | rule not enabled or not assigned to the upload, prefix differs from the column names, or no segment uses the column |
+| Edits report &quot;No change.&quot; | a parameter name literal does not match the declared parameter |
+| Untouched segments rejected | the stored value is no longer valid (disabled, expired, newly required): correct it in the same row |
+| Stored DFF cleared by an upload | parameters passed instead of the merged record, or a csv/xlsx uploaded without a template |
+| Every download fails with `ORA-00923` | a plain-text column comment starts with the word &quot;select&quot; |
+| Works on 19c, fails on 11.2/12.1 | identifier over 30 bytes, or an outer join to two tables in the Success SQL (`ORA-01417`) |
+
+## Reference
+
+- `xxen_util.display_flexfield_context(app_id, flexfield, context_code)`: returns the context name.
+- `xxen_util.display_flexfield_value(app_id, flexfield, context_code, column_name, rowid, value)`: returns the display value.
+- `xxen_util.dff_attribute_lov(p_application_id, p_descriptive_flexfield_name, p_context_name, p_column_name, p_lov_delimter default &#x27;~&#x27;, p_attribute1..30)`: pipelined, one `value~description` row per value. Call it with named notation.
+- `xxen_fnd_upload.validate_dff_attributes(p_appl_sn, p_flexfield_name, p_values_or_ids_in, p_values_or_ids_out, p_column_prefix, px_attribute_rec, x_error_message)`: on error the record is unchanged and the message is set.
+- `xxen_upload.value_modified(p)` / `xxen_upload.parameter_exists(p)`: parameter names in lower case, as declared.
+- Shipped uploads to compare: INV Manufacturer Upload (one DFF), AR Customer Upload (five DFFs, one rule with a `case` on the flexfield name), FND Lookup Upload (reference-field context).</pre></section><section id='file-references-flexfield-facts-sql'><h3 class='fname'>references/flexfield_facts.sql</h3><details><summary>Show references/flexfield_facts.sql</summary><pre><code class='language-sql'>--Query 1: flexfield definition (replace &lt;TABLE_NAME&gt;)
+select
+fa.application_id,
+fa.application_short_name,
+fdfv.descriptive_flexfield_name,
+fdfv.title,
+fdfv.application_table_name,
+fdfv.context_column_name,
+fdfv.context_user_override_flag,
+fdfv.default_context_field_name
+from
+fnd_descriptive_flexs_vl fdfv,
+fnd_application fa
+where
+fdfv.application_table_name=&#x27;&lt;TABLE_NAME&gt;&#x27; and
+fdfv.descriptive_flexfield_name not like &#x27;$SRS$.%&#x27; and
+fdfv.application_id=fa.application_id;
+
+--Query 2: contexts and segments (replace &lt;APPLICATION_ID&gt; and &lt;FLEXFIELD_NAME&gt;)
+select
+fdfcv.descriptive_flex_context_code context_code,
+fdfcv.descriptive_flex_context_name context_name,
+fdfcu.application_column_name,
+fdfcu.form_left_prompt,
+ffvs.flex_value_set_name,
+ffvs.validation_type,
+ffvs.format_type,
+fdfcu.required_flag,
+fdfcu.display_flag
+from
+fnd_descr_flex_contexts_vl fdfcv,
+fnd_descr_flex_col_usage_vl fdfcu,
+fnd_flex_value_sets ffvs
+where
+fdfcv.application_id=&lt;APPLICATION_ID&gt; and
+fdfcv.descriptive_flexfield_name=&#x27;&lt;FLEXFIELD_NAME&gt;&#x27; and
+fdfcv.enabled_flag=&#x27;Y&#x27; and
+fdfcv.application_id=fdfcu.application_id and
+fdfcv.descriptive_flexfield_name=fdfcu.descriptive_flexfield_name and
+fdfcv.descriptive_flex_context_code=fdfcu.descriptive_flex_context_code and
+fdfcu.enabled_flag=&#x27;Y&#x27; and
+fdfcu.flex_value_set_id=ffvs.flex_value_set_id(+)
+order by
+fdfcv.global_flag desc,
+fdfcv.descriptive_flex_context_code,
+fdfcu.column_seq_num;
+
+--Query 3: attribute columns of the table and their length (replace &lt;TABLE_NAME&gt; and &lt;FAMILY&gt;, e.g. ATTRIBUTE)
+select
+atc.owner,
+count(*) attribute_columns,
+max(atc.data_length) max_length
+from
+all_tab_columns atc
+where
+atc.table_name=&#x27;&lt;TABLE_NAME&gt;&#x27; and
+regexp_like(atc.column_name,&#x27;^&lt;FAMILY&gt;\d+$&#x27;)
+group by
+atc.owner;
+
+--Is the Blitz Report build recent enough? Must return P_COLUMN_PREFIX.
+select
+aa.argument_name
+from
+all_arguments aa
+where
+aa.package_name=&#x27;XXEN_FND_UPLOAD&#x27; and
+aa.object_name=&#x27;VALIDATE_DFF_ATTRIBUTES&#x27; and
+aa.argument_name=&#x27;P_COLUMN_PREFIX&#x27;;</code></pre></details></section><section id='file-scripts-gen-dff-py'><h3 class='fname'>scripts/gen_dff.py</h3><details><summary>Show scripts/gen_dff.py</summary><pre><code class='language-python'>#!/usr/bin/env python3
+&quot;&quot;&quot;Generate the descriptive flexfield (DFF) parts of a Blitz Upload.
+
+Writes, for one DFF, every artefact the add-dff-to-upload skill describes:
+  main_sql_columns.sql      select-list lines for the upload&#x27;s main SQL
+  success_sql_columns.sql   select-list lines for the Success SQL
+  upload_columns.xml        UPLOAD_COLUMNS_ROW elements: context + attribute columns with LOVs and comments
+  upload_parameters.xml     UPLOAD_PARAMETERS_ROW elements mapping the procedure parameters
+  translation_rule.xml      importable dynamic column translation rule for the upload
+  template.xml              TEMPLATES_ROW element: the key columns and the DFF columns, Upload Mode Update
+  &lt;package&gt;.pks/.pkb        a complete example package whose procedure carries the DFF handling
+Standard library only. Run with --help for the arguments.
+&quot;&quot;&quot;
+import argparse, pathlib, sys, uuid
+from xml.sax.saxutils import escape
+
+
+def x(s):
+    return escape(s, {&quot;&#x27;&quot;: &quot;&amp;apos;&quot;})
+
+
+def lines(items, sep):
+    items = [i.strip() for i in items if i.strip()]
+    return [i + (sep if k &lt; len(items) - 1 else &quot;&quot;) for k, i in enumerate(items)]
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument(&quot;--app-id&quot;, type=int, required=True, help=&quot;application_id of the flexfield (Query 1)&quot;)
+    ap.add_argument(&quot;--app-short-name&quot;, required=True, help=&quot;application_short_name of the flexfield (Query 1)&quot;)
+    ap.add_argument(&quot;--flexfield&quot;, required=True, help=&quot;descriptive_flexfield_name (Query 1)&quot;)
+    ap.add_argument(&quot;--prefix&quot;, required=True, help=&quot;column alias prefix, lower case, e.g. subinv&quot;)
+    ap.add_argument(&quot;--count&quot;, type=int, required=True, help=&quot;number of attribute columns of the table (Query 3)&quot;)
+    ap.add_argument(&quot;--family&quot;, default=&quot;ATTRIBUTE&quot;, help=&quot;attribute column family, e.g. ATTRIBUTE or PEI_INFORMATION&quot;)
+    ap.add_argument(&quot;--context-column&quot;, default=&quot;ATTRIBUTE_CATEGORY&quot;, help=&quot;context_column_name (Query 1)&quot;)
+    ap.add_argument(&quot;--alias&quot;, required=True, help=&quot;alias of the flexfield&#x27;s own table in the main SQL, e.g. msi&quot;)
+    ap.add_argument(&quot;--success-alias&quot;, default=&quot;x&quot;, help=&quot;alias of the inline view in the Success SQL&quot;)
+    ap.add_argument(&quot;--param-prefix&quot;, default=&quot;p_attribute&quot;, help=&quot;procedure parameter prefix of the attributes&quot;)
+    ap.add_argument(&quot;--context-param&quot;, default=&quot;p_attribute_category&quot;, help=&quot;procedure parameter of the context&quot;)
+    ap.add_argument(&quot;--guid&quot;, help=&quot;GUID of the upload, for translation_rule.xml&quot;)
+    ap.add_argument(&quot;--rule-name&quot;, help=&quot;name of the dynamic column translation rule&quot;)
+    ap.add_argument(&quot;--first-column&quot;, type=int, default=1,
+                    help=&quot;COLUMN_NUMBER of the upload column the DFF columns go before (usually UPLOAD_ROW)&quot;)
+    ap.add_argument(&quot;--first-sequence&quot;, type=int, default=1,
+                    help=&quot;DISPLAY_SEQUENCE of the last existing upload parameter + 1&quot;)
+    ap.add_argument(&quot;--template-keys&quot;, default=&quot;&quot;,
+                    help=&quot;comma separated upload column names identifying the record, e.g. ORGANIZATION_CODE,SUBINVENTORY&quot;)
+    ap.add_argument(&quot;--template-name&quot;, default=&quot;Descriptive Flexfield&quot;, help=&quot;name of the generated template&quot;)
+    ap.add_argument(&quot;--package&quot;, default=&quot;xx_my_upload&quot;, help=&quot;package name of the example procedure&quot;)
+    ap.add_argument(&quot;--procedure&quot;, default=&quot;upload_record&quot;, help=&quot;procedure name&quot;)
+    ap.add_argument(&quot;--key-params&quot;, default=&quot;&quot;, help=&quot;comma separated key parameters, e.g. p_organization_code,p_subinventory&quot;)
+    ap.add_argument(&quot;--cursor-from&quot;, help=&quot;comma separated from list of the stored-record cursor (default: the flexfield table)&quot;)
+    ap.add_argument(&quot;--table&quot;, help=&quot;the flexfield&#x27;s own table, used when --cursor-from is not given&quot;)
+    ap.add_argument(&quot;--cursor-where&quot;, default=&quot;&quot;, help=&quot;predicates of the stored-record cursor, separated by &#x27; and &#x27;&quot;)
+    ap.add_argument(&quot;--hidden&quot;, default=&quot;&quot;, help=&quot;comma separated columns of non-displayed segments (Query 2 display_flag N)&quot;)
+    ap.add_argument(&quot;--dry-run&quot;, action=&quot;store_true&quot;, help=&quot;report the values the API would receive in message_ instead of calling it&quot;)
+    ap.add_argument(&quot;--out&quot;, required=True, help=&quot;output directory&quot;)
+    a = ap.parse_args()
+
+    fam = a.family.upper()
+    famlc = fam.lower()
+    ctx = a.context_column.lower()
+    n = a.count
+    attrs = range(1, n + 1)
+    pre = a.prefix.lower()
+    ctx_alias = f&quot;{pre}_attribute_category&quot;
+    col_alias = lambda i: f&quot;{pre}_{famlc}{i}&quot;
+    app, dff = a.app_id, a.flexfield
+    out = pathlib.Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    warnings = [f&quot;alias {s} is {len(s)} bytes, over the 30-byte limit of databases before 12.2&quot;
+                for s in [ctx_alias, col_alias(n)] if len(s) &gt; 30]
+    warnings += [f&quot;parameter {s} is {len(s)} bytes: the import truncates it to 30 and every upload fails with PLS-00306&quot;
+                 for s in [a.context_param, f&quot;{a.param_prefix}{n}&quot;] if len(s) &gt; 30]
+
+    def disp(alias, rowid):
+        res = [f&quot;xxen_util.display_flexfield_context({app},&#x27;{dff}&#x27;,{alias}.{ctx}) {ctx_alias},&quot;]
+        res += [f&quot;xxen_util.display_flexfield_value({app},&#x27;{dff}&#x27;,{alias}.{ctx},&#x27;{fam}{i}&#x27;,{rowid},{alias}.{famlc}{i}) {col_alias(i)},&quot;
+                for i in attrs]
+        return &quot;\n&quot;.join(res)
+
+    ctx_lov = &quot;\n&quot;.join([&quot;select&quot;, &quot;fdfcv.descriptive_flex_context_name value,&quot;, &quot;fdfcv.description&quot;, &quot;from&quot;,
+        &quot;fnd_descr_flex_contexts_vl fdfcv&quot;, &quot;where&quot;, f&quot;fdfcv.application_id={app} and&quot;,
+        f&quot;fdfcv.descriptive_flexfield_name=&#x27;{dff}&#x27; and&quot;, &quot;fdfcv.enabled_flag=&#x27;Y&#x27; and&quot;, &quot;fdfcv.global_flag=&#x27;N&#x27;&quot;,
+        &quot;order by&quot;, &quot;fdfcv.descriptive_flex_context_name&quot;])
+
+    def attr_lov(i):
+        sib = &quot;,\n&quot;.join([f&quot;p_attribute{j}=&gt;:$column$.{col_alias(j)}&quot; for j in attrs])
+        return &quot;\n&quot;.join([&quot;select&quot;, &quot;substrb(lov.column_value,1,instrb(lov.column_value,&#x27;~&#x27;,1,1)-1) value,&quot;,
+            &quot;substrb(lov.column_value,instrb(lov.column_value,&#x27;~&#x27;,1,1)+1,lengthb(lov.column_value)) description&quot;,
+            &quot;from&quot;, &quot;table(xxen_util.dff_attribute_lov(&quot;, f&quot;p_application_id=&gt;{app},&quot;,
+            f&quot;p_descriptive_flexfield_name=&gt;&#x27;{dff}&#x27;,&quot;, f&quot;p_context_name=&gt;:$column$.{ctx_alias},&quot;,
+            f&quot;p_column_name=&gt;&#x27;{fam}{i}&#x27;,&quot;, sib, &quot;)) lov&quot;, &quot;order by&quot;, &quot;value&quot;])
+
+    def comment(i):
+        return &quot;\n&quot;.join([&quot;select&quot;,
+            &quot;&#x27;(Context) &#x27;||initcap(y.application_column_name)||&#x27;: &#x27;||listagg(y.entry,&#x27;, &#x27;) within group (order by y.sort_key) comments&quot;,
+            &quot;from&quot;, &quot;(&quot;, &quot;select&quot;, &quot;x.application_column_name,&quot;, &quot;x.entry,&quot;, &quot;x.sort_key,&quot;,
+            &quot;sum(lengthb(x.entry)+2) over (order by x.sort_key) len&quot;, &quot;from&quot;, &quot;(&quot;, &quot;select&quot;, &quot;fdfcu.application_column_name,&quot;,
+            &quot;decode(fdfc.descriptive_flex_context_code,&#x27;Global Data Elements&#x27;,&#x27;(Global)&#x27;,&#x27;(&#x27;||fdfc.descriptive_flex_context_code||&#x27;)&#x27;)||&#x27; &#x27;||fdfcu.form_left_prompt entry,&quot;,
+            &quot;decode(fdfc.descriptive_flex_context_code,&#x27;Global Data Elements&#x27;,&#x27;1&#x27;,&#x27;2&#x27;||fdfc.descriptive_flex_context_code) sort_key&quot;,
+            &quot;from&quot;, &quot;fnd_descr_flex_contexts fdfc,&quot;, &quot;fnd_descr_flex_col_usage_vl fdfcu&quot;, &quot;where&quot;,
+            f&quot;fdfc.application_id={app} and&quot;, f&quot;fdfc.descriptive_flexfield_name=&#x27;{dff}&#x27; and&quot;, &quot;fdfc.enabled_flag=&#x27;Y&#x27; and&quot;,
+            &quot;fdfc.application_id=fdfcu.application_id and&quot;, &quot;fdfc.descriptive_flexfield_name=fdfcu.descriptive_flexfield_name and&quot;,
+            &quot;fdfc.descriptive_flex_context_code=fdfcu.descriptive_flex_context_code and&quot;, &quot;fdfcu.enabled_flag=&#x27;Y&#x27; and&quot;,
+            f&quot;fdfcu.application_column_name=&#x27;{fam}{i}&#x27;&quot;, &quot;) x&quot;, &quot;) y&quot;, &quot;where&quot;, &quot;y.len&lt;=3900&quot;, &quot;group by&quot;, &quot;y.application_column_name&quot;])
+
+    rule_sql = &quot;\n&quot;.join([&quot;select&quot;, f&quot;&#x27;{pre.upper()}_&#x27;||z.application_column_name column_name,&quot;,
+        &quot;case when lengthb(z.prompts)&gt;xxen_report.max_column_length then substrb(z.prompts,1,xxen_report.max_column_length-4)||&#x27;(..)&#x27; else z.prompts end translation&quot;,
+        &quot;from&quot;, &quot;(&quot;, &quot;select&quot;, &quot;y.application_column_name,&quot;, &quot;listagg(y.form_left_prompt,&#x27;, &#x27;) within group (order by y.sort_key) prompts&quot;,
+        &quot;from&quot;, &quot;(&quot;, &quot;select&quot;, &quot;x.application_column_name,&quot;, &quot;x.form_left_prompt,&quot;, &quot;x.sort_key,&quot;,
+        &quot;sum(lengthb(x.form_left_prompt)+2) over (partition by x.application_column_name order by x.sort_key) len&quot;, &quot;from&quot;, &quot;(&quot;,
+        &quot;select&quot;, &quot;fdfcu.application_column_name,&quot;, &quot;fdfcu.form_left_prompt,&quot;,
+        &quot;min(decode(fdfc.descriptive_flex_context_code,&#x27;Global Data Elements&#x27;,&#x27;1&#x27;,&#x27;2&#x27;||fdfc.descriptive_flex_context_code)) sort_key&quot;,
+        &quot;from&quot;, &quot;fnd_descr_flex_contexts fdfc,&quot;, &quot;fnd_descr_flex_col_usage_vl fdfcu&quot;, &quot;where&quot;, f&quot;fdfc.application_id={app} and&quot;,
+        f&quot;fdfc.descriptive_flexfield_name=&#x27;{dff}&#x27; and&quot;, &quot;fdfc.enabled_flag=&#x27;Y&#x27; and&quot;, &quot;fdfc.application_id=fdfcu.application_id and&quot;,
+        &quot;fdfc.descriptive_flexfield_name=fdfcu.descriptive_flexfield_name and&quot;,
+        &quot;fdfc.descriptive_flex_context_code=fdfcu.descriptive_flex_context_code and&quot;, &quot;fdfcu.enabled_flag=&#x27;Y&#x27; and&quot;,
+        f&quot;fdfcu.application_column_name like &#x27;{fam}%&#x27;&quot;, &quot;group by&quot;, &quot;fdfcu.application_column_name,&quot;, &quot;fdfcu.form_left_prompt&quot;,
+        &quot;) x&quot;, &quot;) y&quot;, &quot;where&quot;, &quot;y.len&lt;=4000&quot;, &quot;group by&quot;, &quot;y.application_column_name&quot;, &quot;) z&quot;])
+
+    def el(tag, val, ind=4):
+        return f&quot;{&#x27; &#x27; * ind}&lt;{tag}&gt;{val}&lt;/{tag}&gt;&quot;
+
+    cols = [(ctx_alias.upper(), {&quot;VALIDATE_FROM_LIST_DSP&quot;: &quot;Y&quot;, &quot;LOV_QUERY_DSP&quot;: x(ctx_lov)})]
+    cols += [(col_alias(i).upper(), {&quot;VALIDATE_FROM_LIST_DSP&quot;: &quot;Y&quot;, &quot;LOV_QUERY_DSP&quot;: x(attr_lov(i)), &quot;COMMENTS&quot;: x(comment(i))}) for i in attrs]
+    ucols = []
+    for k, (name, o) in enumerate(cols):
+        r = [&quot;   &lt;UPLOAD_COLUMNS_ROW&gt;&quot;, el(&quot;COLUMN_NUMBER&quot;, a.first_column + k), el(&quot;COLUMN_NAME&quot;, name),
+             el(&quot;COLUMN_TYPE_DSP&quot;, &quot;LOV custom&quot;), el(&quot;DATA_TYPE&quot;, &quot;varchar2&quot;)]
+        r += [el(t, o[t]) for t in (&quot;VALIDATE_FROM_LIST_DSP&quot;, &quot;LOV_QUERY_DSP&quot;, &quot;COMMENTS&quot;) if t in o]
+        ucols.append(&quot;\n&quot;.join(r + [&quot;   &lt;/UPLOAD_COLUMNS_ROW&gt;&quot;]))
+    ups = [(a.context_param, ctx_alias.upper())] + [(f&quot;{a.param_prefix}{i}&quot;, col_alias(i).upper()) for i in attrs]
+    uparams = [&quot;\n&quot;.join([&quot;   &lt;UPLOAD_PARAMETERS_ROW&gt;&quot;, el(&quot;SOURCE&quot;, &quot;U&quot;), el(&quot;DISPLAY_SEQUENCE&quot;, a.first_sequence + k),
+               el(&quot;PARAMETER_NAME&quot;, p), el(&quot;IN_OUT&quot;, &quot;in&quot;), el(&quot;PARAMETER_TYPE&quot;, &quot;Char&quot;), el(&quot;COLUMN_NAME&quot;, c),
+               el(&quot;DEFAULTED&quot;, &quot;Y&quot;), &quot;   &lt;/UPLOAD_PARAMETERS_ROW&gt;&quot;]) for k, (p, c) in enumerate(ups)]
+    rule_xml = None
+    if a.guid:
+        rule_xml = &quot;\n&quot;.join([&quot;&lt;ROOT&gt;&quot;, &quot;&lt;DYNAMIC_COLUMN_TRANSLATION_RULES&gt;&quot;, &quot; &lt;DYNAMIC_COLUMN_TRANSLATION_RULES_ROW&gt;&quot;,
+            f&quot;  &lt;RULE_NAME&gt;{x(a.rule_name or (pre + &#x27; DFF Attributes&#x27;))}&lt;/RULE_NAME&gt;&quot;, f&quot;  &lt;RULE_SQL&gt;{x(rule_sql)}&lt;/RULE_SQL&gt;&quot;,
+            &quot;  &lt;ENABLED&gt;Y&lt;/ENABLED&gt;&quot;, &quot;  &lt;REPORTS&gt;&quot;, &quot;   &lt;REPORTS_ROW&gt;&quot;, f&quot;    &lt;GUID&gt;{a.guid}&lt;/GUID&gt;&quot;, &quot;   &lt;/REPORTS_ROW&gt;&quot;,
+            &quot;  &lt;/REPORTS&gt;&quot;, &quot; &lt;/DYNAMIC_COLUMN_TRANSLATION_RULES_ROW&gt;&quot;, &quot;&lt;/DYNAMIC_COLUMN_TRANSLATION_RULES&gt;&quot;, &quot;&lt;/ROOT&gt;&quot;, &quot;&quot;])
+    tkeys = [k.strip().upper() for k in a.template_keys.split(&quot;,&quot;) if k.strip()]
+    template_xml = None
+    if tkeys:
+        tcols = []
+        for k, name in enumerate(tkeys + [c for c, _ in cols]):
+            r = [&quot;     &lt;TEMPLATE_COLUMNS_ROW&gt;&quot;, el(&quot;DISPLAY_SEQUENCE&quot;, k + 1, 6), el(&quot;COLUMN_NAME&quot;, name, 6)]
+            if k == len(tkeys) - 1:
+                r.append(el(&quot;FREEZE_PANES&quot;, &quot;Y&quot;, 6))
+            tcols.append(&quot;\n&quot;.join(r + [&quot;     &lt;/TEMPLATE_COLUMNS_ROW&gt;&quot;]))
+        template_xml = &quot;\n&quot;.join([&quot;   &lt;TEMPLATES_ROW&gt;&quot;, el(&quot;GUID&quot;, uuid.uuid4().hex.upper()), el(&quot;TEMPLATE_NAME&quot;, x(a.template_name)),
+            el(&quot;DESCRIPTION&quot;, &quot;Key and descriptive flexfield columns.&quot;), &quot;    &lt;TEMPLATE_COLUMNS&gt;&quot;] + tcols + [&quot;    &lt;/TEMPLATE_COLUMNS&gt;&quot;,
+            &quot;    &lt;TEMPLATE_PARAMETER_DEFAULTS&gt;&quot;, &quot;     &lt;TEMPLATE_PARAMETER_DEFAULTS_ROW&gt;&quot;, el(&quot;PARAMETER_NAME&quot;, &quot;Upload Mode&quot;, 6),
+            el(&quot;DEFAULT_VALUE&quot;, &quot;U&quot;, 6), &quot;     &lt;/TEMPLATE_PARAMETER_DEFAULTS_ROW&gt;&quot;, &quot;    &lt;/TEMPLATE_PARAMETER_DEFAULTS&gt;&quot;,
+            &quot;    &lt;TEMPLATE_SHARING&gt;&quot;, &quot;     &lt;TEMPLATE_SHARING_ROW&gt;&quot;, el(&quot;SHARING_LEVEL&quot;, &quot;S&quot;, 6), el(&quot;LEVEL_VALUE&quot;, &quot;Site&quot;, 6),
+            &quot;     &lt;/TEMPLATE_SHARING_ROW&gt;&quot;, &quot;    &lt;/TEMPLATE_SHARING&gt;&quot;, &quot;   &lt;/TEMPLATES_ROW&gt;&quot;, &quot;&quot;])
+
+    # example package
+    keys = [k.strip() for k in a.key_params.split(&quot;,&quot;) if k.strip()]
+    params = [&quot;status_ out varchar2,&quot;, &quot;message_ out varchar2,&quot;] + [f&quot;{k} in varchar2,&quot; for k in keys]
+    params += [f&quot;{a.context_param} in varchar2 default null,&quot;]
+    params += [f&quot;{a.param_prefix}{i} in varchar2 default null{&#x27;,&#x27; if i &lt; n else &#x27;&#x27;}&quot; for i in attrs]
+    header = f&quot;procedure {a.procedure}(\n&quot; + &quot;\n&quot;.join(params) + &quot;\n)&quot;
+    spec = f&quot;create or replace package {a.package} as\n\n{header};\n\nend {a.package};\n/\n&quot;
+    sel = [f&quot;  {a.alias}.{ctx}&quot; + (&quot;&quot; if ctx == &quot;attribute_category&quot; else &quot; attribute_category&quot;)]
+    sel += [f&quot;  {a.alias}.{famlc}{i}&quot; + (&quot;&quot; if fam == &quot;ATTRIBUTE&quot; else f&quot; attribute{i}&quot;) for i in attrs]
+    frm = lines(a.cursor_from.split(&quot;,&quot;) if a.cursor_from else [f&quot;{a.table} {a.alias}&quot;], &quot;,&quot;)
+    whr = lines(a.cursor_where.split(&quot; and &quot;) if a.cursor_where else [], &quot; and&quot;)
+    hidden = [h.strip().upper() for h in a.hidden.split(&quot;,&quot;) if h.strip()]
+    stored = [&quot;    l_stored.attribute_category:=c.attribute_category;&quot;] + [f&quot;    l_stored.attribute{i}:=c.attribute{i};&quot; for i in attrs]
+    newv = [f&quot;    l_dff.attribute_category:={a.context_param};&quot;] + [f&quot;    l_dff.attribute{i}:={a.param_prefix}{i};&quot; for i in attrs]
+    merge = [f&quot;      l_dff.attribute_category:=merged(&#x27;{a.context_param}&#x27;,&#x27;ATTRIBUTE_CATEGORY&#x27;,l_dff.attribute_category,l_stored.attribute_category);&quot;]
+    merge += [f&quot;      l_dff.attribute{i}:=merged(&#x27;{a.param_prefix}{i}&#x27;,&#x27;{fam}{i}&#x27;,l_dff.attribute{i},l_stored.attribute{i});&quot; for i in attrs]
+    cmp = &quot; or\n&quot;.join([&quot;    nvl(l_dff.attribute_category,fnd_api.g_miss_char)&lt;&gt;nvl(l_stored.attribute_category,fnd_api.g_miss_char)&quot;] +
+        [f&quot;    nvl(l_dff.attribute{i},fnd_api.g_miss_char)&lt;&gt;nvl(l_stored.attribute{i},fnd_api.g_miss_char)&quot; for i in attrs])
+    api = &quot;,\n&quot;.join([f&quot;    {k}=&gt;{k}&quot; for k in keys] + [&quot;    p_attribute_category=&gt;l_dff.attribute_category&quot;] +
+        [f&quot;    p_{famlc}{i}=&gt;l_dff.attribute{i}&quot; for i in attrs])
+
+    def seg_fn(name, extra):
+        return f&quot;&quot;&quot;function {name}(p_context_code in varchar2, p_column_name in varchar2) return boolean is
+begin
+  for c in (
+  select
+  null
+  from
+  fnd_descr_flex_column_usages fdfcu
+  where
+  fdfcu.application_id=g_application_id and
+  fdfcu.descriptive_flexfield_name=g_flexfield_name and
+  fdfcu.descriptive_flex_context_code in (&#x27;Global Data Elements&#x27;,p_context_code) and
+  fdfcu.application_column_name=p_column_name and
+  fdfcu.enabled_flag=&#x27;Y&#x27;{extra}
+  ) loop
+    return true;
+  end loop;
+  return false;
+end {name};&quot;&quot;&quot;
+
+    if a.dry_run:
+        write = (&quot;    --test build: report the stored values that would be passed to the API instead of writing them\n&quot;
+                 &quot;    message_:=case when l_exists then &#x27;Would update: &#x27; else &#x27;Would create: &#x27; end||\n&quot; + &quot; ||\n&quot;.join(
+                     [&quot;    &#x27;Context=&#x27;||l_dff.attribute_category&quot;] +
+                     [f&quot;    case when l_dff.attribute{i} is not null then &#x27;, {fam}{i}=&#x27;||l_dff.attribute{i} end&quot; for i in attrs]) + &quot;;&quot;)
+    else:
+        write = (&quot;    --pass the context code and stored values to the API or table handler that writes the record\n&quot;
+                 &quot;    --and check its return status: on failure set message_ and raise le_validation_error,\n&quot;
+                 &quot;    --which rolls the row back to its savepoint\n&quot;
+                 f&quot;    xx_my_api.create_or_update(\n{api}\n    );&quot;)
+    hidden_fn = (&quot;\n\n&quot; + seg_fn(&quot;segment_hidden&quot;, &quot; and\n  fdfcu.display_flag=&#x27;N&#x27;&quot;)) if hidden else &quot;&quot;
+    slot = lambda col: &quot;attribute&quot; + col[len(fam):] if col.startswith(fam) and col[len(fam):].isdigit() else None
+    bad = [h for h in hidden if not slot(h)]
+    if bad:
+        sys.exit(f&quot;--hidden columns must be {fam}&lt;n&gt;: {&#x27;, &#x27;.join(bad)}&quot;)
+    restore = &quot;&quot;.join(f&quot;&quot;&quot;
+    if segment_hidden(case when not l_context_changed then l_stored.attribute_category end,&#x27;{h}&#x27;) then
+      l_dff.{slot(h)}:=l_stored.{slot(h)};
+    end if;&quot;&quot;&quot; for h in hidden)
+    prefix_arg = &quot;&quot; if fam == &quot;ATTRIBUTE&quot; else f&quot;\n    p_column_prefix=&gt;&#x27;{fam}&#x27;,&quot;
+    body = f&quot;&quot;&quot;create or replace package body {a.package} as
+
+g_application_id constant fnd_application.application_id%type:={app};
+g_application_short_name constant fnd_application.application_short_name%type:=&#x27;{a.app_short_name}&#x27;;
+g_flexfield_name constant fnd_descriptive_flexs.descriptive_flexfield_name%type:=&#x27;{dff}&#x27;;
+
+
+{header} is
+l_exists boolean:=false;
+l_rowid rowid;
+l_stored xxen_fnd_upload.g_attribute_rec_type;
+l_dff xxen_fnd_upload.g_attribute_rec_type;
+l_dff_message varchar2(4000);
+l_context_changed boolean:=false;
+l_changed boolean:=false;
+le_validation_error exception;
+
+--a hand-built csv or xlsx counts every parameter as modified, also one whose column the upload&#x27;s
+--template leaves out
+function modified(p_parameter_name in varchar2) return boolean is
+begin
+  return xxen_upload.parameter_exists(p_parameter_name) and xxen_upload.value_modified(p_parameter_name);
+end modified;
+
+function dff_modified return boolean is
+begin
+  if modified(&#x27;{a.context_param}&#x27;) then
+    return true;
+  end if;
+  for i in 1..{n} loop
+    if modified(&#x27;{a.param_prefix}&#x27;||i) then
+      return true;
+    end if;
+  end loop;
+  return false;
+end dff_modified;
+
+{seg_fn(&quot;segment_enabled&quot;, &quot;&quot;)}{hidden_fn}
+
+--an unmodified cell keeps the stored value: in the display form the download shows if an enabled
+--segment uses the column, unconverted otherwise; a context change clears the old context&#x27;s segments
+function merged(p_parameter_name in varchar2, p_column_name in varchar2, p_new_value in varchar2, p_stored_value in varchar2) return varchar2 is
+begin
+  if modified(p_parameter_name) then
+    return p_new_value;
+  elsif p_column_name=&#x27;ATTRIBUTE_CATEGORY&#x27; then
+    return xxen_util.display_flexfield_context(g_application_id,g_flexfield_name,p_stored_value);
+  elsif segment_enabled(case when not l_context_changed then l_stored.attribute_category end,p_column_name) then
+    return xxen_util.display_flexfield_value(g_application_id,g_flexfield_name,l_stored.attribute_category,p_column_name,l_rowid,p_stored_value);
+  elsif not l_context_changed then
+    return p_stored_value;
+  end if;
+  return null;
+end merged;
+
+begin
+  status_:=xxen_upload.g_status_success;
+  savepoint before_row;
+  for c in (
+  select
+  {a.alias}.rowid row_id,
+{(&quot;,&quot;+chr(10)).join(sel)}
+  from
+{chr(10).join(&#x27;  &#x27;+l for l in frm)}
+  where
+{chr(10).join(&#x27;  &#x27;+l for l in whr)}
+  ) loop
+    l_exists:=true;
+    l_rowid:=c.row_id;
+{chr(10).join(stored)}
+  end loop;
+  l_dff:=l_stored;
+
+  if not l_exists or dff_modified then
+{chr(10).join(newv)}
+    if l_exists then
+      l_context_changed:=modified(&#x27;{a.context_param}&#x27;) and
+      nvl({a.context_param},fnd_api.g_miss_char)&lt;&gt;nvl(xxen_util.display_flexfield_context(g_application_id,g_flexfield_name,l_stored.attribute_category),fnd_api.g_miss_char);
+{chr(10).join(merge)}
+    end if;
+    xxen_fnd_upload.validate_dff_attributes(
+    p_appl_sn=&gt;g_application_short_name,
+    p_flexfield_name=&gt;g_flexfield_name,
+    p_values_or_ids_in=&gt;&#x27;V&#x27;,
+    p_values_or_ids_out=&gt;&#x27;I&#x27;,{prefix_arg}
+    px_attribute_rec=&gt;l_dff,
+    x_error_message=&gt;l_dff_message
+    );
+    if l_dff_message is not null then
+      message_:=l_dff_message;
+      raise le_validation_error;
+    end if;{restore}
+    l_changed:=not l_exists or
+{cmp};
+  end if;
+
+  --merge the entity&#x27;s other columns here and set l_changed when one of them changed;
+  --test each with modified(), since xxen_upload.new_value alone treats a column that
+  --the csv/xlsx template omits as cleared
+
+  if l_changed then
+{write}
+  else
+    message_:=&#x27;No change.&#x27;;
+  end if;
+exception
+  when le_validation_error then
+    rollback to before_row;
+    status_:=xxen_upload.g_status_error;
+end {a.procedure};
+
+
+end {a.package};
+/
+&quot;&quot;&quot;
+    crlf = lambda s: s.replace(&quot;\r\n&quot;, &quot;\n&quot;).replace(&quot;\n&quot;, &quot;\r\n&quot;)
+    files = {
+        &quot;main_sql_columns.sql&quot;: disp(a.alias, f&quot;{a.alias}.rowid&quot;) + &quot;\n&quot;,
+        &quot;success_sql_columns.sql&quot;: disp(a.success_alias, f&quot;{a.success_alias}.row_id&quot;) + &quot;\n&quot;,
+        &quot;upload_columns.xml&quot;: &quot;\n&quot;.join(ucols) + &quot;\n&quot;,
+        &quot;upload_parameters.xml&quot;: &quot;\n&quot;.join(uparams) + &quot;\n&quot;,
+        f&quot;{a.package}.pks&quot;: spec,
+        f&quot;{a.package}.pkb&quot;: body,
+    }
+    if rule_xml:
+        files[&quot;translation_rule.xml&quot;] = rule_xml
+    if template_xml:
+        files[&quot;template.xml&quot;] = template_xml
+    for name, text in files.items():
+        (out / name).write_bytes(crlf(text).encode(&quot;utf-8&quot;))
+    print(f&quot;written to {out}: &quot; + &quot;, &quot;.join(sorted(files)))
+    for w in warnings:
+        print(&quot;WARNING: &quot; + w)
+    if not a.guid:
+        print(&quot;NOTE: no --guid given, translation_rule.xml not written&quot;)
+    if not tkeys:
+        print(&quot;NOTE: no --template-keys given, template.xml not written&quot;)
+
+
+if __name__ == &quot;__main__&quot;:
+    main()</code></pre></details></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

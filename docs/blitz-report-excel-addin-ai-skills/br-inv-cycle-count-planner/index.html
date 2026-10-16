@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>INV Cycle Count Planner - Blitz Report Excel Add-in Skills</title><meta name="description" content="Plan and steer Oracle EBS cycle counting: analyse count accuracy history, find never-counted and overdue items, recommend count priorities by value/velocity/accuracy (ABC-weighted), and surface the approval and adjustment backlog. Read-only — recommendations feed the customer&#x27;s own cycle count sched">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-inv-cycle-count-planner/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="INV Cycle Count Planner - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Plan and steer Oracle EBS cycle counting: analyse count accuracy history, find never-counted and overdue items, recommend count priorities by value/velocity/accuracy (ABC-weighted), and surface the approval and adjustment backlog. Read-only — recommendations feed the customer&#x27;s own cycle count sched"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-inv-cycle-count-planner/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cycle-count-planner/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Inventory</p><h1>INV Cycle Count Planner</h1><p class='name'>br-inv-cycle-count-planner</p><p class='lead'>Plan and steer Oracle EBS cycle counting: analyse count accuracy history, find never-counted and overdue items, recommend count priorities by value/velocity/accuracy (ABC-weighted), and surface the approval and adjustment backlog. Read-only — recommendations feed the customer&#x27;s own cycle count scheduling in EBS.</p><h2>When to use</h2><p>Use when the user asks what to count next, why inventory accuracy is slipping, which adjustments await approval, or wants a count program review.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-inv-cycle-count-planner.zip'>Download br-inv-cycle-count-planner.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cycle-count-planner'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/inv-onhand-quantities/'>INV Onhand Quantities</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cycle-count-planner'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># INV Cycle Count Planner (br-inv-cycle-count-planner)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. The ABC segmentation
+&gt; reuses the technique in `br-clustering` when the value/velocity classing runs.
+
+## When to use
+&quot;What should we count next&quot;, &quot;cycle count program review&quot;, &quot;why is count accuracy slipping&quot;,
+&quot;what adjustments are waiting for approval&quot;, &quot;which items never get counted&quot;. This skill is
+**read-and-recommend only** — EBS&#x27;s own cycle count scheduling generates the count requests; the
+deliverable here is the prioritized recommendation and the health picture, not a write.
+
+## Inputs
+- **Organization Code** (required) — ask if not supplied.
+- **Cycle count name** — if the org runs several, ask which (or analyse all and say so).
+- *Optional:* lookback window for accuracy history (default 12 months, say so).
+
+## Reports used (authoritative names — do NOT broad-search for them)
+| Report (exact name) | Role |
+|---|---|
+| `INV Cycle count entries and adjustments` | count results + adjustment values — the accuracy record |
+| `INV Cycle count hit/miss analysis` | accuracy rate by class — the trend spine |
+| `INV Cycle count unscheduled items` | items in scope but never/not recently scheduled |
+| `INV Cycle count open requests listing` | the open count backlog |
+| `INV Cycle counts pending approval` | adjustments awaiting approval — the control breach risk |
+| `INV Cycle count listing` | count definition scope/classes context |
+| `INV Physical inventory accuracy analysis` | physical-inventory accuracy cross-check where PI is used |
+| `INV Onhand Quantities` | value on hand per item — the value weighting |
+
+Pass the exact names; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+## Workflow
+1. **Extract** the accuracy history, unscheduled items, open requests, pending approvals and
+   on-hand values (one call per report).
+2. **Health picture**: hit rate trend, gross vs net adjustment value over the lookback, approval
+   backlog age (pending adjustments distort on-hand until approved — call that out), and open-
+   request aging (a stale open request blocks the item&#x27;s next schedule).
+3. **Coverage gaps**: unscheduled/never-counted items ranked by on-hand value; items whose last
+   count is older than their class frequency implies.
+4. **Recommend count priorities**: rank items by value at risk × historical miss rate × time since
+   last count — ABC-weighted (A-class first). Deliverable = the prioritized &quot;count next&quot; list with
+   the driver named per item (&quot;high value, missed twice, 7 months uncounted&quot;), sized to the org&#x27;s
+   evident weekly count capacity (derive from history; state the assumption).
+5. **Dashboard** (br-data-dashboard): accuracy trend, adjustment value trend, coverage %, approval
+   backlog.
+
+## Hard rules
+- Never present a pending adjustment as an accuracy result — it isn&#x27;t one until approved.
+- Accuracy is measured in both units and value; report the one that tells the worse story, show
+  both.
+
+## Degradation rules
+- Org uses physical inventory only (no cycle counts) → say so, pivot to
+  `INV Physical inventory accuracy analysis` as the accuracy record, skip the schedule-driven steps.
+- Hit/miss report empty for the window → derive accuracy from entries-and-adjustments directly and
+  say the derived basis.
+
+## Talk in the user&#x27;s language
+Items, counts, adjustment dollars, approvals — never `br_*` functions or helper sheets.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

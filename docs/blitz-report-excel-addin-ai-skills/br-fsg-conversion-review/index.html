@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Finish a Spreadsheet Server / GL Wand conversion - Blitz Report Excel Add-in Skills</title><meta name="description" content="Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency typ">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-fsg-conversion-review/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Finish a Spreadsheet Server / GL Wand conversion - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency typ"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-fsg-conversion-review/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / General Ledger</p><h1>Finish a Spreadsheet Server / GL Wand conversion</h1><p class='name'>br-fsg-conversion-review</p><p class='lead'>Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency types, cells left unconverted), ask the user about the rest, and mark every log line.</p><h2>When to use</h2><p>Use when the user asks to review, finish, fix or check a converted Spreadsheet Server or GL Wand workbook, its conversion log, or &quot;the warnings from the conversion&quot;. Edits the workbook only; never writes to Oracle EBS.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-fsg-conversion-review.zip'>Download br-fsg-conversion-review.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-fixes-md'>references/fixes.md</a><a href='#file-references-log-messages-md'>references/log-messages.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Finish a Spreadsheet Server / GL Wand conversion (br-fsg-conversion-review)
+
+The Blitz Report add-in has already converted this workbook: every balance, period and segment
+description formula now uses the add-in&#x27;s own functions, and what the converter could not finish is
+listed on the **`Conversion Log`** sheet (row 1 headers `Level | Cell | Message`, one line per issue,
+`Cell` is `&lt;sheet&gt;!&lt;address&gt;` or blank for a workbook-wide line). Your job is that list, nothing else.
+
+**Self-contained: read no other skill.** Each numbered Op is one workbook operation (Claude: one
+`execute_office_js` call; Copilot: one read or edit action).
+
+## Rules
+1. **Only what the log names.** Never rewrite a formula the log does not point at, never &quot;tidy&quot; a
+   converted formula, never recalculate or refresh balances yourself.
+2. **One confirmation before any edit.** Show every change as `cell: before -&gt; after` and ask. A
+   line that needs a business decision (which ledger, which currency, which values) is a question
+   in that same message, never a guess.
+3. **Every argument of a balance, period or description formula is a plain cell reference or a
+   quoted literal** — the add-in reads them without Excel calculating. A computed value goes into a
+   helper cell, and the formula points at that cell. Never put an expression inside these formulas.
+4. **A helper cell must be empty** (read it first) and sit next to the cell it serves; tell the user
+   where it went.
+5. **Talk about periods, balances, segments, ledgers and cells** in the user&#x27;s language. Never name
+   the add-in&#x27;s worksheet functions, this skill, or the log&#x27;s internal wording.
+
+## Op 1 — Read the log
+Read `Conversion Log` columns A:C (its whole used range). No such sheet: the conversion finished
+clean — say so and stop. Classify every line with `references/log-messages.md`: **Fix**, **Ask**,
+**Info**, or **Re-run** (the converter can finish it once the input is corrected).
+
+## Op 2 — Read what the fixes need
+In one operation, read the formulas (not values) of every cell the Fix and Ask lines name, plus the
+cells those formulas point at that the fix procedure needs (period cells, format cells, the
+source cell of a period number). `references/fixes.md` says exactly what each procedure reads.
+
+## Op 3 — Propose → confirmation
+One message, grouped:
+- **I will change** — per line: the cell, before -&gt; after, one plain sentence why.
+- **I need your answer** — the Ask lines, each with the options the procedure lists.
+- **For your information** — the Info lines in one sentence each (no action).
+- **The converter can finish these** — Re-run lines: what to correct first (you may propose that
+  correction above) and that they then run the Spreadsheet Server or GL Wand converter again on
+  this workbook from the Blitz Report ribbon (Tools &gt; Converter), which converts only what is
+  still unconverted.
+Options: `Yes — make the changes` / `Change some first` / `Cancel`. Nothing is written before Yes.
+
+## Op 4 — Apply
+Write the confirmed changes, one contiguous block per write (a comma-separated multi-area address is
+rejected; retry a rejected write once on that range, then move on). A formula written into a cell
+formatted as Text stays text: set that cell&#x27;s number format to General first.
+
+## Op 5 — Mark the log
+Write a `Status` heading in D1 of `Conversion Log` and, in one block write down column D, `Fixed`,
+`Needs you`, `Info` or `Run the converter again` for every line. Never delete log lines.
+
+## Op 6 — Reply
+What was changed (cell by cell), what still needs the user (with the question), and: &quot;Refresh the
+workbook (Blitz Report ribbon &gt; Refresh &gt; Other &gt; Workbook) to calculate the balances.&quot; If the user answered an Ask
+question, apply it in a further Op 4 + Op 5 round.</pre></section><section id='file-references-fixes-md'><h3 class='fname'>references/fixes.md</h3><pre class='md'># Fix procedures
+
+## The converted formulas (for reading them; never name them to the user)
+
+- Balance: `br_balance(period, amount type, currency, currency type, balance type, budget,
+  encumbrance, ledger, movement, multiplier, , , segment 1, segment 2, ... segment 20)` - segment n
+  is argument 12+n.
+- Period name: `br_period_name(year, period number, ledger, , )`.
+- Period offset: `br_period_offset(period cell, n, , , ledger)` = n periods after that cell&#x27;s period.
+- Segment description: `br_segment_description(&quot;segment name&quot;, value, ledger)`.
+- A stored formula may carry a file prefix before the function (`&#x27;...Blitz Report.xlam&#x27;!br_balance(`,
+  `[1]!br_balance(`): keep it exactly as it is.
+- Segment values: `a;b` list, `a-b` range, `~a` excluded, `%` wildcard; a parent value includes its
+  children. Amount types: PTD, QTD, YTD, CTD (CTD over a period range `first-last`). Currency type:
+  T = the ledger currency total, E = amounts entered in that currency.
+- Every argument is a plain cell reference or a quoted literal; a computed value goes into a helper
+  cell. A helper cell is an empty cell next to the cell it serves (read it first); prefer the cell to
+  the right, then the one below.
+
+When a reference moves to another cell, keep its `$` anchors (`$K$5` -&gt; `$S$5`, `K$5` -&gt; `S$5`) and
+prefix the sheet (`&#x27;Sheet name&#x27;!`) when the target is on another sheet than the formula.
+
+## P1 - A formula still reads a period cell as a number
+The period cell (named in the message) now shows a period name; the formula (log `Cell`) expects the
+period number it held before. Read both formulas.
+1. Find where the number is now: the period cell&#x27;s formula.
+   - `br_period_name(year, &lt;ref&gt;, ...)` with a cell reference: the number is in that cell. Replace
+     the formula&#x27;s reference to the period cell with it.
+   - `br_period_name(year, &quot;n&quot;, ...)` with a quoted number: write n into a helper cell, change that
+     argument from `&quot;n&quot;` to the helper (absolute, `$L$5`), and replace the formula&#x27;s reference to
+     the period cell with the helper.
+   - `br_period_offset(&lt;base&gt;, n, ...)`: the number is the base cell&#x27;s number plus n. Find the base
+     cell&#x27;s number source as above and replace the reference with `(&lt;source&gt;+n)`.
+   - Two period calls joined by `&amp;&quot;-&quot;&amp;` (a range or a year to date): ask which number the formula
+     needs.
+2. The period cell is read inside a range (`SUM(K5:K9)`), or the formula is an array formula: ask.
+
+## P2 - Restore a period cell&#x27;s own formula
+The message shows the formula the period cell had (`=&lt;formula&gt;`) and the value it was replaced by.
+Write that formula into a helper cell and change the period call&#x27;s number argument (the quoted value)
+to the helper, so the period follows it again.
+
+## P3 - One cell, two meanings
+List the converted formulas that read the cell (search the formulas for its address). Offer a second
+cell beside it holding the other value, and point the formulas that need the other meaning at it.
+Never change which value the first group reads.
+
+## P4 - Format cell / amount type
+Spreadsheet Server format -&gt; amount type: PER -&gt; PTD, LTD -&gt; YTD, QTR or DQTR -&gt; QTD (the period
+becomes the quarter&#x27;s last period), YTD or RANGE -&gt; CTD over a period range.
+- Formula-driven format cell that only switches among PER, LTD, QTR and DQTR, and the user wants it
+  to keep driving the balances: helper cell next to it with
+  `=IFERROR(INDEX({&quot;PTD&quot;,&quot;YTD&quot;,&quot;QTD&quot;,&quot;QTD&quot;},MATCH(&lt;format cell&gt;,{&quot;PER&quot;,&quot;LTD&quot;,&quot;QTR&quot;,&quot;DQTR&quot;},0)),&lt;format cell&gt;)`,
+  then replace the quoted amount type (argument 2) in each balance formula that came from that
+  format cell (same row or column as the log `Cell`) with the helper.
+- YTD or RANGE also change the period: leave the literal and explain.
+- Unknown format: ask what it means, then write the amount type it maps to.
+
+## P5 - Currency type E or T on a ledger this instance does not have
+Ask: &quot;Is &lt;C&gt; the ledger currency of &lt;L&gt;?&quot; Yes -&gt; T: write `T` into the cell the balance&#x27;s argument
+4 reads (it changes every balance reading that cell), or replace the quoted `&quot;E&quot;` in that formula.
+No -&gt; leave E. Unknown type -&gt; ask what it stands for.
+
+## P6 - Reporting currency (M) or a translated currency
+Blitz FSG reads a reporting currency from its reporting ledger. Ask for that ledger&#x27;s name; set the
+balance&#x27;s ledger (argument 8, or the cell it reads) to it and the currency type to T. Without a
+reporting ledger there is no equivalent: mark Needs you.
+
+## P7 - Hierarchy value with a segment suffix
+A Spreadsheet Server hierarchy value is `&lt;parent value&gt;_&lt;Segment_Name&gt;` (`1000_Natural_Account` =
+parent 1000 of segment &quot;Natural Account&quot;). The converter strips the suffix only on an instance that
+has the ledger. Recommend converting on such an instance. If the user instead confirms the segment
+name, strip `_&lt;Segment_Name&gt;` from every value of that segment: the values sit in the segment cells
+the balance formulas read (argument 12+n), often several `;`-separated in one cell. Show before/after
+per cell; never strip a suffix that differs from the confirmed one.
+
+## P8 - Formula-driven segment value
+Keep the formula; rewrite the Spreadsheet Server syntax inside its quoted text only: drop `[` and `]`,
+list separator `,` -&gt; `;`, range `.` -&gt; `-`, exclusion `/` -&gt; `~`, `*` -&gt; `%`, drop a leading `^^`
+(and its suffix, P7). Use the delimiters the batch line names when the log has one.
+
+## P9 - Segment list (`^list`) or field (`@field`)
+These have no Blitz Report equivalent. Ask for the values the list held and write them `;`-separated
+into the cell.
+
+## P10 - Let the converter finish
+Correct the input first, then the user runs the converter again on this workbook (Blitz Report ribbon
+&gt; Tools &gt; Converter &gt; Spreadsheet Server or GL Wand). It converts only the formulas still in the
+old form, and writes a new Conversion Log sheet for what remains.
+- An argument that is an expression, or a period argument that is not a cell: move the expression
+  into a helper cell and point the argument at it.
+- &quot;the segment names of ledger &lt;L&gt; are not loaded&quot;: choose &lt;L&gt; in the ribbon&#x27;s Ledger box on that
+  sheet first.
+- &quot;period &lt;n&gt; of &lt;year&gt; not found&quot;: ask for the period the user means.
+- &quot;balance type P (project) is not supported&quot;: no equivalent, Needs you.
+- GL Wand &quot;not loaded&quot; / &quot;names none&quot;: log in, or choose the ledger on the ribbon, first.
+- &quot;could not be written&quot;: the sheet is protected or the cell is part of an array formula; unprotect
+  it first.
+
+## P11 - Balance type cell is empty
+The formula reads its balance type (A actual, B budget, E encumbrance) from a cell that is empty,
+usually a spare column of the template; Spreadsheet Server returned nothing for it. List the columns
+affected (one cell names them all) and ask:
+- it should read a balance type: write that letter into the named cell (one cell serves the whole
+  column), then let the converter finish (P10);
+- the column is unused: clear its unconverted formulas, after the user confirms.</pre></section><section id='file-references-log-messages-md'><h3 class='fname'>references/log-messages.md</h3><pre class='md'># Conversion Log messages
+
+`Message` texts as the converters write them (`&lt;...&gt;` = a variable part). Match on the fixed words.
+**Class**: Fix = you can correct it after the confirmation; Ask = needs the user&#x27;s answer first;
+Info = nothing to change; Re-run = correct the input if needed, then the user runs the converter
+again on this workbook. **Proc** = the procedure in `fixes.md`.
+
+## Spreadsheet Server
+
+| Message | Class | Proc |
+|---|---|---|
+| `reads the period number from &lt;cell&gt; instead of the period cell &lt;cell&gt;` | Info — the converter already repointed this formula; check it shows the period number it showed before | — |
+| `uses the period cell &lt;cell&gt;, which now holds the period name instead of the period number` | Fix | P1 |
+| `uses the period cell &lt;cell&gt; and could not be rewritten: &lt;error&gt;` | Fix (an array formula: rewrite the whole array range) | P1 |
+| `period cell &lt;cell&gt; formula =&lt;formula&gt; replaced by its value &lt;n&gt;` | Fix | P2 |
+| `period cell &lt;cell&gt; is shared by formulas with different formats or ledgers (...), converted for the first` | Ask | P3 |
+| `period cell &lt;cell&gt;: &lt;format&gt; &lt;value&gt; embedded as literal period numbers, the link to &lt;cell&gt; is not kept` | Info (a quarter or range period no longer follows that cell; P2 restores it on request) | P2 |
+| `literal period &lt;p&gt; resolved to &quot;&lt;name&gt;&quot; at conversion time` | Info (the period is fixed text; offer a period cell only if the user wants it to roll) | — |
+| `format cell &lt;cell&gt; is formula-driven, amount type &lt;type&gt; embedded as a literal` | Ask | P4 |
+| `unknown format &#x27;&lt;f&gt;&#x27; left unchanged` | Ask | P4 |
+| `translation type E kept, ledger &lt;L&gt; is not on this instance; change it to T where &lt;C&gt; is that ledger&#x27;s currency` | Ask | P5 |
+| `T with &lt;C&gt; on ledger &lt;L&gt; returns that ledger&#x27;s own currency total, verify &lt;C&gt; is its currency` | Ask (confirm only) | P5 |
+| `translated balances in &lt;C&gt; are not supported, T returns the ledger currency total` | Ask | P6 |
+| `translation type M (multiple reporting currencies) has no Blitz Report equivalent` | Ask | P6 |
+| `unknown translation type &#x27;&lt;t&gt;&#x27;` | Ask | P5 |
+| `key data cell &lt;cell&gt; is formula-driven, its values are embedded as literals` | Info | — |
+| `key data &lt;name&gt;=&lt;value&gt; has no Blitz Report equivalent and is ignored`, `key data &lt;name&gt; is ignored` | Info | — |
+| `hierarchy value &lt;v&gt; keeps its segment suffix, segment &lt;n&gt; of ledger &lt;L&gt; is not on this instance` | Ask, recommend Re-run | P7 |
+| `hierarchy value &lt;v&gt; does not end with &lt;suffix&gt;, the segment name of ledger &lt;L&gt;, and is kept as is` | Ask | P7 |
+| `hierarchy values are converted to parent values, the refresh reports an unknown one as invalid` | Info | — |
+| `segment value &lt;v&gt; in &lt;cell&gt; is formula-driven and needs manual conversion` | Fix | P8 |
+| `segment list or @ field &lt;v&gt; in &lt;cell&gt; has no Blitz Report equivalent` | Ask | P9 |
+| `single character mask &lt;v&gt; only applies together with a % wildcard` | Info | — |
+| `numeric cell &lt;cell&gt; displays &lt;text&gt; but holds &lt;value&gt;, converted from the stored value` | Info (check the value) | — |
+| `&lt;cell&gt; is used as &lt;a&gt; and &lt;b&gt;, converted as &lt;a&gt;` | Ask (the cell feeds two different parameters; offer a second cell for &lt;b&gt;) | P3 |
+| `&lt;list&gt; of ledger &lt;L&gt; could not be read: &lt;error&gt;` | Info | — |
+| `balance type &lt;cell&gt; is empty` (level Error) | Ask | P11 |
+| Any other level `Error` (the cell still holds the Spreadsheet Server formula) | Re-run | P10 |
+
+## GL Wand (all level Error)
+
+| Message | Class | Proc |
+|---|---|---|
+| `left unconverted: segment descriptions need the ledger&#x27;s segment names, which are not loaded - log in and convert again` | Re-run (log in first) | P10 |
+| `left unconverted: glw_set_of_books_name needs the statement&#x27;s ledger, and the sheet names none` | Re-run (choose the ledger on the ribbon first) | P10 |
+| `left unconverted: a segment description whose segment number is not a literal number` | Fix, then Re-run | P10 |
+| `left unconverted: a segment description names segment &lt;n&gt;, which the ledger&#x27;s chart of accounts does not carry` | Ask | — |
+| `left unconverted: a GL Wand call could not be parsed` | Re-run after correcting the syntax | P10 |
+| `could not be written: &lt;error&gt;`, `parameter cell could not be written: &lt;error&gt;` | Re-run (unprotect the sheet first) | P10 |
+
+## Batch lines (no cell)
+
+| Message | Class |
+|---|---|
+| `the formulas name ledger &lt;L&gt;, which your responsibilities do not offer; the workbook is bound to &lt;D&gt;` | Ask: convert again under a responsibility that offers &lt;L&gt;, or confirm &lt;D&gt; |
+| `period or segment values use characters other than the delimiters &lt;d&gt; chosen for this batch; check the converted values` | Ask: which range, list and exclusion characters this workbook uses; then P8 on the affected values |
+| `The conversion stopped: &lt;error&gt;` | Re-run |</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

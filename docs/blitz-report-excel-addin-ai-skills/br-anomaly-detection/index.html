@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anomaly Detection - Blitz Report Excel Add-in Skills</title><meta name="description" content="Find unusual or suspicious rows in a Blitz Report dataset — outlier transactions, duplicate invoices, abnormal amounts, data-quality errors — using robust statistics, Mahalanobis distance, Benford&#x27;s Law, and duplicate detection.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-anomaly-detection/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Anomaly Detection - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Find unusual or suspicious rows in a Blitz Report dataset — outlier transactions, duplicate invoices, abnormal amounts, data-quality errors — using robust statistics, Mahalanobis distance, Benford&#x27;s Law, and duplicate detection."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-anomaly-detection/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-anomaly-detection/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Analytics</p><h1>Anomaly Detection</h1><p class='name'>br-anomaly-detection</p><p class='lead'>Find unusual or suspicious rows in a Blitz Report dataset — outlier transactions, duplicate invoices, abnormal amounts, data-quality errors — using robust statistics, Mahalanobis distance, Benford&#x27;s Law, and duplicate detection.</p><h2>When to use</h2><p>Use this whenever the user wants to detect anomalies, outliers, exceptions, &quot;things that look wrong&quot;, duplicate or suspicious invoices, fraud signals, or data-quality issues in an Oracle EBS / Blitz Report sheet. Trigger it for &quot;flag anything unusual&quot;, &quot;find outliers&quot;, &quot;check for duplicates&quot;, or &quot;what looks suspicious here&quot;, even without a named method.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-anomaly-detection.zip'>Download br-anomaly-detection.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-anomaly-detection'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-anomaly-detection'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-methods-md'>references/methods.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># br-anomaly-detection — flag the rows that don&#x27;t belong
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Surface the rows in a Blitz Report that deviate from the norm and explain **why** each was
+flagged, so a person can review them. Everything is computed in the Office.js script inside the
+workbook — no data leaves the sheet. Favour **explainable, deterministic** methods: an AP clerk or
+auditor must be able to see the reason, not just a black-box score.
+
+## When to use / not use
+- **Use** for: outlier/exception detection, duplicate-invoice scans, abnormal-amount checks,
+  data-quality auditing, fraud *screening* (candidates for review).
+- **Don&#x27;t use** for: predicting a labelled outcome (classification), or normal grouping
+  (`br-clustering`). Don&#x27;t use the word &quot;fraud&quot; as a conclusion — these are rows that **warrant
+  review**, not proof of anything.
+
+## Shared conventions (the br_ analytics house style)
+1. **Source** = an existing Blitz Report sheet; row 1 is headers. **Never add, rename, or delete
+   source columns** — read only.
+2. **Scratch work** on a helper sheet `br_calc_`; delete it when done.
+3. **Outputs (all four):** a results sheet `br_anomaly_results` (key + metric(s) + score + `Flag` +
+   `Reason`); a chart; a dashboard (reuse `br-data-dashboard` via `read_skill(&quot;br-data-dashboard&quot;)`
+   for its KPI/slicer layout; add a slicer on `Flag`); a plain-English chat summary with
+   recommended follow-up.
+4. **Determinism:** the methods below are deterministic by design — same input, same flags. State
+   the threshold you used and why.
+5. **Privacy:** operate only on the provided sheet.
+
+## Workflow — follow in order
+
+### Step 1 — Locate the data and decide what &quot;unusual&quot; means
+Read headers + 5-10 rows (`get_cell_ranges`). Identify the **key column** (Invoice, Vendor,
+Transaction) and the **metric column(s)**. Then pick the method from the user&#x27;s intent — ask only if
+genuinely ambiguous:
+- one numeric metric, &quot;find outliers in Amount&quot; → **robust z-score + IQR** (Step 2a)
+- several numeric metrics, &quot;rows that are odd across columns&quot; → **Mahalanobis distance** (Step 2b)
+- &quot;are these amounts manipulated / too many round numbers&quot; → **Benford&#x27;s Law** (Step 2c)
+- &quot;find duplicate / near-duplicate invoices&quot; → **duplicate scan** (Step 2d)
+
+You can run more than one (e.g. robust z **and** a duplicate scan) and combine the reasons.
+
+### Step 2 — Score + write results sheet (implementations in `references/methods.md`)  *(single `execute_office_js` call)*
+In one call: read the key + metric column(s), run the chosen method(s) below, build the
+flagged-row array sorted by score descending, create `br_anomaly_results`, and write all rows
+(headers + key + metric(s) + `Score` + `Flag` + `Reason`). Do not issue a separate read call and
+then a separate write call; do not insert any verification read between the score and the write.
+
+**2a. Robust z-score (median + MAD) and IQR.** Use the **median and MAD, not mean and standard
+deviation** — a few big outliers inflate the mean/sd and hide themselves. Flag rows with
+modified-z `&gt; 3.5` (and/or beyond the 1.5×IQR fences). The reason reads like &quot;4.1× MAD above median
+on Amount&quot;.
+
+**2b. Mahalanobis distance.** Standardise the numeric columns, compute the covariance and its
+inverse, and score each row by Mahalanobis distance; flag rows beyond the chi-square cutoff for the
+number of features (e.g. p &lt; 0.01). Reason: &quot;multivariate outlier, p&lt;0.01&quot;.
+
+**2c. Benford&#x27;s Law.** Compare the observed first-digit distribution of the amounts against Benford&#x27;s
+expected curve with a chi-square test; flag the digits that are over-represented and the rows behind
+them. Only valid on naturally-spanning amounts over many rows (see gotchas).
+
+**2d. Duplicate / near-duplicate scan.** Group by the keys that should be unique together (e.g.
+Vendor + Amount), and within a group flag rows whose dates fall within a small window (e.g. ≤ 5
+days) or that share an invoice number. Reason: &quot;possible duplicate of INV-00123 (same vendor +
+amount, 2 days apart)&quot;.
+
+### Step 3 — Results sheet (written in Step 2&#x27;s call)
+`br_anomaly_results` holds: key column(s) + the metric(s) + an anomaly `Score` + a `Flag`
+(Yes/No) + a human-readable `Reason`, with flagged rows sorted to the top. This sheet is created
+and populated **inside the Step 2 `execute_office_js` call** — not as a separate write.
+
+### Step 4 — Chart  *(single `execute_office_js` call — the permitted separate charts call)*
+- For 2a/2b: a **sorted score bar** with a horizontal **threshold line**, or a 2-D scatter with
+  flagged points highlighted.
+- For 2c: a bar of **observed vs expected** first-digit frequencies.
+
+### Step 5 — Dashboard
+Build the dashboard from `br_anomaly_results` with a **slicer on `Flag`** so the user can
+isolate the exceptions and see their total value/count.
+
+### Step 6 — Chat summary
+Report: the method(s) and threshold, how many rows were flagged (and what share of total value they
+represent), the **top offenders with their reasons**, and the recommended next step (&quot;send these to
+AP for review&quot;, &quot;the Benford spike on leading-9 amounts is worth a closer look&quot;, &quot;the noise rows may
+be a data-quality issue&quot;). Frame flags as candidates for review, never as proven fraud.
+
+## Gotchas
+- Mean/standard-deviation outlier tests are self-defeating — outliers inflate both. Use median + MAD.
+- Mahalanobis needs more rows than features and a non-degenerate covariance; if columns are
+  collinear, drop one or fall back to per-column robust z.
+- Benford only applies to amounts that span several orders of magnitude and arise naturally; it is
+  **invalid** on assigned numbers, capped ranges, or small samples (rule of thumb: ≥ ~300 rows).
+- Negative amounts / credits: decide whether to test absolute values or treat credits separately.
+- Never assert fraud. Flags are rows that warrant human review.</pre></section><section id='file-references-methods-md'><h3 class='fname'>references/methods.md</h3><pre class='md'># Anomaly methods — Office.js / JavaScript reference
+
+Read when scoring in Step 2. All deterministic; runs in-workbook so data stays in the sheet.
+
+## TOC
+1. Robust z-score (median + MAD) and IQR fences
+2. Mahalanobis distance (+ chi-square cutoff)
+3. Benford&#x27;s Law (first-digit chi-square)
+4. Duplicate / near-duplicate scan
+
+---
+
+## 1. Robust z (median + MAD) and IQR
+```js
+const median = a =&gt; { const s=[...a].sort((x,y)=&gt;x-y), m=s.length&gt;&gt;1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+
+function robustZ(values){                  // values: number[]
+  const med = median(values);
+  const mad = median(values.map(v=&gt;Math.abs(v-med))) || 1e-9;
+  // 0.6745 scales MAD to be comparable to a standard deviation
+  return values.map(v =&gt; 0.6745*(v-med)/mad);   // |z| &gt; 3.5 =&gt; flag
+}
+
+function iqrFences(values){
+  const s=[...values].sort((x,y)=&gt;x-y);
+  const q=p=&gt;{const i=(s.length-1)*p, lo=Math.floor(i); return s[lo]+(s[Math.ceil(i)]-s[lo])*(i-lo);};
+  const q1=q(.25), q3=q(.75), iqr=q3-q1;
+  return {low:q1-1.5*iqr, high:q3+1.5*iqr};    // outside =&gt; flag
+}
+```
+
+## 2. Mahalanobis distance
+```js
+// X: n x d (raw numeric features). Standardise first (see br-clustering scaler) for stability.
+function mahalanobis(X){
+  const n=X.length, d=X[0].length;
+  const mean=Array(d).fill(0);
+  X.forEach(r=&gt;r.forEach((v,j)=&gt;mean[j]+=v/n));
+  // covariance
+  const cov=Array.from({length:d},()=&gt;Array(d).fill(0));
+  X.forEach(r=&gt;{for(let i=0;i&lt;d;i++)for(let j=0;j&lt;d;j++)cov[i][j]+=(r[i]-mean[i])*(r[j]-mean[j])/(n-1);});
+  const inv=invert(cov);
+  return X.map(r=&gt;{
+    const dev=r.map((v,j)=&gt;v-mean[j]);
+    let s=0; for(let i=0;i&lt;d;i++)for(let j=0;j&lt;d;j++) s+=dev[i]*inv[i][j]*dev[j];
+    return Math.sqrt(Math.max(s,0));          // distance; square it to compare to chi-square
+  });
+}
+// Gauss-Jordan inverse (small d only)
+function invert(M){
+  const n=M.length, A=M.map((r,i)=&gt;[...r,...Array.from({length:n},(_,j)=&gt;i===j?1:0)]);
+  for(let c=0;c&lt;n;c++){
+    let p=c; while(p&lt;n &amp;&amp; Math.abs(A[p][c])&lt;1e-12) p++;
+    if(p===n) throw new Error(&quot;singular covariance — drop a collinear column&quot;);
+    [A[c],A[p]]=[A[p],A[c]];
+    const piv=A[c][c]; for(let j=0;j&lt;2*n;j++) A[c][j]/=piv;
+    for(let r=0;r&lt;n;r++){ if(r===c) continue; const f=A[r][c];
+      for(let j=0;j&lt;2*n;j++) A[r][j]-=f*A[c][j]; }
+  }
+  return A.map(r=&gt;r.slice(n));
+}
+// Chi-square 0.99 cutoffs for squared distance by d (df): 1:6.63 2:9.21 3:11.34 4:13.28 5:15.09 6:16.81
+```
+
+## 3. Benford&#x27;s Law (first significant digit)
+```js
+const BENFORD=[.301,.176,.125,.097,.079,.067,.058,.051,.046]; // P(d) for d=1..9
+function benford(values){
+  const obs=Array(9).fill(0); let n=0;
+  for(const v of values){ const a=Math.abs(v); if(a&lt;1) continue;
+    const d=+String(a).replace(&#x27;.&#x27;,&#x27;&#x27;).replace(/^0+/,&#x27;&#x27;)[0]; if(d&gt;=1){obs[d-1]++;n++;} }
+  const expCount=BENFORD.map(p=&gt;p*n);
+  let chi2=0; for(let i=0;i&lt;9;i++) chi2+=(obs[i]-expCount[i])**2/expCount[i];
+  // df=8, 0.05 crit = 15.51, 0.01 = 20.09  -&gt; exceed =&gt; distribution is suspicious
+  const obsFreq=obs.map(c=&gt;c/n);
+  return {n, chi2, obsFreq, expFreq:BENFORD,
+          overRep:obsFreq.map((f,i)=&gt;f&gt;BENFORD[i]*1.2?i+1:null).filter(Boolean)};
+}
+```
+Only meaningful for n ≥ ~300 amounts spanning several orders of magnitude.
+
+## 4. Duplicate / near-duplicate scan
+```js
+// rows: [{key, vendor, amount, date(ms), invNo}]
+function findDuplicates(rows, dayWindow=5){
+  const byVA=new Map();
+  for(const r of rows){ const k=r.vendor+&quot;|&quot;+r.amount.toFixed(2);
+    (byVA.get(k)||byVA.set(k,[]).get(k)).push(r); }
+  const flags=[];
+  for(const [,grp] of byVA){ if(grp.length&lt;2) continue;
+    grp.sort((a,b)=&gt;a.date-b.date);
+    for(let i=1;i&lt;grp.length;i++){
+      const dt=Math.abs(grp[i].date-grp[i-1].date)/86400000;
+      if(dt&lt;=dayWindow || grp[i].invNo===grp[i-1].invNo)
+        flags.push({key:grp[i].key,
+          reason:`possible duplicate of ${grp[i-1].invNo} (same vendor+amount, ${dt.toFixed(0)}d apart)`});
+    }
+  }
+  return flags;
+}
+```</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

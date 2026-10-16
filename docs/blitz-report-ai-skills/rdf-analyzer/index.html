@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oracle Report Analyzer - Blitz Report Development</title><meta name="description" content="Analyze Oracle EBS standard reports (.rdf and XML Publisher data templates) to extract SQL queries, parameters, output structure, and PL/SQL logic.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/rdf-analyzer/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Oracle Report Analyzer - Blitz Report Development"><meta property="og:description" content="Analyze Oracle EBS standard reports (.rdf and XML Publisher data templates) to extract SQL queries, parameters, output structure, and PL/SQL logic."><meta property="og:url" content="https://www.enginatics.com/ai-skills/rdf-analyzer/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/rdf-analyzer/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Migration</p><h1>Oracle Report Analyzer</h1><p class='name'>rdf-analyzer</p><p class='lead'>Analyze Oracle EBS standard reports (.rdf and XML Publisher data templates) to extract SQL queries, parameters, output structure, and PL/SQL logic.</p><h2>When to use</h2><p>Use when converting an Oracle report to Blitz Report format.</p><h2>Use</h2><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p>Then ask Claude for the task, or run:</p><pre><code>/blitz-report-ai-skills:rdf-analyzer</code></pre><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/fa-tax-reserve-ledger/'>FA Tax Reserve Ledger</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/rdf-analyzer'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># RDF Analyzer Skill
+
+Extracts the data model, parameters, output columns, and PL/SQL logic from Oracle EBS reports — both **Oracle Reports** (.rdf) and **XML Publisher** (BI Publisher) data templates. Produces a structured **Report Analysis Document** (RAD) that the report builder and conversion skill consume.
+
+## When to Use
+
+- Before converting an Oracle Report (.rdf) to a Blitz Report
+- Before converting a BI Publisher report to a Blitz Report
+- When user provides a concurrent program name and wants to understand the report structure
+
+## Arguments
+
+$ARGUMENTS should contain the report filename (e.g., &quot;FADTXA.rdf&quot;), concurrent program name (e.g., &quot;FADTXA&quot;), or a description of the report (e.g., &quot;FA Tax Reserve Report&quot;).
+
+## Report Type Detection
+
+| Type | File Extension | Location | Conversion Tool |
+|------|---------------|----------|-----------------|
+| Oracle Reports | `.rdf` | `$APPL_TOP/{mod}/12.0.0/reports/US/` | `rwconverter` |
+| XML Publisher | `.xml` | `$APPL_TOP/{mod}/12.0.0/patch/115/publisher/defs/` | Not needed (already XML) |
+
+## Phase 1: Locate Report Source
+
+### 1.1 Find by Concurrent Program Name
+
+```sql
+-- Find the concurrent program and its executable
+select
+fcp.concurrent_program_name,
+fcp.user_concurrent_program_name,
+fe.execution_file_name,
+fe.execution_method_code,
+fa.application_short_name
+from
+fnd_concurrent_programs fcp,
+fnd_executables fe,
+fnd_application fa
+where
+fcp.executable_id=fe.executable_id and
+fcp.executable_application_id=fe.application_id and
+fcp.application_id=fa.application_id and
+(fcp.concurrent_program_name=:program_name or
+ fcp.user_concurrent_program_name like &#x27;%&#x27;||:keyword||&#x27;%&#x27;)
+order by
+fcp.concurrent_program_name
+```
+
+**Execution methods:**
+- `O` = Oracle Reports (.rdf file)
+- `J` = Java / XML Publisher
+- `P` = PL/SQL stored procedure
+- `S` = SQL*Plus script
+
+### 1.2 Find the Source File
+
+The source files are on the apps tier of the EBS instance (`$&lt;PROD&gt;_TOP/reports/US` for .rdf files). Connect to it as described in `blitz-environment.md`, or ask the DBA to copy the files.
+
+```bash
+# Source the apps tier environment file first
+
+# Oracle Reports (.rdf)
+find $APPL_TOP/*/12.0.0/reports/US -name &quot;FILENAME.rdf&quot; 2&gt;/dev/null
+
+# XML Publisher data templates
+find $APPL_TOP/*/12.0.0/patch/115/publisher/defs -name &quot;FILENAME*.xml&quot; 2&gt;/dev/null
+```
+
+### 1.3 Find Concurrent Program Parameters
+
+```sql
+-- Get parameter definitions
+select
+fdfcuv.column_seq_num,
+fdfcuv.end_user_column_name,
+fdfcuv.form_left_prompt,
+fdfcuv.default_type,
+fdfcuv.default_value,
+fdfcuv.required_flag,
+fdfcuv.enabled_flag,
+fdfcuv.display_flag,
+fdfcuv.flex_value_set_id,
+ffvs.flex_value_set_name,
+ffvs.validation_type
+from
+fnd_descr_flex_col_usage_vl fdfcuv,
+fnd_flex_value_sets ffvs
+where
+fdfcuv.application_id=:app_id and
+fdfcuv.descriptive_flexfield_name=&#x27;$SRS$.&#x27;||:program_name and
+fdfcuv.descriptive_flex_context_code=&#x27;Global Data Elements&#x27; and
+fdfcuv.flex_value_set_id=ffvs.flex_value_set_id(+)
+order by
+fdfcuv.column_seq_num
+```
+
+## Phase 2: Convert and Read Oracle Reports (.rdf)
+
+### 2.1 Convert to XML
+
+```bash
+# Copy to /tmp and convert
+cp $APPL_TOP/{mod}/12.0.0/reports/US/FILENAME.rdf /tmp/
+cd /tmp
+rwconverter stype=rdffile source=/tmp/FILENAME.rdf dtype=xmlfile dest=/tmp/FILENAME.xml batch=yes
+```
+
+**If rwconverter fails** (segfault, exit 139 — happens with some files):
+
+```bash
+# Fallback: extract readable content with strings
+strings /tmp/FILENAME.rdf &gt; /tmp/FILENAME_strings.txt
+
+# Search for SQL queries
+strings /tmp/FILENAME.rdf | grep -i &#x27;select.*from&#x27; | head -20
+
+# Search for parameter references
+strings /tmp/FILENAME.rdf | grep -i &#x27;:P_&#x27; | head -20
+```
+
+### 2.2 Extract Data Model from Converted XML
+
+The converted XML has these key sections:
+
+#### Parameters (`&lt;userParameter&gt;`)
+
+```xml
+&lt;userParameter name=&quot;P_BOOK&quot; datatype=&quot;character&quot; width=&quot;15&quot; initialValue=&quot;&quot;/&gt;
+&lt;userParameter name=&quot;P_PERIOD&quot; datatype=&quot;character&quot; width=&quot;25&quot;/&gt;
+&lt;userParameter name=&quot;P_CONC_REQUEST_ID&quot; datatype=&quot;number&quot; width=&quot;15&quot; initialValue=&quot;0&quot;/&gt;
+```
+
+Extract: name, datatype, width, initialValue, any `&lt;listOfValues&gt;` children.
+
+#### SQL Queries (`&lt;dataSource&gt;`)
+
+```xml
+&lt;dataSource name=&quot;Q_MAIN&quot;&gt;
+  &lt;select&gt;&lt;![CDATA[
+    select ad.asset_number, ad.description, fb.cost, fb.date_placed_in_service
+    from fa_additions ad, fa_books fb
+    where ad.asset_id=fb.asset_id and fb.book_type_code=:P_BOOK
+    and fb.date_effective between :P_START and nvl(:P_END, sysdate)
+    order by ad.asset_number
+  ]]&gt;&lt;/select&gt;
+&lt;/dataSource&gt;
+```
+
+#### Groups and Columns (`&lt;group&gt;`, `&lt;dataItem&gt;`)
+
+```xml
+&lt;group name=&quot;G_MAIN&quot;&gt;
+  &lt;dataItem name=&quot;ASSET_NUMBER&quot; oracleDatatype=&quot;varchar2&quot; width=&quot;15&quot;&gt;
+    &lt;dataDescriptor expression=&quot;ad.asset_number&quot; order=&quot;1&quot;/&gt;
+  &lt;/dataItem&gt;
+  &lt;formula name=&quot;CF_TOTAL&quot; source=&quot;cf_totalformula&quot; datatype=&quot;number&quot;/&gt;
+  &lt;summary name=&quot;CS_COST_SUM&quot; source=&quot;COST&quot; function=&quot;sum&quot; reset=&quot;G_MAIN&quot;/&gt;
+&lt;/group&gt;
+```
+
+- `&lt;dataItem&gt;` = a column from the SQL query
+- `&lt;formula&gt;` = a PL/SQL-computed column (see `&lt;programUnits&gt;`)
+- `&lt;summary&gt;` = aggregate (sum, count, min, max, avg) with break/reset group
+- `&lt;placeholder&gt;` = a variable populated by triggers at runtime
+
+#### Master-Detail Relationships
+
+Nested `&lt;group&gt;` elements within a `&lt;dataSource&gt;` indicate master-detail:
+```xml
+&lt;dataSource name=&quot;Q_DETAIL&quot;&gt;
+  &lt;group name=&quot;G_HEADER&quot;&gt;
+    &lt;!-- header columns --&gt;
+    &lt;group name=&quot;G_LINES&quot;&gt;
+      &lt;!-- line columns — detail of G_HEADER --&gt;
+    &lt;/group&gt;
+  &lt;/group&gt;
+&lt;/dataSource&gt;
+```
+
+#### PL/SQL Triggers (`&lt;programUnits&gt;`)
+
+```xml
+&lt;function name=&quot;beforereport&quot;&gt;
+  &lt;textSource&gt;&lt;![CDATA[
+    function BeforeReport return boolean is
+    begin
+      srw.user_exit(&#x27;FND SRWINIT&#x27;);
+      -- parameter preprocessing, dynamic WHERE clause construction
+      return true;
+    end;
+  ]]&gt;&lt;/textSource&gt;
+&lt;/function&gt;
+
+&lt;function name=&quot;cf_totalformula&quot; returnType=&quot;number&quot;&gt;
+  &lt;textSource&gt;&lt;![CDATA[
+    function CF_TotalFormula return Number is
+    begin
+      return :cost * :quantity;
+    end;
+  ]]&gt;&lt;/textSource&gt;
+&lt;/function&gt;
+```
+
+**Key things to extract from PL/SQL:**
+1. `BeforeReport` — often builds dynamic WHERE clauses via lexical parameters (`&amp;WHERE_CLAUSE`)
+2. Formula functions — computed columns that need SQL equivalents
+3. `SRW.USER_EXIT` calls — especially `FND FLEXSQL`, `FND FORMAT_CURRENCY` (flexfield and currency formatting)
+
+#### Lexical Parameters
+
+These are string substitution variables (not bind variables). They appear as `&amp;NAME` in the SQL:
+
+```sql
+select ... from table where &amp;WHERE_DAS_CLAUSE and &amp;H_WHERE
+```
+
+The `BeforeReport` trigger typically builds these dynamically. They need to be converted to Blitz Report anchors or parameterized conditions.
+
+## Phase 3: Read XML Publisher Data Templates
+
+XML Publisher templates are already clean XML — no conversion needed.
+
+### 3.1 Extract SQL Queries
+
+```xml
+&lt;dataQuery&gt;
+  &lt;sqlStatement name=&quot;Q_PARAMETERS&quot;&gt;
+    &lt;![CDATA[SELECT :P_DATE param_date FROM sys.dual]]&gt;
+  &lt;/sqlStatement&gt;
+  &lt;sqlStatement name=&quot;Q_MAIN&quot;&gt;
+    &lt;![CDATA[SELECT inv.invoice_num, inv.invoice_amount
+    FROM ap_invoices_all inv
+    WHERE inv.org_id = :P_ORG_ID]]&gt;
+  &lt;/sqlStatement&gt;
+&lt;/dataQuery&gt;
+```
+
+### 3.2 Extract Parameters
+
+```xml
+&lt;parameters&gt;
+  &lt;parameter name=&quot;P_ORG_ID&quot; dataType=&quot;NUMBER&quot;/&gt;
+  &lt;parameter name=&quot;P_DATE&quot; dataType=&quot;DATE&quot; defaultValue=&quot;{$SYSDATE$}&quot;/&gt;
+&lt;/parameters&gt;
+```
+
+### 3.3 Extract Output Structure
+
+```xml
+&lt;dataStructure&gt;
+  &lt;group name=&quot;G_HEADER&quot; source=&quot;Q_MAIN&quot;&gt;
+    &lt;element name=&quot;INVOICE_NUM&quot; value=&quot;INVOICE_NUM&quot;/&gt;
+    &lt;element name=&quot;TOTAL_AMOUNT&quot; value=&quot;G_LINES.LINE_AMOUNT&quot; function=&quot;SUM()&quot;/&gt;
+    &lt;group name=&quot;G_LINES&quot; source=&quot;Q_LINES&quot;&gt;
+      &lt;element name=&quot;LINE_AMOUNT&quot; value=&quot;LINE_AMOUNT&quot;/&gt;
+    &lt;/group&gt;
+  &lt;/group&gt;
+&lt;/dataStructure&gt;
+```
+
+### 3.4 Check for PL/SQL Package
+
+```xml
+&lt;dataTemplate defaultPackage=&quot;AP_SOME_RPT_PKG&quot;&gt;
+```
+
+If `defaultPackage` is set, the report calls PL/SQL functions for computed columns. Read the package source:
+
+```sql
+select text from all_source
+where name=:package_name and type=&#x27;PACKAGE BODY&#x27;
+order by line;
+```
+
+## Phase 4: Produce the Report Analysis Document (RAD)
+
+### 4.1 Summary
+
+```
+Report: FADTXA (FA Tax Reserve Ledger)
+Module: Fixed Assets (FA)
+Type: Oracle Reports (.rdf) / XML Publisher
+Concurrent Program: FADTXA
+Executable: FADTXA.rdf
+Application: OFA
+```
+
+### 4.2 Parameters
+
+| # | Name | Prompt | Type | Required | Default | Value Set |
+|---|------|--------|------|----------|---------|-----------|
+| 1 | P_BOOK | Book | Char | Y | — | FA_BOOK |
+| 2 | P_PERIOD | Period | Char | Y | — | FA_PERIOD |
+| 3 | P_CATEGORY | Category | Char | N | — | — |
+
+### 4.3 SQL Queries
+
+For each query, document:
+- **Query name** (Q_MAIN, Q_DETAIL, etc.)
+- **Full SQL text** — complete with all joins and conditions
+- **Bind variables** — which parameters are referenced
+- **Lexical parameters** — `&amp;NAME` substitutions and how they&#x27;re built in BeforeReport
+
+### 4.4 Output Columns
+
+| # | Column | Source | Type | Width | Formula/Summary |
+|---|--------|--------|------|-------|-----------------|
+| 1 | ASSET_NUMBER | Q_MAIN.ASSET_NUMBER | Char | 15 | — |
+| 2 | COST | Q_MAIN.COST | Number | 20 | — |
+| 3 | TOTAL_COST | CS_COST_SUM | Number | 20 | SUM(COST) by G_BOOK |
+| 4 | FORMATTED_AMT | CF_FORMAT | Char | 30 | FND FORMAT_CURRENCY |
+
+### 4.5 Groups and Breaks
+
+| Group | Parent | Source Query | Break Column | Aggregates |
+|-------|--------|-------------|--------------|------------|
+| G_BOOK | — | Q_MAIN | BOOK_TYPE_CODE | — |
+| G_ASSET | G_BOOK | Q_MAIN | ASSET_NUMBER | SUM(COST) |
+
+### 4.6 PL/SQL Logic
+
+Document:
+- `BeforeReport` — dynamic WHERE clause construction, parameter validation
+- Formula functions — each with its SQL equivalent
+- `SRW.USER_EXIT` calls — flexfield handling, currency formatting
+- `AfterReport` — cleanup, `FND SRWEXIT`
+
+### 4.7 Blitz Conversion Notes
+
+Based on the analysis, note:
+- Which queries to consolidate (UNION ALL vs subqueries), keeping a `union` inside an original query as `union` over its key, and leaving out sections a group filter or format trigger never prints
+- Which formulas can be replaced with SQL expressions
+- Which lexical parameters become Blitz anchors
+- Which SRW user exits need `xxen_util` function equivalents:
+  - `FND FLEXSQL` → `xxen_util.segments()` or KFF column references
+  - `FND FORMAT_CURRENCY` → `to_char()` with format mask
+  - `FND SRWINIT` / `FND SRWEXIT` → `fnd_global.apps_initialize()` (handled by Blitz framework)
+- Master-detail groups → flattened with joins or kept as separate SQL (depends on layout)
+- Any concurrent program parameters that need Blitz LOVs
+
+### 4.8 Request Group Assignments
+
+```sql
+-- Find which responsibilities can run this report
+select distinct
+frg.request_group_name,
+fa.application_short_name
+from
+fnd_request_groups frg,
+fnd_request_group_units frgu,
+fnd_application fa,
+fnd_concurrent_programs fcp
+where
+frg.request_group_id=frgu.request_group_id and
+frg.application_id=fa.application_id and
+fcp.concurrent_program_name=:program_name and
+(frgu.unit_application_id=fcp.application_id and
+ frgu.request_unit_id=fcp.concurrent_program_id and
+ frgu.request_unit_type=&#x27;P&#x27;
+ or
+ frgu.unit_application_id=fcp.application_id and
+ frgu.request_unit_type=&#x27;A&#x27;)
+order by
+frg.request_group_name
+```
+
+## Quality Checklist
+
+Before producing the RAD, verify:
+- [ ] All SQL queries extracted completely (no truncation)
+- [ ] All parameters documented with type and default
+- [ ] Field inventory generated (`${CLAUDE_PLUGIN_ROOT}/skills/migrate-custom-reports/field_inventory.py &lt;folder&gt;`): every printed field traced to its source
+- [ ] All formula functions have SQL equivalents identified, including the placeholders they assign and what their exception handlers return
+- [ ] Group filters, parent-child links and format triggers that can return FALSE listed with the rows or sections they hide
+- [ ] For a PL/SQL program, every variable the loop writes to the output traced to its assignments (cursor literals such as `0 basic` are filled there)
+- [ ] Lexical parameters traced back to BeforeReport logic
+- [ ] Master-detail hierarchy is clear
+- [ ] SRW.USER_EXIT calls identified and mapped to xxen_util functions
+- [ ] Request group assignments captured
+
+## Handoff
+
+The RAD is consumed by:
+- **convert-bip-and-rdf-reports-to-blitz** skill — for building the Blitz Report XML
+- **report-tester** — for running and comparing the original vs Blitz output</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

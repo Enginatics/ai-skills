@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR Credit Risk &amp; DSO Analysis - Blitz Report Excel Add-in Skills</title><meta name="description" content="Score customer credit risk and analyse DSO from Oracle EBS Receivables: combine credit limits and utilization, aging severity, payment behaviour and balance trend into a per-customer risk grade with the drivers named, plus a DSO decomposition showing which segments and behaviours move it. Read-only.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-credit-risk/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="AR Credit Risk &amp; DSO Analysis - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Score customer credit risk and analyse DSO from Oracle EBS Receivables: combine credit limits and utilization, aging severity, payment behaviour and balance trend into a per-customer risk grade with the drivers named, plus a DSO decomposition showing which segments and behaviours move it. Read-only."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-credit-risk/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-credit-risk/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>AR Credit Risk &amp; DSO Analysis</h1><p class='name'>br-ar-credit-risk</p><p class='lead'>Score customer credit risk and analyse DSO from Oracle EBS Receivables: combine credit limits and utilization, aging severity, payment behaviour and balance trend into a per-customer risk grade with the drivers named, plus a DSO decomposition showing which segments and behaviours move it. Read-only.</p><h2>When to use</h2><p>Use when the user asks which customers are a credit risk, wants credit limits reviewed, asks &quot;why is our DSO rising&quot;, or needs a credit-review worklist.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-credit-risk.zip'>Download br-ar-credit-risk.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-credit-risk'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ar-applied-receipts/'>AR Applied Receipts</a></li><li><a href='https://www.enginatics.com/reports/ar-customer-credit-limits/'>AR Customer Credit Limits</a></li><li><a href='https://www.enginatics.com/reports/ar-customer-open-balances-period-lookback/'>AR Customer Open Balances Period Lookback</a></li><li><a href='https://www.enginatics.com/reports/ar-customer-profiles/'>AR Customer Profiles</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-credit-risk'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># AR Credit Risk &amp; DSO Analysis (br-ar-credit-risk)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. The payment-behaviour
+&gt; scoring reuses the technique in `br-rfm-analysis` — read it when that add-on runs.
+
+## When to use
+&quot;Which customers are a credit risk&quot;, &quot;review credit limits&quot;, &quot;who is close to / over their limit&quot;,
+&quot;why is DSO up this quarter&quot;, &quot;credit-review worklist for the committee&quot;. For chase-this-week
+collections prioritization use **br-ar-collections-worklist** (it owns dunning); this skill is the
+slower-cadence credit and DSO view. They compose: run this first, hand the high-risk names to the
+worklist.
+
+## Inputs
+- **Operating Unit** (required) — ask if not supplied.
+- **As-of date** — default today; say so.
+- *Optional:* customer scope, the payment-behaviour add-on (extra extract — offer once, yes/no).
+
+## Reports used (authoritative names — do NOT broad-search for them)
+| Report (exact name) | Role |
+|---|---|
+| `AR Customer Credit Snapshot` | the spine — per-customer credit position |
+| `AR Customer Credit Limits` | limits per customer/site/currency to compute utilization |
+| `AR Aging` | open balance by bucket — severity input |
+| `AR Customer Open Balances Period Lookback` | balance trend over trailing periods |
+| `AR Applied Receipts` | payment behaviour add-on — days-to-pay distribution (extra extract, offer first) |
+| `AR Customer Profiles` | profile class, terms, collector — context columns |
+
+Pass the exact names; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+## Workflow
+1. **Extract** snapshot, limits, aging and lookback for the OU (one call each). Run
+   `AR Applied Receipts` only if the behaviour add-on was accepted.
+2. **Score each customer** on four dimensions, each 0–25, with the raw driver kept beside the score:
+   - **Utilization** — open balance vs credit limit (over-limit caps the dimension at 25).
+     Customers with NO limit set are their own class — &quot;unlimited exposure&quot;, listed separately,
+     never scored as safe.
+   - **Aging severity** — share of balance past 60/90 days.
+   - **Trend** — balance growth over the lookback periods (growing balance + worsening aging is the
+     compound signal to call out).
+   - **Payment behaviour** — weighted days-to-pay vs terms from applied receipts; when the add-on
+     was skipped, this dimension reads &quot;not scored&quot; and the total is out of 75 — SAY SO, never
+     silently rescale.
+3. **Grade** A–D from the total (thresholds are CONFIG placeholders — label them), and produce the
+   credit-review worklist: grade C/D + over-limit + unlimited-exposure customers, ranked by open
+   balance, one plain-language line each (&quot;82% utilized, balance +40% in 3 months, pays 18 days
+   late&quot;).
+4. **DSO decomposition**: DSO from aging balance vs credited sales proxy (lookback periods), split
+   by customer segment/profile class — which segment moves the number, and whether the driver is
+   balance growth or payment slowdown. Trend across the lookback.
+5. **Dashboard** (br-data-dashboard): grade distribution, exposure by grade, DSO trend, top-10
+   exposure list.
+
+## Hard rules
+- A recommendation is a REVIEW candidate, never &quot;cut this customer&#x27;s credit&quot; — credit decisions
+  are the customer&#x27;s policy, and the sheet says so.
+- Never net credit balances into risk scores silently — a large unapplied credit is its own
+  callout, not a risk reducer.
+
+## Degradation rules
+- No `AR Customer Credit Limits` rows (site doesn&#x27;t use limits) → utilization dimension reads
+  &quot;limits not used&quot;, scoring proceeds on the other dimensions with the reduced denominator stated.
+- Thin lookback history → trend dimension &quot;not scored&quot;, stated.
+
+## Talk in the user&#x27;s language
+Customer names, balances, grades — never `br_*` functions or helper sheets.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

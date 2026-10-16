@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>INV Stock Level Optimizer - Blitz Report Excel Add-in Skills</title><meta name="description" content="Recommend min/max quantities, reorder points and safety stock per item and subinventory in Oracle EBS from actual demand history and on-hand position — then, only on explicit user confirmation, apply the approved recommendations back to EBS via the INV Item Subinventory Upload or INV Safety Stock Up">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-inv-stock-optimizer/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="INV Stock Level Optimizer - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Recommend min/max quantities, reorder points and safety stock per item and subinventory in Oracle EBS from actual demand history and on-hand position — then, only on explicit user confirmation, apply the approved recommendations back to EBS via the INV Item Subinventory Upload or INV Safety Stock Up"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-inv-stock-optimizer/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-stock-optimizer/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Inventory</p><h1>INV Stock Level Optimizer</h1><p class='name'>br-inv-stock-optimizer</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Recommend min/max quantities, reorder points and safety stock per item and subinventory in Oracle EBS from actual demand history and on-hand position — then, only on explicit user confirmation, apply the approved recommendations back to EBS via the INV Item Subinventory Upload or INV Safety Stock Upload.</p><h2>When to use</h2><p>Use when the user asks to optimize stock levels, review min/max settings, right-size safety stock, reduce excess inventory, or fix reorder points. WRITES to Oracle EBS (optional, gated).</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-inv-stock-optimizer.zip'>Download br-inv-stock-optimizer.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-stock-optimizer'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/inv-item-subinventory-upload/'>INV Item Subinventory Upload</a></li><li><a href='https://www.enginatics.com/reports/inv-onhand-quantities/'>INV Onhand Quantities</a></li><li><a href='https://www.enginatics.com/reports/inv-safety-stock-upload/'>INV Safety Stock Upload</a></li><li><a href='https://www.enginatics.com/reports/inv-safety-stocks/'>INV Safety Stocks</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-stock-optimizer'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># INV Stock Level Optimizer (br-inv-stock-optimizer)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. For the optional apply
+&gt; step, **read `br-run-uploads` FIRST** — it owns the upload mechanics; this skill only adds what is
+&gt; specific to stock parameters.
+
+## When to use
+&quot;Optimize our min/max settings&quot;, &quot;are our reorder points right&quot;, &quot;right-size safety stock&quot;,
+&quot;which items are over-stocked / under-stocked&quot;, &quot;review replenishment parameters for org X&quot;.
+For day-to-day inventory exceptions (negative on-hand, stuck transactions) use
+**br-inv-exception-triage** instead; for demand forecasting alone use **br-forecasting**.
+
+## Inputs
+- **Organization Code** (required) — ask if not supplied.
+- **Lookback window** — default 12 months of demand history; say so and let the user change it.
+- *Optional:* Subinventory, item category/range, service-level target (see CONFIG).
+
+## Reports and uploads used (authoritative names — do NOT broad-search for them)
+| Name | Type | Role |
+|---|---|---|
+| `INV Item Demand History` | Report | demand per item per period — the consumption baseline |
+| `INV Onhand Quantities` | Report | current position per item/subinventory |
+| `INV Safety Stocks` | Report | current safety-stock settings to compare against |
+| `INV Transaction Historical Summary` | Report | issue/receipt velocity cross-check |
+| `INV Item Subinventory Upload` | Upload | **write path** for min/max and reorder-point changes |
+| `INV Safety Stock Upload` | Upload | **write path** for safety-stock changes |
+
+Pass these exact names; only fall back to a name search on `#BLITZ_REPORT_NOT_FOUND`.
+There is no shipped generic min-max listing report — current min/max values come back on the
+`INV Item Subinventory Upload` download grid itself (run it in Create, Update mode), which is also
+what makes the apply step safe: you edit only the rows you propose.
+
+## Workflow
+1. **Extract** demand history, on-hand and current safety stocks for the org (one call per report,
+   per br-analytics-standards batching).
+2. **Profile each item**: average and variability of period demand (mean, coefficient of variation),
+   lead-time assumption (see CONFIG), current on-hand vs current min/max/safety stock.
+3. **Recommend** per item-subinventory: suggested min, max, reorder point and safety stock, each with
+   the driver stated in plain language (&quot;demand doubled since the setting was last right&quot;,
+   &quot;9 months of zero demand — candidate to cut to zero&quot;). Classify: RAISE / LOWER / LEAVE /
+   NO-DATA (never guess where history is too thin — say so).
+4. **Quantify** the working-capital effect: excess units × item cost where the recommendation lowers
+   stock; exposure where it raises. Present as a ranked sheet + dashboard (br-data-dashboard).
+5. **Apply (optional, gated)** — only when the user explicitly asks to apply: download the
+   `INV Item Subinventory Upload` (or `INV Safety Stock Upload` for safety stock) for the org, fill
+   ONLY the approved rows&#x27; min/max/reorder columns, validate, show the user exactly what will change
+   (item count + before/after values), and submit only on their second explicit confirmation.
+   Untouched rows are inert. Never mix the two uploads in one confirmation.
+
+## CONFIG — placeholder policy, label it as such
+Service level (default 95%), lead-time days (default: ask, or use a stated assumption and LABEL it),
+and the zero-demand cut threshold (default 9 months) are PLACEHOLDERS until the customer states
+policy. Every recommendation sheet must carry a visible note naming the assumptions used.
+
+## Degradation rules
+- No demand history for an item → NO-DATA class, never a recommendation.
+- `INV Item Demand History` empty for the org (demand history not compiled) → fall back to
+  `INV Transaction Historical Summary` issues as the consumption proxy and say so.
+- The user declines the apply step → the recommendation sheet IS the deliverable; never nag.
+
+## Talk in the user&#x27;s language
+Say &quot;apply the approved stock settings to Oracle&quot; — never name `br_*` functions, the `blitz_`
+sheet or trigger cells. Ask about the ACTION: &quot;Apply new min/max to 34 items in M1 —
+lowering stock value by ~$210k?&quot;</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

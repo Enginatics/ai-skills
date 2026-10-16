@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Subledger-to-GL Reconciliation - Blitz Report Excel Add-in Skills</title><meta name="description" content="Reconcile Oracle EBS subledgers to the General Ledger in Excel: have the br-run-reports skill extract AP, AR, Inventory and FA control balances and tie each to its GL control account, surfacing the variance per subledger with a red/amber/green verdict.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-subledger-gl-reconciliation/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Subledger-to-GL Reconciliation - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Reconcile Oracle EBS subledgers to the General Ledger in Excel: have the br-run-reports skill extract AP, AR, Inventory and FA control balances and tie each to its GL control account, surfacing the variance per subledger with a red/amber/green verdict."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-subledger-gl-reconciliation/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-subledger-gl-reconciliation/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Period Close</p><h1>Subledger-to-GL Reconciliation</h1><p class='name'>br-subledger-gl-reconciliation</p><p class='lead'>Reconcile Oracle EBS subledgers to the General Ledger in Excel: have the br-run-reports skill extract AP, AR, Inventory and FA control balances and tie each to its GL control account, surfacing the variance per subledger with a red/amber/green verdict.</p><h2>When to use</h2><p>Use when the user asks to reconcile AP/AR/INV/FA to GL, subledger-to-GL tie-out, or control account differences at period end.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-subledger-gl-reconciliation.zip'>Download br-subledger-gl-reconciliation.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-subledger-gl-reconciliation'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/cst-period-close-subinventory-value/'>CST Period Close Subinventory Value</a></li><li><a href='https://www.enginatics.com/reports/fa-journal-entry-reserve-ledger/'>FA Journal Entry Reserve Ledger</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-subledger-gl-reconciliation'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Subledger-to-GL Reconciliation (br-subledger-gl-reconciliation)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Tie each subledger to its GL control account in one workbook and surface the variances. You own
+orchestration, the tie-out, and the verdict; br-run-reports does extraction and
+br-data-dashboard the build. Run steps in order, keeping intermediate sheets.
+
+**Requires:** br-run-reports, br-data-dashboard.
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports**
+(connection, auth, async run, completion, cell population). Never call `br_*` functions, and never
+rename/read/sum the result sheet or start analysis until extraction is confirmed complete. This
+skill is **read-only**: it reconciles and reports; it changes nothing.
+
+## When to use
+&quot;Reconcile AP/AR/INV/FA to GL&quot;, subledger-to-GL tie-out, control-account differences, period-end recon.
+
+## Inputs
+- **Ledger** (required); **Period**; *optional:* which subledgers to include (default AP, AR, INV, FA).
+
+## Reports used (authoritative names — do NOT broad-search for them)
+These exact report names are known. When you ask br-run-reports to run one, pass the
+**documented name directly** — do NOT run a `br_report_list_external` discovery search first. Inspect
+parameters only if you need an exact LOV spelling. **Fallback:** only if a run returns
+`#BLITZ_REPORT_NOT_FOUND` (the instance renamed it, or the module isn&#x27;t installed) do a name search.
+
+| Report (exact name) | Run with | Notes |
+|---|---|---|
+| `AP Trial Balance` | Ledger + Period | AP liability ending balance |
+| `AR to GL Reconciliation` | Ledger + Period | AR receivables ending balance |
+| `CST Period Close Subinventory Value` (+ `CST AP and PO Accrual Reconciliation`) | Org / Ledger + Period | INV value |
+| `FA Journal Entry Reserve Ledger` | Book + Period | FA cost + reserve |
+| `GL Trial Balance Detail` | Ledger + Period | GL control balances (all four tie-outs) |
+
+## CONFIG
+### Subledger → source report → GL control account
+| Subledger | Subledger balance source | GL side | Tie-out |
+|---|---|---|---|
+| AP | `AP Trial Balance` (liability ending balance) | GL liability control account (`GL Trial Balance Detail`) | AP ending = GL liability |
+| AR | `AR to GL Reconciliation` | GL receivables control account | AR ending = GL receivables |
+| INV | `CST Period Close Subinventory Value` (+ `CST AP and PO Accrual Reconciliation`) | GL inventory / accrual accounts | INV value = GL inventory |
+| FA | `FA Journal Entry Reserve Ledger` (cost + reserve) | GL asset / accumulated-depreciation accounts | FA = GL asset accounts |
+
+### Materiality / RAG
+- **Green** — every included subledger ties within the materiality threshold (ask the user; default 0).
+- **Amber** — a variance within a small tolerance the user accepts.
+- **Red** — any variance over materiality.
+
+### Output sheets &amp; tab order (left to right)
+`Subledger_GL_Recon` (first), then one sheet per subledger (`AP_TB`, `AR_GL`, `INV_Value`, `FA_Reserve`), GL balance sheet last.
+
+## Pipeline
+1. **Extract — DELEGATE.** For each included subledger, br-run-reports runs its source report (CONFIG) for the Ledger+Period, plus **&quot;GL Trial Balance Detail&quot;** for the GL control balances. Wait for each; do nothing mid-run.
+2. **Anchor &amp; tie-out** *(single `execute_office_js` call)*. In one call: read each subledger&#x27;s ending balance and the matching GL control balance (the **reconciliation anchor** for the final step), compute variance = subledger − GL per subledger, and classify per CONFIG materiality. Trust formula_results from the write call. No re-read needed here.
+3. **Scorecard** *(single `execute_office_js` call)* (delegate to br-data-dashboard if it fires; else build inline). Write all sections to `Subledger_GL_Recon` in one call: the tie-out table (subledger, subledger balance, GL balance, variance, status), the RAG banner, and the worst-variance highlight.
+   - **Build mechanics (learned on a real run):** build on a NEW sheet at **position 0** (first tab); leave each report on the sheet br-run-reports created (its report name) — do NOT rename it, the dashboard links to it. **Do NOT use a multi-row `copyToRange`** to fill formula rows (it can latch onto the wrong source box and duplicate headers into the data) — write each row&#x27;s formula explicitly. After building, scan **beyond** the dashboard&#x27;s column range, clear any stray cells, and widen amount columns so values don&#x27;t render as `######`.
+4. **Narrative** *(single `set_cell_range` call)*. Write all ≤5 bullets in one call: which subledgers tie, which don&#x27;t, the largest variance and where to look.
+5. **Arrange tabs + final validation** *(single `execute_office_js` call + one read)*. In one call: reorder tabs per CONFIG and make `Subledger_GL_Recon` active. Only after the scorecard. **Then do the one permitted verification read:** confirm each scorecard subledger/GL balance equals the Step-2 anchor.
+
+## Validation
+Each variance = its subledger balance − its GL balance; Red only if a variance exceeds materiality.
+If a subledger&#x27;s control account mapping is unknown on the instance, say so rather than reporting a false tie.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

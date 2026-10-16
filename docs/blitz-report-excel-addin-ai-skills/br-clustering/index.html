@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clustering - Blitz Report Excel Add-in Skills</title><meta name="description" content="Segment a Blitz Report dataset into natural groups using K-Means or DBSCAN, then profile and name each segment in plain business language.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-clustering/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Clustering - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Segment a Blitz Report dataset into natural groups using K-Means or DBSCAN, then profile and name each segment in plain business language."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-clustering/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-clustering/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Analytics</p><h1>Clustering</h1><p class='name'>br-clustering</p><p class='lead'>Segment a Blitz Report dataset into natural groups using K-Means or DBSCAN, then profile and name each segment in plain business language.</p><h2>When to use</h2><p>Use this whenever the user wants to cluster, segment, or group rows of an Oracle EBS / Blitz Report sheet — e.g. &quot;segment our customers&quot;, &quot;group these vendors by spend behaviour&quot;, &quot;find natural clusters in this data&quot;, &quot;which items behave alike&quot;, or any request to discover groupings the data isn&#x27;t already labelled with. Trigger it even when the user says &quot;segment&quot; or &quot;group&quot; without naming an algorithm.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-clustering.zip'>Download br-clustering.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-clustering'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-clustering'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-algorithms-md'>references/algorithms.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># br_clustering — segment a Blitz Report dataset
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Discover the natural groups inside a tabular Blitz Report (customers, vendors, items, GL
+accounts, employees…) and translate each group into something a business user can act on.
+You handle feature selection, the algorithm, and — most importantly — the *interpretation*;
+the Office.js script handles the maths inside the workbook so no data leaves the sheet.
+
+## When to use / not use
+- **Use** for: &quot;segment&quot;, &quot;cluster&quot;, &quot;group&quot;, &quot;find natural groupings&quot;, &quot;which of these behave
+  alike&quot;, customer/vendor/item/account segmentation, persona discovery.
+- **Don&#x27;t use** for: a simple pivot/group-by the user already knows the categories for (that&#x27;s a
+  pivot, not clustering), single-column ranking (use `br_abc_pareto`), or labelled prediction
+  (that&#x27;s classification, not clustering).
+
+## Shared conventions (the br_ analytics house style)
+These apply to every `br_` analytics skill:
+1. **Source** = an existing Blitz Report data sheet. Row 1 is headers. **Never add, rename, or
+   delete the source columns** — read only.
+2. **Scratch work** goes on a helper sheet named `br_calc_`; delete it when finished so the
+   workbook stays clean.
+3. **Outputs (all four):**
+   - a results sheet `br_clustering_results` (key column(s) + the computed label, joined back),
+   - a chart on that sheet,
+   - a dashboard view (reuse the `br-data-dashboard` skill — call `read_skill(&quot;br-data-dashboard&quot;)`
+     for its KPI/slicer/chart layout; add a slicer on the new label column),
+   - a plain-English chat summary with recommended business actions.
+4. **Determinism:** fix the random seed (e.g. 42) and state every parameter you chose and *why*,
+   so a re-run reproduces and the user can audit the choice.
+5. **Privacy:** operate only on the provided sheet; never send row-level data outside the workbook.
+
+## Workflow — follow in order
+
+### Step 1 — Locate and read the source sheet
+If the user named a sheet, use it; otherwise use the active sheet (the deliverable a Blitz Report
+left visible). Read headers + 5-10 rows with `get_cell_ranges` to understand the shape. Identify:
+- a **key column** that names each row (Customer, Vendor, Item, Account) — kept verbatim in output,
+- the **numeric feature columns** to cluster on (Amount, Qty, Days, Count, Balance…).
+
+### Step 2 — Select and prepare features
+Clustering is distance-based, so preparation decides the result more than the algorithm does.
+- Keep numeric columns that describe *behaviour* (spend, frequency, recency, balance, lead time).
+- **Drop identifiers** (IDs, codes, phone numbers) — clustering on an ID number is meaningless.
+- Handle missing values: impute numeric blanks with the column median; drop a column that is
+  mostly blank.
+- **Standardise** every feature to mean 0 / sd 1 (z-score). This is non-negotiable: without it a
+  column measured in millions (revenue) drowns out a column measured in days. See
+  `references/algorithms.md` for the scaler.
+- If the user insists on a categorical driver, one-hot encode it; otherwise stay numeric.
+
+### Step 3 — Pick the algorithm
+- **K-Means** when the user wants a *set number of segments* and groups are roughly blob-shaped
+  (the usual customer/vendor/item case). Fast, every row gets a cluster.
+- **DBSCAN** when groups have *irregular shape/density* or the user also wants **outliers flagged**
+  — DBSCAN labels sparse rows as noise (`-1`), which doubles as a light outlier finder.
+- If unsure, default to **K-Means** and mention DBSCAN as the density/outlier alternative.
+
+### Step 4 — Fit + write results + profile  *(single `execute_office_js` call)*
+In one call: read the standardised feature columns, fit the chosen algorithm (sweeping `k` as
+below), assign each row its `Cluster` label, write the `br_clustering_results` sheet (Step 5), and
+build the cluster profile table (Step 6) — all in the same JS block. Trust the values this call
+returns; do not insert a verification read between fitting, writing, and profiling.
+
+**K-Means — choosing `k` carefully (this is where it&#x27;s easy to go wrong):**
+- If the user gave a target number of segments (e.g. &quot;give me 4 tiers&quot;), **use that `k`** — they
+  usually have a business reason. Still report the quality so they know how clean it is.
+- Otherwise, sweep `k = 2..8` and look at **both** inertia (the elbow) **and** silhouette. **Do not
+  just take the highest silhouette** — silhouette tends to reward the *fewest, broadest* clusters
+  and will happily merge real segments. Prefer the `k` at the **elbow** (where inertia stops
+  dropping sharply); use silhouette as a tie-breaker and a quality read-out, not the sole judge.
+  *Worked example:* on a 3-behaviour dataset, silhouette peaked at k=2 (0.62) but inertia fell
+  278→115 from k=2→3 with silhouette still strong at k=3 (0.57) — the elbow at **k=3** is the
+  correct, business-meaningful answer; k=2 would have hidden a segment.
+- **Always show the user the sweep** (k, silhouette, inertia) and the `k` you picked, so they can
+  override. Report silhouette honestly: ≈ &gt;0.5 strong, 0.25-0.5 moderate, &lt;0.25 weak.
+Implementation in `references/algorithms.md`.
+
+**DBSCAN:** set `min_samples ≈ 2 × (#features)`; estimate `eps` from the k-distance heuristic
+(the &quot;knee&quot; of sorted nearest-neighbour distances) in `references/algorithms.md`. Report how many
+rows fell into noise.
+
+### Step 5 — Write the results sheet (written in Step 4&#x27;s call)
+`br_clustering_results` holds: the key column(s) + the original features + a `Cluster` column
+(and `IsNoise` for DBSCAN). This is written **inside the Step 4 `execute_office_js` call**, in the
+same block that computed the labels — never as a separate write, and on a new sheet (never write
+back onto the source).
+
+### Step 6 — Profile and NAME each cluster (the part that delivers value; table built in Step 4&#x27;s call)
+A cluster number means nothing to a business user. Build a **cluster profile table**: for each
+cluster, the row count, % of total, and the mean of each feature (in original units, not scaled).
+Then give each cluster a business name from its profile, e.g. *&quot;High-value, frequent — 8% of
+customers, 41% of revenue&quot;* or *&quot;Dormant low-spend — large count, tiny value&quot;*. This naming is the
+skill&#x27;s main output; spend effort here.
+
+### Step 7 — Charts  *(single `execute_office_js` call — the permitted separate charts call)*
+On `br_clustering_results`:
+- a **2-D scatter** coloured by cluster, plotted on the two highest-variance scaled features (label
+  the axes with the real column names so it&#x27;s readable),
+- a **cluster-size bar** (count per cluster).
+
+### Step 8 — Dashboard
+Build the dashboard via the `br-data-dashboard` conventions, sourced from
+`br_clustering_results`, with a **slicer on `Cluster`** so the user can drill into one segment and
+watch the KPIs (count, total value, average) update.
+
+### Step 9 — Chat summary
+Report: the algorithm and why, `k`/`eps` chosen and the quality metric, each cluster&#x27;s name + size
++ defining traits, and **2-3 recommended actions** (&quot;focus retention on the dormant-high-value
+segment; the noise rows are worth a data-quality check&quot;). End with where the sheet and dashboard are.
+
+## Gotchas
+- Forgetting to standardise → one big-magnitude column dictates every cluster. Always scale.
+- Clustering on ID/code columns → nonsense. Exclude them in Step 2.
+- Reporting a cluster number without a name/profile → the user can&#x27;t act on it. Step 6 is mandatory.
+- Over-reading weak clusters: if silhouette is low, say the data may not segment cleanly rather than
+  inventing personas.
+- K-Means is seed-sensitive — fix the seed and use k-means++ init (see references).</pre></section><section id='file-references-algorithms-md'><h3 class='fname'>references/algorithms.md</h3><pre class='md'># Clustering algorithms — Office.js / JavaScript reference
+
+Read this when fitting in Step 4. These run in the same Office.js script that reads the sheet, so
+the data never leaves the workbook. Adapt variable names to the data at hand.
+
+## Table of contents
+1. Standardise (z-score)
+2. K-Means (k-means++ init, fixed seed)
+3. Silhouette score (cluster quality)
+4. Choosing k (elbow + silhouette sweep)
+5. DBSCAN
+6. eps heuristic (k-distance knee)
+
+---
+
+## 1. Standardise (z-score) — always do this first
+```js
+function standardise(rows) {            // rows: number[][]  (n x d)
+  const d = rows[0].length, n = rows.length;
+  const mean = Array(d).fill(0), sd = Array(d).fill(0);
+  for (const r of rows) for (let j=0;j&lt;d;j++) mean[j]+=r[j];
+  for (let j=0;j&lt;d;j++) mean[j]/=n;
+  for (const r of rows) for (let j=0;j&lt;d;j++) sd[j]+=(r[j]-mean[j])**2;
+  for (let j=0;j&lt;d;j++) sd[j]=Math.sqrt(sd[j]/n)||1;   // avoid /0 on constant cols
+  return { z: rows.map(r=&gt;r.map((v,j)=&gt;(v-mean[j])/sd[j])), mean, sd };
+}
+```
+
+## 2. K-Means (k-means++ seeding, deterministic)
+```js
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a&gt;&gt;&gt;15,1|a);
+  t=t+Math.imul(t^t&gt;&gt;&gt;7,61|t)^t;return((t^t&gt;&gt;&gt;14)&gt;&gt;&gt;0)/4294967296;};}
+const dist2=(a,b)=&gt;a.reduce((s,v,j)=&gt;s+(v-b[j])**2,0);
+
+function kmeans(X, k, seed=42, maxIter=100){
+  const rnd=mulberry32(seed), n=X.length;
+  // k-means++ init
+  const centroids=[X[Math.floor(rnd()*n)].slice()];
+  while(centroids.length&lt;k){
+    const d=X.map(p=&gt;Math.min(...centroids.map(c=&gt;dist2(p,c))));
+    const sum=d.reduce((a,b)=&gt;a+b,0); let t=rnd()*sum, i=0;
+    while(t&gt;0 &amp;&amp; i&lt;n-1){t-=d[i];i++;} centroids.push(X[i].slice());
+  }
+  let labels=new Array(n).fill(0);
+  for(let it=0;it&lt;maxIter;it++){
+    let moved=false;
+    for(let i=0;i&lt;n;i++){
+      let best=0,bd=Infinity;
+      for(let c=0;c&lt;k;c++){const dd=dist2(X[i],centroids[c]);if(dd&lt;bd){bd=dd;best=c;}}
+      if(labels[i]!==best){labels[i]=best;moved=true;}
+    }
+    const sums=centroids.map(c=&gt;c.map(()=&gt;0)), cnt=new Array(k).fill(0);
+    for(let i=0;i&lt;n;i++){cnt[labels[i]]++;X[i].forEach((v,j)=&gt;sums[labels[i]][j]+=v);}
+    for(let c=0;c&lt;k;c++) if(cnt[c]) centroids[c]=sums[c].map(v=&gt;v/cnt[c]);
+    if(!moved) break;
+  }
+  // inertia for the elbow
+  const inertia=X.reduce((s,p,i)=&gt;s+dist2(p,centroids[labels[i]]),0);
+  return {labels, centroids, inertia};
+}
+```
+
+## 3. Silhouette score (mean over all points; range -1..1)
+```js
+function silhouette(X, labels, k){
+  const n=X.length, byC=Array.from({length:k},()=&gt;[]);
+  labels.forEach((c,i)=&gt;byC[c].push(i));
+  let total=0;
+  for(let i=0;i&lt;n;i++){
+    const same=byC[labels[i]];
+    const a = same.length&gt;1 ? same.filter(j=&gt;j!==i)
+        .reduce((s,j)=&gt;s+Math.sqrt(dist2(X[i],X[j])),0)/(same.length-1) : 0;
+    let b=Infinity;
+    for(let c=0;c&lt;k;c++){ if(c===labels[i]||!byC[c].length) continue;
+      const mean=byC[c].reduce((s,j)=&gt;s+Math.sqrt(dist2(X[i],X[j])),0)/byC[c].length;
+      if(mean&lt;b) b=mean; }
+    total += (b-a)/Math.max(a,b||1);
+  }
+  return total/n;
+}
+```
+
+## 4. Choosing k — sweep, then read elbow + silhouette together
+```js
+const sweep=[];
+for(let k=2;k&lt;=8;k++){
+  const km=kmeans(Xz,k);
+  sweep.push({k, sil:silhouette(Xz,km.labels,k), inertia:km.inertia, km});
+}
+// DON&#x27;T just pick max silhouette — it rewards the fewest/broadest clusters and merges real segments.
+// 1) Find the elbow: the k after which inertia stops dropping sharply
+//    (largest drop in the *rate* of inertia decrease).
+// 2) Prefer that k; use silhouette as a tie-breaker + quality read-out.
+// 3) If the user asked for a specific number of segments, use it regardless.
+// Always print the whole sweep (k, silhouette, inertia) so the user can override.
+// Example: k=2 sil .62 inertia 278 | k=3 sil .57 inertia 115  -&gt; elbow at k=3 is the right answer,
+// even though k=2 has the higher silhouette.
+```
+
+## 5. DBSCAN
+```js
+function dbscan(X, eps, minPts){
+  const n=X.length, labels=new Array(n).fill(undefined); // undefined=unvisited, -1=noise
+  const region=i=&gt;{const out=[];for(let j=0;j&lt;n;j++) if(Math.sqrt(dist2(X[i],X[j]))&lt;=eps) out.push(j);return out;};
+  let c=-1;
+  for(let i=0;i&lt;n;i++){
+    if(labels[i]!==undefined) continue;
+    let nb=region(i);
+    if(nb.length&lt;minPts){labels[i]=-1;continue;}
+    c++; labels[i]=c;
+    const seeds=nb.filter(j=&gt;j!==i);
+    for(let s=0;s&lt;seeds.length;s++){
+      const q=seeds[s];
+      if(labels[q]===-1) labels[q]=c;
+      if(labels[q]!==undefined) continue;
+      labels[q]=c;
+      const qn=region(q);
+      if(qn.length&gt;=minPts) for(const x of qn) if(!seeds.includes(x)) seeds.push(x);
+    }
+  }
+  return labels; // cluster ids 0..c, and -1 = noise/outlier
+}
+```
+
+## 6. eps heuristic (k-distance knee)
+```js
+// minPts = 2 * #features (round up). eps = the &quot;knee&quot; of the sorted k-distance curve.
+function suggestEps(X, minPts){
+  const n=X.length, kd=[];
+  for(let i=0;i&lt;n;i++){
+    const ds=X.map((p,j)=&gt;j===i?Infinity:Math.sqrt(dist2(X[i],p))).sort((a,b)=&gt;a-b);
+    kd.push(ds[minPts-1]);
+  }
+  kd.sort((a,b)=&gt;a-b);
+  // simple knee: point of max distance from the chord between first and last
+  const x0=0,y0=kd[0],x1=n-1,y1=kd[n-1];
+  let knee=0,bd=-1;
+  for(let i=0;i&lt;n;i++){
+    const num=Math.abs((y1-y0)*i-(x1-x0)*kd[i]+x1*y0-y1*x0);
+    if(num&gt;bd){bd=num;knee=i;}
+  }
+  return kd[knee];
+}
+```
+Always report the chosen `eps`/`minPts` and the noise count so the user can audit the fit.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

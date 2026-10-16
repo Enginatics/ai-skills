@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GL Account Coding Assistant - Blitz Report Excel Add-in Skills</title><meta name="description" content="Suggest GL account coding from the ledger&#x27;s own history: given transactions to code (or re-code), mine GL Account Analysis for how this entity has historically coded the same supplier, source, category or description, and propose the account combination with a confidence level and the precedent show">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-gl-account-coder/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="GL Account Coding Assistant - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Suggest GL account coding from the ledger&#x27;s own history: given transactions to code (or re-code), mine GL Account Analysis for how this entity has historically coded the same supplier, source, category or description, and propose the account combination with a confidence level and the precedent show"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-gl-account-coder/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-gl-account-coder/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / General Ledger</p><h1>GL Account Coding Assistant</h1><p class='name'>br-gl-account-coder</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Suggest GL account coding from the ledger&#x27;s own history: given transactions to code (or re-code), mine GL Account Analysis for how this entity has historically coded the same supplier, source, category or description, and propose the account combination with a confidence level and the precedent shown. Optionally stage approved corrections as a journal via the GL Journal Upload — only on explicit user confirmation.</p><h2>When to use</h2><p>Use when the user asks &quot;which account should this go to&quot;, wants miscoding candidates found, or needs a reclass journal drafted. Recommend-first; WRITES to Oracle EBS only via the gated journal step.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-gl-account-coder.zip'>Download br-gl-account-coder.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-gl-account-coder'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/gl-journal-upload/'>GL Journal Upload</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-gl-account-coder'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># GL Account Coding Assistant (br-gl-account-coder)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. For the optional journal
+&gt; step, **read `br-run-uploads` FIRST**.
+
+## When to use
+&quot;What account does this belong to&quot;, &quot;find likely miscodings in period X&quot;, &quot;draft the reclass
+journal for these&quot;, &quot;how do we normally code invoices from supplier Y&quot;. This is a COMPANION to the
+accountant, not an auto-coder: every suggestion shows its precedent, and nothing posts without a
+human.
+
+## Inputs
+- **Ledger** (required) and **Period / date range** for the history mine — ask if not supplied.
+- **What to code** — rows the user supplies (a pasted list, another report&#x27;s output) OR a scope to
+  scan for miscoding candidates (an account, a source, a supplier).
+
+## Reports and uploads used (authoritative names — do NOT broad-search for them)
+| Name | Type | Role |
+|---|---|---|
+| `GL Account Analysis` | Report | the history mine — account combinations by source, category, description and subledger detail |
+| `GL Journals` | Report | journal-level context when a candidate needs its origin checked |
+| `GL Journal Upload` | Upload | **write path** — the staged reclass/correction journal |
+
+Pass the exact names; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+## Workflow
+1. **Mine the history**: run `GL Account Analysis` for the ledger/period scope (restrict by source
+   or account range where the user gave one — never wide open, per br-run-reports).
+2. **Build the precedent table** in-sheet: for each (supplier / source / category / normalized
+   description keyword) → the account combinations historically used, with frequency and recency.
+3. **Suggest**: for each row to code, the best-precedent combination with a confidence class —
+   **STRONG** (one dominant precedent, ≥90% of history), **SPLIT** (two+ combinations in real use —
+   show both and the discriminator, e.g. &quot;freight goes to 5230 for org A but 5240 for org B&quot;),
+   **NONE** (no usable precedent — say so; never invent an account). Show the precedent rows that
+   justify each suggestion.
+4. **Miscoding scan mode**: rows whose coded account contradicts a STRONG precedent are flagged as
+   candidates, ranked by amount, with the precedent shown. These are candidates for review — never
+   assert &quot;wrong&quot;, the precedent may be the thing that changed.
+5. **Stage the journal (optional, gated)**: only when the user explicitly approves specific
+   corrections — build the reclass in the `GL Journal Upload` grid (balanced Dr/Cr per line, the
+   user&#x27;s period and category), validate, show journal totals and line count, submit only on a
+   second explicit confirmation. The journal still routes through the customer&#x27;s normal GL
+   approval/posting flow — say that.
+
+## Hard rules
+- **Never suggest an account with no precedent in this ledger&#x27;s own history.** No generic chart-of-
+  accounts knowledge substitutes for the entity&#x27;s actual practice.
+- **Cross-validated combinations only**: a suggested combination must exist in history — never
+  compose a novel segment mix.
+- Confidence comes from precedent counts, not from the model&#x27;s certainty.
+
+## Degradation rules
+- Thin history for the scope → say the mine is thin and widen the period only with the user&#x27;s OK.
+- Cost-center-dependent codings (SPLIT class) that the user cannot discriminate → leave uncoded
+  with both options shown, never pick silently.
+
+## Talk in the user&#x27;s language
+&quot;Post a reclass journal of $84,300 across 12 lines to period MAY-26?&quot; — accounts, amounts,
+periods; never `br_*` functions or helper sheets.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

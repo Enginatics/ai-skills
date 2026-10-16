@@ -1,0 +1,1511 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Migrate Custom Reports - Blitz Report Development</title><meta name="description" content="Phase-2 engagement workflow for migrating a customer&#x27;s gathered custom Oracle EBS reports (the Blitz Report Custom Reports Converter zip output) into Blitz Reports — inventory, extract SQL, classify each report into one of three outcomes (complete map / enhance / new custom build), build/recommend, ">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/migrate-custom-reports/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Migrate Custom Reports - Blitz Report Development"><meta property="og:description" content="Phase-2 engagement workflow for migrating a customer&#x27;s gathered custom Oracle EBS reports (the Blitz Report Custom Reports Converter zip output) into Blitz Reports — inventory, extract SQL, classify each report into one of three outcomes (complete map / enhance / new custom build), build/recommend, "><meta property="og:url" content="https://www.enginatics.com/ai-skills/migrate-custom-reports/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/migrate-custom-reports/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Migration</p><h1>Migrate Custom Reports</h1><p class='name'>migrate-custom-reports</p><p class='lead'>Phase-2 engagement workflow for migrating a customer&#x27;s gathered custom Oracle EBS reports (the Blitz Report Custom Reports Converter zip output) into Blitz Reports — inventory, extract SQL, classify each report into one of three outcomes (complete map / enhance / new custom build), build/recommend, categorize as &quot;Custom Reports &lt;ABBR&gt;&quot;, and prove each report prints what the original prints (field inventory + value fidelity gate) on the conversion instance.</p><h2>Use</h2><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p>Then ask Claude for the task, or run:</p><pre><code>/blitz-report-ai-skills:migrate-custom-reports</code></pre><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/blitz-report-custom-reports-converter/'>Blitz Report Custom Reports Converter</a></li><li><a href='https://www.enginatics.com/reports/fa-depreciation-projection/'>FA Depreciation Projection</a></li><li><a href='https://www.enginatics.com/reports/gl-trial-balance-detail/'>GL Trial Balance - Detail</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/migrate-custom-reports'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-build-xml-py'>build_xml.py</a><a href='#file-classify-probe-py'>classify_probe.py</a><a href='#file-field-inventory-py'>field_inventory.py</a><a href='#file-references-fidelity-audit-prompt-md'>references/fidelity-audit-prompt.md</a><a href='#file-references-value-fidelity-md'>references/value-fidelity.md</a><a href='#file-rex-parse-py'>rex_parse.py</a><a href='#file-verify-assignments-py'>verify_assignments.py</a><a href='#file-vs-parse-py'>vs_parse.py</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'>## When to use
+
+A customer has run the **Blitz Report Custom Reports Converter** Blitz Upload on their instance and handed over the gathered zip (`CONV_&lt;ABBR&gt;_&lt;reqid&gt;_&lt;timestamp&gt;/`). This skill takes that zip and turns each custom report into a recommendation or a built Blitz Report, in a customer-specific category.
+
+Read `custom-reports-migration` skill first — it holds the durable taxonomy, the gathered-folder layout, the gotchas, and the category-naming rule this skill depends on. For the per-report RDF/BIP→Blitz mechanics (SQL consolidation, anchors, assignments, parameter binding), delegate to the `convert-bip-and-rdf-reports-to-blitz` skill.
+
+## Arguments
+
+`$ARGUMENTS` should contain:
+- The **customer abbreviation** (e.g. `ABC`) — drives the category name `Custom Reports &lt;ABBR&gt;`.
+- The **path to the gathered zip OR an unzipped folder** (e.g. `.../CONV_ABC_72146542_20260527_163231.zip` or the extracted folder). A zip is fine — unzip it first (step 0).
+- Optionally, a single program name to process just one report.
+
+## Instance
+
+Run against the **conversion instance** (see `blitz-environment.md` for how to reach it, connect as `apps/$APPS_PWD`, copy files to it and query it). Never use any other instance for a conversion.
+
+## Workflow
+
+### 1. Inventory the gathered package
+- **Step 0 — if `$ARGUMENTS` points at a `.zip`, unzip it to a working directory first** (e.g. the scratchpad), then operate on the extracted `CONV_&lt;ABBR&gt;_&lt;reqid&gt;_&lt;timestamp&gt;/` folder. A folder path is used as-is. The customer typically sends the **gather zip** plus the **converter result Excel** (which lists the programs they selected) — use the Excel to confirm scope.
+- Read `manifest.txt` and `gather_summary.txt` — list each program, its execution method (P=Reports, I=PL/SQL, Q=SQL*Plus, H=Host, K/J=Java), and which artifacts came through.
+- Note, per program, whether `&lt;PROG&gt;_rdf.xml` is present (rwconverter succeeded) and whether any `&lt;OWNER&gt;.&lt;NAME&gt;.&lt;type&gt;.sql` custom-dependency files exist.
+- **Noetix detection:** a `noetix/_noetix_conversion.txt` marker in an item&#x27;s folder (program type `Noetix View` or `Excel4apps` in the manifest) means this is a **Noetix conversion** — route it through the Noetix path in step 4 (see `custom-reports-migration` skill → &quot;Noetix conversion&quot;). The `noetix/` subfolder holds the recursive `NOETIX_SYS` view/package closure; `&lt;PROG&gt;_wand.sql` (Excel4apps items) holds the consumer report SQL.
+- **Two-step extract→report detection:** a PL/SQL **wrapper/data-extract program** gathered alongside a BIP/report child (manifest shows e.g. `XX_EXTRACT_WRAPPER|Data Extract|...` next to `XX_EXTRACT_REPORT|BI Publisher|...`), both folders sharing the SAME custom staging-table dependency closure, and the wrapper package spec exposing a conc-program `MAIN` entry + a populate procedure + a submit-child procedure — pair them and plan **ONE combined conversion**, not two (see `custom-reports-migration` skill → &quot;Two-step extract → temp table → report processes&quot;).
+- **🚨 Request the reference outputs NOW, with the scope confirmation:** one output of each original program from the customer&#x27;s system (Excel, CSV or the XML/PDF it produces), with the parameters it was run with and the run time. It is the arbiter of the value fidelity gate (step 6): printed columns, order and headings, row grain, and every value the file lets you recompute. A report without one can still be built, but its delivery email says that the figures are unverified until the customer compares them. Our own earlier Blitz output is never a reference.
+
+### 2. Per report — gather the facts (do NOT skip the .ldt or .rtf)
+- **Parameters &amp; value sets — the AUTHORITATIVE source is `&lt;PROG&gt;.ldt`, NOT the SQL binds.** Build the full parameter inventory per the rule&#x27;s **🚨 Parameter fidelity** section (Step P1): for each LDT parameter capture `FORM_LEFT_PROMPT` (→ Blitz name), `FLEX_VALUE_SET_NAME` (→ LOV), `REQUIRED_FLAG`, `DISPLAY_FLAG`, `DEFAULT_TYPE`/`DEFAULT_VALUE`, and **`SRW_PARAM`** (→ the RDF bind/token, the authoritative mapping). **Never derive parameters from the rwconverter SQL bind list — that drops PL/SQL-driven parameters and invents wrong ones.**
+- **Data-model SQL:**
+  - If `&lt;PROG&gt;_rdf.xml` present → parse the data-model query from it. Also read its `&lt;programUnits&gt;` / formula columns / triggers — parameters used only there (not in the SELECT binds) are still real parameters (Step P3).
+  - If absent → rwconverter segfaulted (large/complex RDF). Strings-extract the RDF (`strings -n 8 &lt;PROG&gt;.rdf` or a printable-char split) to **identify** the report and its tables. Do not expect a clean single SQL from a procedural multi-cursor RDF.
+- **Output columns:** read the `.rtf` `&lt;?FIELD?&gt;` codes — the columns the customer&#x27;s layout actually renders — together with the heading printed over or beside each one: the Blitz column must show that heading verbatim (rule &quot;Data-model SQL&quot;, headings bullets). (`_ds.ldt` is BIP template registration only — no SQL.)
+- **🚨 Field inventory — MANDATORY, before writing any SQL:** `python field_inventory.py &lt;program folder&gt;` writes `&lt;PROG&gt;_field_inventory.md`. It reads the `_rdf.xml` (or the `.rex` when rwconverter failed), the data template, the RTF and the custom package bodies, and lists:
+  1. every printed field and where the original computes it (query column, formula, placeholder, summary, parameter, or the package variable the loop writes, with the lines that assign it);
+  2. every formula, with the placeholders it assigns, its `select into` count and its exception handlers;
+  3. everything that decides which rows print (group filters, parent-child links, format triggers that can return FALSE, layout conditions and loops, and the triggers that build lexicals);
+  4. each query&#x27;s `union` / `union all` counts and `order by`.
+
+  The query is only part of the report. Most conversion defects sit in the per-row code after it: package loop code filling cursor literals, formula columns, a group filter hiding a section. The inventory is the conversion&#x27;s work list. Fill its Blitz expression column as you build, and keep the file with the deliverables. A field with no Blitz expression is an open defect, not a simplification.
+- **Custom objects:** list the `&lt;OWNER&gt;.&lt;NAME&gt;.&lt;type&gt;.sql` dependency files.
+- **Value sets:** the `.ldt` embeds the full `VALUE_SET` definitions. For the Blitz parameters use **`LOV Oracle` + `LOV_NAME=&lt;value-set name&gt;`** (Step P2) — reuse the existing Oracle value set, do NOT re-author LOV SQL. To test on the conversion instance, load the value sets there (standalone value-set LDT) so `LOV Oracle` resolves.
+- **🚨 Lists of values — REUSE, in this order: shared Blitz Report LOV → the program&#x27;s Oracle value set → `LOV custom` LAST (rule Step P2a).** For every list-bearing parameter, query the shared catalogue for the master table it picks from (`xxen_report_parameter_lovs_v` … `dbms_lob.instr(lov_query,&#x27;&lt;table&gt;&#x27;)&gt;0`) and record which shared LOV you considered. The shared LOVs carry **security** you will not reproduce by hand (525 shared LOVs on an R12.1.3 instance: 24 GL-access-set aware, 33 `org_access_view` aware, 13 MOAC aware). **When id-ness forces a custom LOV, re-author only the SELECT LIST and copy the shipped LOV&#x27;s `where` clause verbatim** — improvising it ships an unrestricted list of every ledger, or *under*-returns by missing ledger-set expansion.
+
+### 3. Classify into one of three outcomes
+Apply the evidence-based 3-outcome taxonomy from the rule (`custom-reports-migration` skill → &quot;The 3-outcome classification&quot;):
+- **Outcome 1 — complete map:** stock value sets + stock tables + **no** custom-dependency files ⇒ a standard Oracle report an existing Blitz Report already covers. Identify the matching Blitz Report by the standard program/tables.
+- **Outcome 2 — partial map:** an existing Blitz Report covers most of it but lacks columns/filters ⇒ propose enhancing it **after user confirmation**; if declined/infeasible, fall through to Outcome 3.
+- **Outcome 3 — new custom report:** bespoke SQL / custom objects / customer-specific columns / row-security ⇒ build new.
+
+Classify by evidence, not by program name (customers rename standard programs).
+
+#### 🚨 MANDATORY GATE — run `classify_probe.py` BEFORE writing down any outcome
+
+A column-name comparison is **not** a classification. Column overlap tells you the two reports *display*
+similar things; it says nothing about whether the shipped report can *produce* the customer&#x27;s rows. The only
+thing that decides that is the **data sources**. Do not reason about this from memory or from the column list —
+**run the probe and paste its output into the engagement notes.**
+
+```bash
+# 1. dump the candidate shipped report&#x27;s SQL from the BASE TABLE (xxen_reports_v truncates at 32764 bytes)
+#      select xr.sql_text from xxen_reports xr, xxen_reports_v v
+#      where xr.report_id=v.report_id and v.report_name=&#x27;&lt;shipped report&gt;&#x27;;   -&gt; shipped.sql
+# 2. run the probe with EVERY customer prefix you have seen, not just manifest.txt&#x27;s
+python ${CLAUDE_PLUGIN_ROOT}/skills/migrate-custom-reports/classify_probe.py \
+  --custom _extract/&lt;PROG&gt;_datamodel_1.sql --shipped shipped.sql --prefixes XX,YY
+```
+
+It compares localization objects (`JAI_*`/`JA_IN_*`), customer-owned objects (by prefix), standard EBS objects
+and union-branch counts, then applies a **deterministic verdict** (exit code 3 = Outcome 3):
+
+| signal | verdict |
+|---|---|
+| a localization object the shipped report does not reference | **Outcome 3** |
+| any customer-owned object referenced by the custom SQL | **Outcome 3** (and confirm its DDL was gathered) |
+| materially more union branches than the shipped report | **Outcome 3** — investigate |
+| none of the above | Outcome 1/2 candidate — *now* do the column diff |
+
+**Do not override the verdict with judgement.** Example: a custom GL detail report called a two-column enhancement of
+`GL Account Analysis` from column names alone; the probe on that exact pair reports 3 localization tables,
+1 customer package and 9-vs-3 union branches — Outcome 3.
+
+The probe also prints an **UNCLASSIFIED** list (identifiers matching no known prefix). Check those by hand —
+an unrecognised customer naming convention is exactly how a customer package goes missing from the gather.
+
+### Build helpers
+
+- `field_inventory.py &lt;program folder&gt; [&lt;PROG&gt;] [--out &lt;file&gt;]` writes the field inventory of step 2. It reads `_rdf.xml`, `.rex` (through `rex_parse.py`), data templates, RTF layouts and custom package bodies.
+- `rex_parse.py &lt;folder&gt; &lt;PROG&gt;` decodes a `.rex` text export when rwconverter fails, writing each query&#x27;s SQL and the PL/SQL units next to it.
+- `vs_parse.py` (run inside a program&#x27;s folder) prints every gathered value set: validation type, table, id and value columns, where clause. Use it to pick the shared LOV that matches each parameter.
+- `build_xml.py &lt;spec.py&gt; &lt;out.xml&gt;` writes the import XML. The spec defines `CATEGORY` and `REPORTS`, a list of report dicts (`NAME`, `DESCRIPTION`, `SQL` file, `GUID`, `ASSIGNMENTS` = the converter&#x27;s `_assignments.xml`, `PARAMS`, and `SHORT_NAME` and `PROGRAM` of the program the report replaces, written as the description&#x27;s last lines `Source:` and `Short Name:`), so one call writes the category deliverable with every report and all assignments; a single report at top level still works. A `PARAMS` row takes name, anchor, sql (omit for a `:bind` anchor), type `LOV`/`LOV Oracle`/`LOV custom`/`Date`/`Char`/`Number`, `lov` or `lov_query`, `required`, `default`, `matching`, `hidden`, and `sub` for a further anchor of the parameter above. Shared LOVs are copied with their fallback payload from the shipped report XMLs (`content/r12/reports` in the Blitz Report repository, or the folder named by the environment variable `BLITZ_CONTENT_DIR`, e.g. `xxen_api.export_report` exports of shipped reports using those LOVs); the build stops when a parameter has other than one display row or an `n=n` anchor is not unique in the SQL. Keep the spec and SQL files next to the category file so a re-issue rebuilds from them.
+- A report cloned from a shipped one (an aging, a trial balance) is built by transforming the shipped XML instead: new GUID, name, description (ending with the `Source:` and `Short Name:` lines), category and assignments, extra columns inserted at the level where their keys are, extra parameters appended. Invoice-level extras go into the detail lexical as `max(x1.col)` so summary mode is untouched.
+
+### 4. Build / recommend per outcome
+- **Outcome 1:** **recommend the shipped Blitz Report — do not ship a clone by default** (one-version-of-truth; a per-customer copy of a standard report is maintenance debt). To *prove* equivalence, you may build a throwaway clone — `xxen_api.export_report(&lt;report_id&gt;)` → change `GUID`, `REPORT_NAME`, replace `CATEGORY_ASSIGNMENTS` with `Custom Reports &lt;ABBR&gt;` → `xxen_api.import_xml` → confirm identical SQL + parameter count + behavior → then **delete it** with `xxen_api.delete_report(&lt;id&gt;,&#x27;Y&#x27;)`. Only keep a clone if the customer explicitly insists on an isolated/branded copy.
+  - **🚨 The Outcome-1 DELIVERABLE IS A TEMPLATE, not a report.** &quot;Recommend the shipped report&quot; is not the whole job — the customer&#x27;s users expect *their* column set, order and layout. Ship one **named template per replaced custom report** (`&lt;ABBR&gt; &lt;original report&#x27;s user-visible name&gt;`, e.g. `ABC Division Wise Trial Balance`) on the shipped report, so switching is a template pick rather than retraining.
+  - **Templates import STANDALONE — never round-trip the whole report to add one.** `xxen_api.export_report` returns an **empty** `&lt;TEMPLATES&gt;` section, so re-importing an exported report would DELETE the shipped templates. Use the template-only shape (`xxen_api.export_template(&lt;template_id&gt;)` produces it): a `REPORTS_ROW` carrying **only** `&lt;GUID&gt;` (the report&#x27;s GUID) + `&lt;TEMPLATES&gt;`, with **no `SQL_TEXT`**. That cannot touch the report definition. (A delta *with* other report elements but no `SQL_TEXT` raises `ORA-01407` — see `report-development` skill.)
+  - **Before building a pivot template, check what the shipped report already exposes.** Several shipped reports already pivot generically — e.g. `GL Trial Balance - Detail` has a **Pivot Segment** parameter (`&amp;lp_pivot_segment_name`, resolved from `fnd_id_flex_segments_vl`) plus `PIVOT_SEGMENT_VALUE` / `ACCOUNT_SEGMENT` columns and a shipped `Trial Balance Pivot` template. A custom RDF that hand-codes one column per division/unit maps onto it exactly: put the account on `ROW`, the division on `COLUMN`, the balance on `VALUE`. That turns *N* hardcoded columns into data, so a new division needs no code change.
+  - Pivot template XML: `&lt;TEMPLATE_PIVOT&gt;&lt;TEMPLATE_PIVOT_ROW&gt;` with `COLUMN_NAME`, `FIELD_TYPE` (`ROW`/`COLUMN`/`VALUE`/`FILTER`), `DISPLAY_SEQUENCE`, and `AGGREGATION` (`SUM`…) on `VALUE` rows. Every column referenced in `TEMPLATE_PIVOT` must also appear in `TEMPLATE_COLUMNS`. Model on the templates of the shipped `MSC Horizontal Plan` report.
+  - **Verify the pivot actually materialised**, not just that the request completed: the output `.xlsx` must contain `xl/pivotTables/pivotTable1.xml` and `xl/pivotCache/…` (`unzip -l &lt;file&gt;.xlsx`). A run can finish Normal and still emit flat data if the template was not applied.
+- **Outcome 2:** enhance the existing Blitz Report per the standard report-modification workflow (`development-workflow` skill → &quot;Standard Workflow for Modifying an Existing Report&quot;) — baseline, change, redeploy, regression-diff. **Plus a named `&lt;ABBR&gt; &lt;original report name&gt;` template** listing the custom report&#x27;s columns **in the custom report&#x27;s own order** (`TEMPLATE_COLUMNS.DISPLAY_SEQUENCE` = the RTF/layout field order), so the enhanced shipped report reproduces the customer&#x27;s familiar layout.
+  - **Measure the delta before proposing an enhancement.** Diff the custom report&#x27;s real output columns (the `.rtf` `&lt;?FIELD?&gt;` list, or the RDF formula-column names) against the shipped report&#x27;s columns across **all** its templates (`xxen_report_template_columns`), not just one. Column names differ freely (`SOURCE`→`SOURCE_NAME`, `TRAN_NO`→`TRANSACTION_NUMBER`, `PARTY_NAME`→`VENDOR_OR_CUSTOMER_NAME`), so build a name-mapping table.
+  - **🚨 A COLUMN-NAME MATCH IS NOT A CLASSIFICATION. You MUST also compare DATA SOURCES before calling anything Outcome 1 or 2.** Column overlap says the two reports *display* similar things; it says nothing about whether the shipped report can *produce* the customer&#x27;s rows. Always check, in the shipped report&#x27;s **`sql_text`**:
+    - **localization coverage** — count `jai_` / `ja_in` / `india` references. Most shipped reports have **none**;
+    - **subledger/source coverage** — which sources the branches actually cover vs the custom report&#x27;s `UNION ALL` branches;
+    - **customer-owned objects** — any `&lt;prefix&gt;_*` package/view the custom SQL calls, which the shipped report by definition does not.
+    Example: a custom GL detail report was classified Outcome 2 (&quot;only `PO_NUMBER` + receipt number missing&quot;) purely from column names. Checking the SQL showed the shipped `GL Account Analysis` has **0** `jai_` references and 2 union branches, while the custom report has **8** branches (Inventory / Payables / Receivables / **Payables India / Purchasing India / Register India / VAT India**), 4 India Localization tables and **25 calls to a customer package**. It was Outcome 3 all along.
+  - **🚨 Read `sql_text` from the BASE TABLE `xxen_reports`, not `xxen_reports_v`** when measuring — the view truncates the CLOB at 32,764 bytes, which silently makes two different reports look the same length and hides content past the cut. (`GL Account Analysis` is 61,606 bytes; the view showed 32,764.)
+  - **Only add columns that are GENERIC.** A column that is standard EBS data (a PO number, a receipt number) is a legitimate shipped-report enhancement. Customer accounting *policy* baked into the report — provision percentages, entity-specific exception lists, a particular `gl_daily_rates` conversion type, hardcoded division codes — must NOT go into the shipped report. Offer the customer the choice explicitly: **(a)** parameterise it so the shipped report stays neutral, or **(b)** build a separate `Custom Reports &lt;ABBR&gt;` report. This is a decision for the customer, not a default — ask. When they choose (b), the custom report&#x27;s `&lt;DESCRIPTION&gt;` must carry a caveat pointing users to the shipped report as well, so the two are not mistaken for alternatives.
+- **Outcome 3:** first create the gathered custom-dependency DDL on the instance (tables may be empty for a parse test), then convert the report via the `convert-bip-and-rdf-reports-to-blitz` skill, category `Custom Reports &lt;ABBR&gt;`. Convert the report, not just its query: the data-model SQL plus every row of the field inventory, with the edge behaviour listed in `references/value-fidelity.md`. That covers what a lookup prints for no row or several, widths, `nvl` defaults, dates as text, row order and grain, serial numbers and report modes. Keep each query&#x27;s own set operator: `union` where the original has `union`, over the original&#x27;s key.
+  - **🚨 Dynamic SQL in the source → lexical anchor, never a frozen copy.** A program that assembles part of its SQL at run time (a select list from a lookup or setup table, a FROM/WHERE fragment chosen by a parameter, a hint, an order by) keeps that behaviour: spec entry `{&#x27;name&#x27;: &#x27;Item Columns&#x27;, &#x27;anchor&#x27;: &#x27;&amp;item_columns&#x27;, &#x27;sql&#x27;: &lt;select returning one line per fragment row&gt;, &#x27;type&#x27;: &#x27;Char&#x27;, &#x27;hidden&#x27;: True, &#x27;default&#x27;: &#x27;&lt;lookup type&gt;&#x27;}` with `&amp;item_columns` at the fragment&#x27;s position in the SQL; for a column list the select returns `&lt;expression&gt; &lt;alias&gt;` per row with a comma on every row but the last, and the FROM must carry the aliases the stored expressions use. Mechanics, limits and the two harness traps are in the rule&#x27;s &quot;Data-model SQL&quot; bullets (`custom-reports-migration` skill). Writing the gathered day&#x27;s column list into the SQL is a regression the customer will find the first time they change the lookup.
+  - **🚨 Design every parameter&#x27;s anchor per rule Step P3 BEFORE authoring the XML — bind anchors are the exception, never the default.** A WHERE filter (plain equality, LIKE, or a self-referencing `nvl`/`DECODE` no-op) becomes a `1=1` anchor with the predicate in `SQL_TEXT` (Yes/No no-ops become `Yes_No` matching-value rows). A `:bind` anchor is allowed ONLY when the token&#x27;s every use in the main SQL is SELECT-list/CASE/row-security logic that must stay inline — and such a parameter still needs an id/value LOV instead of raw id entry. Write down the justification per retained bind; you will need it for the step-6 gate.
+- **Two-step extract→report pairs (Outcome 3, ONE report for both programs):** convert wrapper + child into a single self-contained Blitz Report using the report-level `&lt;DB_PACKAGE&gt;` before/after-report trigger mechanism (shipped reference: FA Depreciation Projection → `XXEN_FA_FAS_XMLP`). Main SQL = the child&#x27;s data-model SQL over the staging table keyed to the Blitz request; DB package = the gathered wrapper package adapted (keep populate, drop child-submit and immediate delete, cleanup in `AFTERREPORT`; public variables named after the bind anchors; APPS-owned); **parameter fidelity runs against the WRAPPER&#x27;s LDT** (it is the user-facing program — the child&#x27;s REQUEST_ID parameter disappears). Full recipe + engine contract + run-context caveats: `custom-reports-migration` skill → &quot;Two-step extract → temp table → report processes&quot;. Only fall back to the child-only conversion (REQUEST_ID parameter, customer keeps their wrapper) when the customer explicitly wants to keep the extract program.
+- **Noetix items (always Outcome 3 — never install the NOETIX_SYS views):** start from the consumer SQL (`&lt;PROG&gt;_wand.sql`, or the root view named in `noetix/_noetix_conversion.txt`), inline the `noetix/` view stack bottom-up into nested subqueries, and apply the **transform catalogue** in `custom-reports-migration` skill → &quot;Noetix conversion&quot; (`#` wrappers → base tables, ACL map views → `hr_operating_units`/`gl_ledgers` + MOAC, `xxk_gl_acct` → `gcck` + `&amp;segment_columns`, `noetix_env_pkg.get_language` → `userenv(&#x27;lang&#x27;)`, drop `A$*`/copyright columns, …). **Parameters are designed, not converted** — Noetix views have none; pick from the standard Blitz parameter/LOV library per the rule&#x27;s &quot;Phase-2 parameters&quot; section, mirroring the nearest shipped Blitz report of the same domain. Description must state *&quot;Migrated from NoetixViews view NOETIX_SYS.&lt;VIEW&gt;&quot;*.
+- **🚨 Assignments (all built/cloned reports) — CONSUME the gathered file, NORMALISE the level code, then GATE it offline.** Without `&lt;ASSIGNMENTS&gt;` no responsibility can see the report. Three rules, each of which has produced a real defect:
+  1. **Consume `&lt;PROG&gt;_assignments.xml` verbatim — never hand-list groups.** It is the authoritative set. Carry **every** row and keep each row&#x27;s **own** `&lt;APPLICATION_SHORT_NAME&gt;` (they are not all the customer&#x27;s custom app — expect `JA`, `SQLAP`, `AR`, `JE`, `SQLGL` alongside it). Add `&lt;REPORT_NAME&gt;` per row and place the block as a **sibling of `&lt;REPORTS&gt;`** (nesting it inside `REPORTS_ROW` silently drops everything — `report-development` skill &quot;Report Assignments&quot;).
+  2. **Normalise `&lt;ASSIGNMENT_LEVEL&gt;` to what the TARGET instance&#x27;s build expects.** Packages gathered before the converter fix carry the obsolete single letter, and an unrecognised code is **silently skipped on import** (zero rows, no error). Map through the legacy table in `custom-reports-migration` skill — `S`→Site, `A`→Application, `G`→Request Group, `R`→Responsibility, `U`→User, `F`→**Form**, `D`→Report; `Function` has no legacy letter. Builds ≥21-Jun-2026 need the full words.
+  3. **Gate it OFFLINE against the gathered file — an instance count of 0 is UNVERIFIABLE, not passed.** On a conversion instance the customer&#x27;s request groups don&#x27;t exist, so the import legitimately reports zero and proves nothing. Diff the built XML&#x27;s rows against the gathered file (count, level value, application short name, level code) with no DB at all. *This is what let defect 1 ship: the zero was explained away instead of checked.*
+- **Description (all built/cloned reports):** set `&lt;DESCRIPTION&gt;` (inside `REPORT_TRANSLATIONS_ROW`) to record **the source Oracle report** (`&lt;PROG&gt;` + its user-visible name) and a **brief, plain-language summary** of what the report does (entity, key columns, main filters). Break it into short paragraphs (per `report-development` skill). See the rule&#x27;s &quot;Description — MANDATORY&quot; section. (A pure Outcome-1 *recommendation* builds no report, so nothing to describe.)
+
+### 5. Category — always `Custom Reports &lt;ABBR&gt;`
+Every produced report (clone or new) gets exactly this category. No exceptions.
+
+### 6. Import + validate — the verification gate (rule Step P4)
+- Import via `import_xml` (which derives parameter and upload dependencies from any `$flex$`/`$column$` references automatically).
+- **🚨 Re-issuing a new version of an already-imported report → DELETE then import fresh** (`xxen_api.delete_report(xxen_report.report_id(&#x27;&lt;name&gt;&#x27;),&#x27;Y&#x27;); commit;` then `import_xml`). Importing on top upsert-merges by `SORT_ORDER`; if the SORT_ORDER→parameter mapping changed between versions the merge is partial (classic symptom: a `1=1`/`&amp;lexical` anchor parameter whose `SQL_TEXT` came out **blank** — impossible from a clean load). See `report-development` skill &quot;Re-issuing a new VERSION&quot;.
+- **Post-import: assert no anchor parameter lost its SQL_TEXT** — `select parameter_name,anchor from xxen_report_parameters_v where report_id=xxen_report.report_id(&#x27;&lt;name&gt;&#x27;) and (anchor like &#x27;%=%&#x27; or anchor like &#x27;&amp;%&#x27;) and nvl(dbms_lob.getlength(sql_text),0)=0;` must return **zero rows**.
+- **Post-import: assert assignments landed** — `select assignment_level,include_exclude,level_value from xxen_report_assignments_v where report_id=xxen_report.report_id(&#x27;&lt;name&gt;&#x27;);` must return the expected rows (zero usually means `&lt;ASSIGNMENTS&gt;` was nested inside `REPORTS_ROW` instead of top-level, or `REPORT_NAME` was missing — see `report-development` skill &quot;Report Assignments&quot;).
+- **Parse-validate** on the instance.
+- **🚨 A wide-open parse+run is NOT acceptance.** Before declaring done, produce the **parameter-by-parameter fidelity table** (rule Step P4) and confirm EVERY row passes: count = LDT count, names = `FORM_LEFT_PROMPT`, every value-set parameter has `LOV Oracle` + correct `LOV_NAME` **and the LOV returns rows**, required flags match, hidden/defaults match, every parameter is wired (bind/SQL_TEXT/lexical) so it actually filters.
+- **🚨 Bind-anchor gate (mechanical, run the query — never eyeball):** `select xrpv.parameter_name, xrpv.anchor from xxen_report_parameters_v xrpv where xrpv.report_id=xxen_report.report_id(&#x27;&lt;name&gt;&#x27;) and xrpv.anchor like &#x27;:%&#x27;;` — for every returned row, quote the P3-exception justification recorded in step 4 (bind used ONLY in SELECT-list/CASE/row-security logic). Automatic FAIL and re-do: the bind token appears in a WHERE filter predicate, or a retained numeric-id bind parameter has no id/value LOV.
+- **🚨 Shared-LOV reuse gate (mechanical, run the query):** `select xrpv.parameter_name, dbms_lob.substr(xrpv.lov_query,300,1) from xxen_report_parameters_v xrpv where xrpv.report_id=xxen_report.report_id(&#x27;&lt;name&gt;&#x27;) and xrpv.lov_query is not null;` — this returns **only hand-written LOVs** (a `LOV Oracle` value set and a shared-LOV reference both store `lov_query` null). For each row, state the shared Blitz LOV you considered and why it was rejected — id-ness or genuine non-portability are the only valid reasons. **Automatic FAIL:** the LOV selects from a security-scoped master table (`gl_ledgers`, `hr_operating_units`, `hr_all_organization_units`, `mtl_parameters`, …) with no security predicate, or with one improvised rather than copied from the shipped LOV.
+- **E2E with REAL filter values** — through the Blitz **frontend run screen** (it evaluates hidden defaults), or with real filter values set. Confirm the filters actually restrict the output. Never accept a wide-open/default-only run as proof.
+- **API hidden-default limitation** (rule → &quot;E2E via the bare API…&quot;): `ORA-01741` / `ORA-01861` under the bare `set_parameter_value_` API are harness limitations, not report defects. For an **Outcome-1 clone**, equivalence to the shipped report (identical SQL + parameter count + behavior) is sufficient.
+- **🚨 Value fidelity gate — the acceptance test, for the first delivery AND every correction** (full procedure and harness skeletons: `references/value-fidelity.md`). Every other gate in this step proves the report is well-formed, not that it prints what the original prints. A report that only parses, runs and returns rows is not delivered. All six must pass:
+  1. **Inventory complete:** every row of the field inventory has a Blitz expression or implementation, or a reason from the source why it never reaches the output.
+  2. **Formula port:** the original&#x27;s formulas and per-row package code, ported as static PL/SQL, run on every row of the Blitz SQL, with 0 differences on every column. Where the instance lacks the data (India Localization lines, the customer&#x27;s own tables), feed identical stand-in rows to both sides.
+  3. **Reference output:** the customer&#x27;s ERP output matches on columns, order and headings, every recomputable relation holds on every row, and the row grain and order match.
+  4. **Old against new** for a correction: 0 differences on every column the change does not intend to alter.
+  5. **Full-fetch cost:** old and new, every column, over the same window. `count(*)` prunes columns and proves nothing about their cost.
+  6. **Independent audit** before the first delivery: a second agent with only the original&#x27;s files and the Blitz XML (`references/fidelity-audit-prompt.md`). Every DIFFERENT or MISSING is fixed or answered from the source before the file goes out.
+
+  Record each result in the inventory&#x27;s Proof column.
+
+- **A report with a `&amp;lexical` in its select list needs the form&#x27;s parse sequence and an explicit hidden value in the E2E.** Gate it with `xxen_report.initialize_run_param_vals_tmp(id)` → `initialize_parameter_values(id,&#x27;Y&#x27;)` → `parse_report_sql_columns(id)` (a bare parse strips the unresolved anchor and reports `Error parsing SQL.`), run the lexical&#x27;s own select standalone and count its lines against the source, and pass the hidden parameter in the scripted run (`xxen_api.create_run_id_` applies no defaults; without it the request fails with `ORA-00936`).
+- **Heading gate:** after import, render every parsed column through `xxen_report.column_translation(xrsc.column_name)` in the parse session and compare with the headings the original printed, column by column; any difference other than an upper-case identifier heading (rule &quot;Heading limits&quot;) is a defect.
+- **Open every custom list the way the run form does.** For each `lov_query` of the category run `select x.value, x.description from (&lt;query&gt;) x where rownum&lt;3` on the instance (substitute the `:$flex$` binds); a list that only returns `value` passes a `count(*)` gate and fails on every run screen with `ORA-00904: &quot;X&quot;.&quot;DESCRIPTION&quot;` (rule &quot;Mechanical rules for generating the parameter XML&quot;).
+- **Open every run screen the way the form and the add-in do.** Per report print `initialize_parameter_values`&#x27; message on its own line (a parse gate that reuses the variable hides a default the engine rejects), then call `xxen_webservices.report_metadata` and `report_param_lov` for the independent lists with the metadata defaults as binds: a literal default on a Number parameter is a form error and a failed add-in run (rule, same section).
+
+### UAT rounds — answer from the source, never patch the symptom
+
+- **A difference the customer reports goes back to that field&#x27;s inventory row.** Re-read the original&#x27;s code for it, find why the Blitz expression differs, and fix the expression to the original&#x27;s logic. A fix that makes the reported cell right without citing the source line is a guess, and a wrong guess creates the next round. Never choose a date basis, a rate or a set operator by analogy with another report.
+- **Check the same pattern on the whole report, then on the category.** A defect class found in one field (per-row code not carried, a handler&#x27;s blank, a literal the loop fills) is searched for in every other field of that report and every other converted report before the round goes out. The field inventories make that a lookup.
+- **Every round re-runs the value fidelity gate for each report it touches.** That means the whole report, not only the changed column, including the full-fetch cost.
+- **Record what the round taught in the skill.** A defect class the gate did not catch becomes a check in `references/value-fidelity.md` or a row type in `field_inventory.py`, not a note in the engagement folder.
+
+### 7. Deliverable per report
+A short record: classification + evidence, the recommendation or built report (name + category + report_id), the validation result (request_id / row count / equivalence note), and the completed field inventory with the value fidelity results.
+
+The XML deliverable is NOT per report: all reports of the category ship in the single category file (see Output). Import and validate that file as a whole (delete the category&#x27;s reports on the instance, import the category file, re-run the gates) before handing it over — the per-report intermediates are not what the customer receives.
+
+## Output
+- **ONE report definition XML per category** — `reports_Custom_Reports_&lt;ABBR&gt;_with_assignments_vNN.xml` in `blitz_converted/` next to the gathered folder, holding EVERY report of `Custom Reports &lt;ABBR&gt;` (all built/cloned reports of the engagement, not just this batch) plus the `&lt;ASSIGNMENTS&gt;` of all of them. Never deliver or keep one XML per report: the customer imports and re-imports a single file, and separate files drift apart (decision: product owner). A re-issue is the next `_vNN` of the same category file. Per-report XMLs are at most an internal build intermediate and are moved to `_superseded/` once the category file exists.</pre></section><section id='file-build-xml-py'><h3 class='fname'>build_xml.py</h3><details><summary>Show build_xml.py</summary><pre><code class='language-python'>&quot;&quot;&quot;Build a Blitz Report import XML: python build_xml.py &lt;spec.py&gt; &lt;out.xml&gt;
+
+spec.py defines CATEGORY and either REPORTS (a list of report dicts - the category deliverable, every
+report plus all their assignments in one file) or the keys of a single report at top level.
+A report dict: NAME, DESCRIPTION, SQL (path), GUID, ASSIGNMENTS (the converter&#x27;s _assignments.xml), PARAMS,
+SHORT_NAME (the short name of the program the report replaces, the view name for a custom view) and optional PROGRAM
+(its user-visible name), optional NUMBER_FORMAT (default #,##0.00;[Red]-#,##0.00; &#x27;General&#x27; prints numbers as the original prints them),
+optional TEMPLATES and DEFAULT_TEMPLATE (the name of the template every user gets without choosing one).
+
+PARAMS lists one dict per PARAMETERS_ROW, in order:
+  name, anchor, sql       sql is the SQL_TEXT; omit it for a :bind anchor
+  type                    Date, Char, Number, LOV (shared Blitz LOV), LOV Oracle (value set), LOV custom
+  lov, lov_query          LOV / LOV Oracle name, LOV custom query
+  fbd                     LOV custom only: filter before display (a list too long to download, e.g. all suppliers)
+  required, default       REQUIRED=Y, DEFAULT_VALUE
+  description             the run screen tooltip (US translation row)
+  matching                MATCHING_VALUE
+  hidden                  negative DISPLAY_SEQUENCE
+  display_sequence        explicit DISPLAY_SEQUENCE, to show a parameter elsewhere on the run screen without moving its
+                          SORT_ORDER (the import&#x27;s upsert key)
+  sub                     a further anchor of the same parameter: no display sequence, type, LOV, default or required
+  lexical                 anchor &#x27;&amp;name&#x27; placed where the fragment goes; sql is a select returning one line per fragment
+                          row (the engine substitutes all rows); hidden + a constant default so the value is always set
+Shared-LOV fallback payloads (LOV_GUID, VALIDATE_FROM_LIST_DSP, LOV_QUERY_DSP) are copied from the shipped content
+(the repository&#x27;s content/r12/reports, or the folder of report XMLs named by the BLITZ_CONTENT_DIR environment variable).
+&quot;&quot;&quot;
+import collections
+import glob
+import html
+import os
+import re
+import runpy
+import sys
+
+REPO = os.path.join(os.environ.get(&quot;BLITZ_CONTENT_DIR&quot;) or os.path.join(os.path.dirname(__file__), &quot;..&quot;, &quot;..&quot;, &quot;..&quot;, &quot;content&quot;, &quot;r12&quot;, &quot;reports&quot;), &quot;&quot;)
+SQL_FUNCTIONS = {&quot;abs&quot;, &quot;add_months&quot;, &quot;bitand&quot;, &quot;cast&quot;, &quot;ceil&quot;, &quot;chr&quot;, &quot;coalesce&quot;, &quot;decode&quot;, &quot;greatest&quot;, &quot;initcap&quot;, &quot;instr&quot;, &quot;last_day&quot;, &quot;least&quot;, &quot;length&quot;,
+                 &quot;lower&quot;, &quot;lpad&quot;, &quot;mod&quot;, &quot;months_between&quot;, &quot;next_day&quot;, &quot;nvl&quot;, &quot;nvl2&quot;, &quot;power&quot;, &quot;regexp_replace&quot;, &quot;regexp_substr&quot;, &quot;replace&quot;, &quot;round&quot;, &quot;rtrim&quot;,
+                 &quot;sign&quot;, &quot;substr&quot;, &quot;substrb&quot;, &quot;to_char&quot;, &quot;to_date&quot;, &quot;to_number&quot;, &quot;translate&quot;, &quot;trim&quot;, &quot;trunc&quot;, &quot;upper&quot;, &quot;userenv&quot;}
+
+
+def shared_lov(name):
+    for p in glob.glob(REPO + &quot;*.xml&quot;):
+        s = open(p, encoding=&quot;utf-8&quot;).read()
+        m = re.search(r&quot;&lt;LOV_NAME&gt;&quot; + re.escape(name) + r&quot;&lt;/LOV_NAME&gt;\s*&lt;LOV_GUID&gt;(\w+)&lt;/LOV_GUID&gt;\s*&lt;VALIDATE_FROM_LIST_DSP&gt;(\w)&lt;/VALIDATE_FROM_LIST_DSP&gt;\s*(&lt;FILTER_BEFORE_DISPLAY_DSP&gt;\w&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;\s*)?&lt;LOV_QUERY_DSP&gt;(.*?)&lt;/LOV_QUERY_DSP&gt;&quot;, s, re.S)
+        if m:
+            return m.group(1), m.group(2), (m.group(3) or &quot;&quot;).strip(), m.group(4)
+    raise SystemExit(&quot;shared LOV not found: &quot; + name)
+
+
+def e(t):
+    return html.escape(t, quote=False).replace(&quot;&#x27;&quot;, &quot;&amp;apos;&quot;)
+
+
+def param_rows(rep):
+    rows, visible = [], 0
+    for i, p in enumerate(rep[&quot;PARAMS&quot;], 1):
+        r = [f&quot;&lt;SORT_ORDER&gt;{i}&lt;/SORT_ORDER&gt;&quot;]
+        if not p.get(&quot;sub&quot;):
+            visible += 1
+            r.append(f&quot;&lt;DISPLAY_SEQUENCE&gt;{p.get(&#x27;display_sequence&#x27;) or (-visible * 10 if p.get(&#x27;hidden&#x27;) else visible * 10)}&lt;/DISPLAY_SEQUENCE&gt;&quot;)
+        r.append(f&quot;&lt;ANCHOR&gt;{e(p[&#x27;anchor&#x27;])}&lt;/ANCHOR&gt;&quot;)
+        if p.get(&quot;sql&quot;):
+            r.append(f&quot;&lt;SQL_TEXT&gt;{e(p[&#x27;sql&#x27;])}&lt;/SQL_TEXT&gt;&quot;)
+        if not p.get(&quot;sub&quot;):
+            r.append(f&quot;&lt;PARAMETER_TYPE_DSP&gt;{p[&#x27;type&#x27;]}&lt;/PARAMETER_TYPE_DSP&gt;&quot;)
+            if p[&quot;type&quot;] == &quot;LOV&quot;:
+                guid, val, fbd, q = shared_lov(p[&quot;lov&quot;])
+                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;, f&quot;&lt;LOV_GUID&gt;{guid}&lt;/LOV_GUID&gt;&quot;, f&quot;&lt;VALIDATE_FROM_LIST_DSP&gt;{val}&lt;/VALIDATE_FROM_LIST_DSP&gt;&quot;] + ([fbd] if fbd else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{q}&lt;/LOV_QUERY_DSP&gt;&quot;]
+            elif p[&quot;type&quot;] == &quot;LOV Oracle&quot;:
+                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;, &quot;&lt;VALIDATE_FROM_LIST_DSP&gt;Y&lt;/VALIDATE_FROM_LIST_DSP&gt;&quot;]
+            elif p[&quot;type&quot;] == &quot;LOV custom&quot;:
+                r += [&quot;&lt;VALIDATE_FROM_LIST_DSP&gt;Y&lt;/VALIDATE_FROM_LIST_DSP&gt;&quot;] + ([&quot;&lt;FILTER_BEFORE_DISPLAY_DSP&gt;Y&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;&quot;] if p.get(&quot;fbd&quot;) else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{e(p[&#x27;lov_query&#x27;].strip())}&lt;/LOV_QUERY_DSP&gt;&quot;]
+        if p.get(&quot;matching&quot;):
+            r.append(f&quot;&lt;MATCHING_VALUE&gt;{e(p[&#x27;matching&#x27;])}&lt;/MATCHING_VALUE&gt;&quot;)
+        if not p.get(&quot;sub&quot;):
+            if p.get(&quot;default&quot;):
+                r.append(f&quot;&lt;DEFAULT_VALUE&gt;{e(p[&#x27;default&#x27;])}&lt;/DEFAULT_VALUE&gt;&quot;)
+            if p.get(&quot;required&quot;):
+                r.append(&quot;&lt;REQUIRED&gt;Y&lt;/REQUIRED&gt;&quot;)
+        description = f&quot;\n      &lt;DESCRIPTION&gt;{e(p[&#x27;description&#x27;])}&lt;/DESCRIPTION&gt;&quot; if p.get(&quot;description&quot;) and not p.get(&quot;sub&quot;) else &quot;&quot;
+        r.append(f&quot;&lt;PARAMETER_TRANSLATIONS&gt;\n     &lt;PARAMETER_TRANSLATIONS_ROW&gt;\n      &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;\n      &lt;PARAMETER_NAME&gt;{e(p[&#x27;name&#x27;])}&lt;/PARAMETER_NAME&gt;{description}\n     &lt;/PARAMETER_TRANSLATIONS_ROW&gt;\n    &lt;/PARAMETER_TRANSLATIONS&gt;&quot;)
+        rows.append(&quot;   &lt;PARAMETERS_ROW&gt;\n    &quot; + &quot;\n    &quot;.join(r) + &quot;\n   &lt;/PARAMETERS_ROW&gt;&quot;)
+    return rows
+
+
+def select_aliases(sql):
+    &quot;&quot;&quot;output column names: the trailing identifier of every depth-0 item of the top-level select list&quot;&quot;&quot;
+    items, cur, depth, started = [], [], 0, False
+    for t in re.findall(r&quot;&#x27;(?:[^&#x27;]|&#x27;&#x27;)*&#x27;|\&quot;[^\&quot;]*\&quot;|--[^\n]*|/\*.*?\*/|[(),]|[\w$#&amp;:.]+|\S&quot;, sql, re.S):
+        low = t.lower()
+        if low.startswith((&quot;--&quot;, &quot;/*&quot;)):
+            continue
+        if not started:
+            started = low == &quot;select&quot;
+            continue
+        if t == &quot;(&quot;:
+            depth += 1
+        elif t == &quot;)&quot;:
+            depth -= 1
+        elif depth == 0 and t == &quot;,&quot;:
+            items.append(cur)
+            cur = []
+            continue
+        elif depth == 0 and low == &quot;from&quot;:
+            break
+        cur.append(t)
+    items.append(cur)
+    return [i[-1].rsplit(&quot;.&quot;, 1)[-1].strip(&#x27;&quot;&#x27;).lower() for i in items if i]
+
+
+def check(rep, sql):
+    # an alias is the column heading: RDF formula, placeholder and summary names must be renamed after the layout heading
+    rdf = [a for a in select_aliases(sql) if re.match(r&quot;c[fps]_&quot;, a)]
+    if rdf:
+        raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: RDF column names in the select list, name them after the layout heading: {rdf}&quot;)
+    display = collections.Counter(p[&quot;name&quot;] for p in rep[&quot;PARAMS&quot;] if not p.get(&quot;sub&quot;))
+    for name in {p[&quot;name&quot;] for p in rep[&quot;PARAMS&quot;]}:
+        if display[name] != 1:
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: parameter {name} has {display[name]} display rows&quot;)
+    for a in {p[&quot;anchor&quot;] for p in rep[&quot;PARAMS&quot;]}:
+        n = len(re.findall(r&quot;(?&lt;![\w&amp;:])&quot; + re.escape(a) + r&quot;(?!\w)&quot;, sql, re.I))
+        # the framework injects an n=n parameter at EVERY occurrence of its anchor; a report that wants the
+        # filters inside each union branch declares the intended count as REPEATED_ANCHOR (anchor -&gt; count)
+        expected = rep.get(&quot;REPEATED_ANCHOR&quot;, {}).get(a, 1)
+        if n == 0 or re.fullmatch(r&quot;(\d+)=\1&quot;, a) and n != expected:
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: anchor {a} occurs {n} times in the SQL, expected {expected}&quot;)
+    # the run form wraps a custom list as select null id, x.value, x.description from (&lt;query&gt;) x
+    for p in rep[&quot;PARAMS&quot;]:
+        q = p.get(&quot;lov_query&quot;)
+        if q and not (re.search(r&quot;\bvalue\b&quot;, q, re.I) and re.search(r&quot;\bdescription\b&quot;, q, re.I)):
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: LOV custom of {p[&#x27;name&#x27;]} must return value and description columns&quot;)
+    # the import stores filter before display only for a custom list: a value set&#x27;s comes from its Long List flag, a shared list&#x27;s from the list
+    for p in rep[&quot;PARAMS&quot;]:
+        if p.get(&quot;fbd&quot;) and p.get(&quot;type&quot;) != &quot;LOV custom&quot;:
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: fbd on {p[&#x27;name&#x27;]} needs type LOV custom, the import ignores it for {p.get(&#x27;type&#x27;)}&quot;)
+    # xxen_report.is_function: a default that is neither a select nor one of these expressions is stored as a literal
+    for p in rep[&quot;PARAMS&quot;]:
+        d = (p.get(&quot;default&quot;) or &quot;&quot;).strip()
+        c = re.sub(r&quot;\s&quot;, &quot;&quot;, d).lower()
+        f = re.match(r&quot;(\w+)\(&quot;, c)
+        evaluated = re.match(r&quot;(select|with)\b&quot;, d, re.I) or re.match(r&quot;(xxen_report\w*|xxen_schub|xxen_util|fnd_global|fnd_profile|:\$flex\$)\.|sys_context\(&quot;, c) \
+            or f and f.group(1) in SQL_FUNCTIONS or c.startswith(&quot;sysdate&quot;) and p.get(&quot;type&quot;, &quot;&quot;).startswith(&quot;Date&quot;) or re.fullmatch(r&quot;case\s.*\send&quot;, d, re.I | re.S)
+        if d and not evaluated and (re.fullmatch(r&quot;[a-z_][\w$#]*\.[a-z_][\w$#]*(\(.*\))?&quot;, c) or p.get(&quot;type&quot;) == &quot;Number&quot; and not re.fullmatch(r&quot;-?\d+(\.\d+)?&quot;, d)):
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: default of {p[&#x27;name&#x27;]} would be stored as the literal text &#x27;{d}&#x27;, write it as select ... from dual&quot;)
+
+
+def template_rows(rep):
+    &quot;&quot;&quot;TEMPLATES_ROW per entry of the report&#x27;s TEMPLATES list: NAME, GUID, COLUMNS (ordered column names),
+    PIVOT (list of (column, ROW|COLUMN|VALUE|FILTER[, aggregation])), optional DYNAMIC_COLUMNS (default N),
+    PIVOT_LAYOUT (T = tabular, no subtotals) and REPEAT_LABELS (Y = every row shows all its row field values),
+    SHARED (default True: a Site sharing row, so every user of the report can pick it), DISTINCT (Y = one row per distinct
+    combination of the template&#x27;s columns) and EXCLUDED_PARAMETERS (parameters hidden and not applied when the template is chosen).
+    A layout on a NEW report ships inside its definition; the standalone template file is only for a shipped report.&quot;&quot;&quot;
+    out = []
+    for t in rep.get(&quot;TEMPLATES&quot;, []):
+        cols = &quot;\n&quot;.join(f&quot;     &lt;TEMPLATE_COLUMNS_ROW&gt;\n      &lt;DISPLAY_SEQUENCE&gt;{i}&lt;/DISPLAY_SEQUENCE&gt;\n      &lt;COLUMN_NAME&gt;{e(c)}&lt;/COLUMN_NAME&gt;\n     &lt;/TEMPLATE_COLUMNS_ROW&gt;&quot;
+                         for i, c in enumerate(t[&quot;COLUMNS&quot;], 1))
+        seq = collections.Counter()
+        piv = []
+        for row in t.get(&quot;PIVOT&quot;, []):
+            col, ftype = row[0], row[1]
+            seq[ftype] += 1
+            agg = f&quot;\n      &lt;AGGREGATION&gt;{row[2]}&lt;/AGGREGATION&gt;&quot; if len(row) &gt; 2 else &quot;&quot;
+            piv.append(f&quot;     &lt;TEMPLATE_PIVOT_ROW&gt;\n      &lt;COLUMN_NAME&gt;{e(col)}&lt;/COLUMN_NAME&gt;\n      &lt;FIELD_TYPE&gt;{ftype}&lt;/FIELD_TYPE&gt;\n      &lt;DISPLAY_SEQUENCE&gt;{seq[ftype]}&lt;/DISPLAY_SEQUENCE&gt;{agg}\n     &lt;/TEMPLATE_PIVOT_ROW&gt;&quot;)
+        missing = {r[0] for r in t.get(&quot;PIVOT&quot;, [])} - set(t[&quot;COLUMNS&quot;])
+        if missing:
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}/{t[&#x27;NAME&#x27;]}: pivot columns not in TEMPLATE_COLUMNS: {sorted(missing)}&quot;)
+        pivot = f&quot;\n    &lt;TEMPLATE_PIVOT&gt;\n{chr(10).join(piv)}\n    &lt;/TEMPLATE_PIVOT&gt;&quot; if piv else &quot;&quot;
+        pivot += &quot;&quot;.join(f&quot;\n    &lt;{k}&gt;{t[k]}&lt;/{k}&gt;&quot; for k in (&quot;PIVOT_LAYOUT&quot;, &quot;REPEAT_LABELS&quot;) if t.get(k))
+        unknown = set(t.get(&quot;EXCLUDED_PARAMETERS&quot;, [])) - {p[&quot;name&quot;] for p in rep[&quot;PARAMS&quot;]}
+        if unknown:
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}/{t[&#x27;NAME&#x27;]}: excluded parameters not in PARAMS: {sorted(unknown)}&quot;)
+        if t.get(&quot;EXCLUDED_PARAMETERS&quot;):
+            pivot += &quot;\n    &lt;PARAMETER_EXCLUSION&gt;&quot; + &quot;&quot;.join(f&quot;\n     &lt;PARAMETER_EXCLUSION_ROW&gt;\n      &lt;PARAMETER_NAME&gt;{e(n)}&lt;/PARAMETER_NAME&gt;\n     &lt;/PARAMETER_EXCLUSION_ROW&gt;&quot;
+                                                   for n in t[&quot;EXCLUDED_PARAMETERS&quot;]) + &quot;\n    &lt;/PARAMETER_EXCLUSION&gt;&quot;
+        # without a sharing row only the owner can pick the template
+        sharing = (&quot;\n    &lt;TEMPLATE_SHARING&gt;\n     &lt;TEMPLATE_SHARING_ROW&gt;\n      &lt;SHARING_LEVEL&gt;S&lt;/SHARING_LEVEL&gt;\n&quot;
+                   &quot;      &lt;LEVEL_VALUE&gt;Site&lt;/LEVEL_VALUE&gt;\n     &lt;/TEMPLATE_SHARING_ROW&gt;\n    &lt;/TEMPLATE_SHARING&gt;&quot;) if t.get(&quot;SHARED&quot;, True) else &quot;&quot;
+        out.append(f&quot;&quot;&quot;   &lt;TEMPLATES_ROW&gt;
+    &lt;GUID&gt;{t[&#x27;GUID&#x27;]}&lt;/GUID&gt;
+    &lt;TEMPLATE_NAME&gt;{e(t[&#x27;NAME&#x27;])}&lt;/TEMPLATE_NAME&gt;{chr(10) + &#x27;    &lt;DISTINCT_FLAG&gt;Y&lt;/DISTINCT_FLAG&gt;&#x27; if t.get(&#x27;DISTINCT&#x27;) == &#x27;Y&#x27; else &#x27;&#x27;}
+    &lt;DYNAMIC_COLUMNS&gt;{t.get(&#x27;DYNAMIC_COLUMNS&#x27;, &#x27;N&#x27;)}&lt;/DYNAMIC_COLUMNS&gt;
+    &lt;OWNER&gt;SYSADMIN&lt;/OWNER&gt;
+    &lt;TEMPLATE_COLUMNS&gt;
+{cols}
+    &lt;/TEMPLATE_COLUMNS&gt;{pivot}{sharing}
+   &lt;/TEMPLATES_ROW&gt;&quot;&quot;&quot;)
+    return out
+
+
+def description(rep):
+    # the program link in the format of Blitz Report&#x27;s own concurrent program import; the migration tracker reads it
+    if not rep.get(&quot;SHORT_NAME&quot;):
+        raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: SHORT_NAME, the short name of the program the report replaces, is required&quot;)
+    source = f&quot;Source: {rep[&#x27;PROGRAM&#x27;]}\n&quot; if rep.get(&quot;PROGRAM&quot;) else &quot;&quot;
+    return f&quot;{rep[&#x27;DESCRIPTION&#x27;].rstrip()}\n\n{source}Short Name: {rep[&#x27;SHORT_NAME&#x27;]}&quot;
+
+
+def report_xml(rep, category):
+    sql = open(rep[&quot;SQL&quot;], encoding=&quot;utf-8&quot;).read().replace(&quot;\r\n&quot;, &quot;\n&quot;).strip()
+    check(rep, sql)
+    anchors = sorted({p[&quot;anchor&quot;] for p in rep[&quot;PARAMS&quot;]})
+    rows = param_rows(rep)
+    templates = template_rows(rep)
+    # a DEFAULT_TEMPLATES_ROW without USER_NAME is the global default; it applies only to users who can use the template
+    default = &quot;&quot;
+    if rep.get(&quot;DEFAULT_TEMPLATE&quot;):
+        t = next((t for t in rep.get(&quot;TEMPLATES&quot;, []) if t[&quot;NAME&quot;] == rep[&quot;DEFAULT_TEMPLATE&quot;]), None)
+        if not t or not t.get(&quot;SHARED&quot;, True):
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: default template {rep[&#x27;DEFAULT_TEMPLATE&#x27;]} must be one of its TEMPLATES and shared&quot;)
+        default = f&quot;\n   &lt;DEFAULT_TEMPLATES_ROW&gt;\n    &lt;TEMPLATE_GUID&gt;{t[&#x27;GUID&#x27;]}&lt;/TEMPLATE_GUID&gt;\n   &lt;/DEFAULT_TEMPLATES_ROW&gt;&quot;
+    return f&quot;&quot;&quot;&lt;!-- loader xml for Blitz Report: {e(rep[&#x27;NAME&#x27;])} --&gt;
+ &lt;REPORTS_ROW&gt;
+  &lt;GUID&gt;{rep[&#x27;GUID&#x27;]}&lt;/GUID&gt;
+  &lt;SQL_TEXT&gt;{e(sql)}&lt;/SQL_TEXT&gt;
+  &lt;NUMBER_FORMAT&gt;{e(rep.get(&#x27;NUMBER_FORMAT&#x27;, &#x27;#,##0.00;[Red]-#,##0.00&#x27;))}&lt;/NUMBER_FORMAT&gt;
+  &lt;REPORT_TRANSLATIONS&gt;
+   &lt;REPORT_TRANSLATIONS_ROW&gt;
+    &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
+    &lt;REPORT_NAME&gt;{e(rep[&#x27;NAME&#x27;])}&lt;/REPORT_NAME&gt;
+    &lt;DESCRIPTION&gt;{e(description(rep))}&lt;/DESCRIPTION&gt;
+   &lt;/REPORT_TRANSLATIONS_ROW&gt;
+  &lt;/REPORT_TRANSLATIONS&gt;
+  &lt;CATEGORY_ASSIGNMENTS&gt;
+   &lt;CATEGORY_ASSIGNMENTS_ROW&gt;
+    &lt;CATEGORY&gt;{e(category)}&lt;/CATEGORY&gt;
+   &lt;/CATEGORY_ASSIGNMENTS_ROW&gt;
+  &lt;/CATEGORY_ASSIGNMENTS&gt;
+  &lt;ANCHORS&gt;
+{chr(10).join(f&quot;   &lt;ANCHORS_ROW&gt;{chr(10)}    &lt;ANCHOR&gt;{e(a)}&lt;/ANCHOR&gt;{chr(10)}   &lt;/ANCHORS_ROW&gt;&quot; for a in anchors)}
+  &lt;/ANCHORS&gt;
+  &lt;PARAMETERS&gt;
+{chr(10).join(rows)}
+  &lt;/PARAMETERS&gt;
+  &lt;TEMPLATES&gt;
+{chr(10).join(templates)}
+  &lt;/TEMPLATES&gt;
+  &lt;DEFAULT_TEMPLATES&gt;{default}
+  &lt;/DEFAULT_TEMPLATES&gt;
+  &lt;UPLOAD_COLUMNS&gt;
+  &lt;/UPLOAD_COLUMNS&gt;
+  &lt;UPLOAD_PARAMETERS&gt;
+  &lt;/UPLOAD_PARAMETERS&gt;
+  &lt;UPLOAD_SQLS&gt;
+  &lt;/UPLOAD_SQLS&gt;
+ &lt;/REPORTS_ROW&gt;&quot;&quot;&quot;, len(rows)
+
+
+def assignment_rows(rep):
+    asg = open(rep[&quot;ASSIGNMENTS&quot;], encoding=&quot;utf-8&quot;).read()
+    return [r.replace(&quot;&lt;ASSIGNMENTS_ROW&gt;&quot;, f&quot;&lt;ASSIGNMENTS_ROW&gt;&lt;REPORT_NAME&gt;{e(rep[&#x27;NAME&#x27;])}&lt;/REPORT_NAME&gt;&quot;)
+            for r in re.findall(r&quot;&lt;ASSIGNMENTS_ROW&gt;.*?&lt;/ASSIGNMENTS_ROW&gt;&quot;, asg, re.S)]
+
+
+spec = runpy.run_path(sys.argv[1])
+category = spec[&quot;CATEGORY&quot;]
+reports = spec.get(&quot;REPORTS&quot;) or [spec]
+blocks, asg = [], []
+for rep in reports:
+    block, n = report_xml(rep, category)
+    blocks.append(block)
+    asg += assignment_rows(rep)
+    print(f&quot;  {rep[&#x27;NAME&#x27;]}: {n} parameter rows, {len(assignment_rows(rep))} assignments&quot;)
+
+out = f&quot;&quot;&quot;&lt;ROOT&gt;
+ &lt;APPS_INITIALIZE_DATA&gt;
+  &lt;USER_NAME&gt;ENGINATICS&lt;/USER_NAME&gt;
+  &lt;RESPONSIBILITY_KEY&gt;SYSTEM_ADMINISTRATOR&lt;/RESPONSIBILITY_KEY&gt;
+  &lt;APPLICATION_SHORT_NAME&gt;SYSADMIN&lt;/APPLICATION_SHORT_NAME&gt;
+ &lt;/APPS_INITIALIZE_DATA&gt;
+&lt;CATEGORIES&gt;
+ &lt;CATEGORIES_ROW&gt;
+  &lt;BASE_CATEGORY&gt;{e(category)}&lt;/BASE_CATEGORY&gt;
+  &lt;CATEGORY_TRANSLATIONS&gt;
+   &lt;CATEGORY_TRANSLATIONS_ROW&gt;
+    &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
+    &lt;CATEGORY&gt;{e(category)}&lt;/CATEGORY&gt;
+   &lt;/CATEGORY_TRANSLATIONS_ROW&gt;
+  &lt;/CATEGORY_TRANSLATIONS&gt;
+ &lt;/CATEGORIES_ROW&gt;
+&lt;/CATEGORIES&gt;
+&lt;REPORTS&gt;
+{chr(10).join(blocks)}
+&lt;/REPORTS&gt;
+&lt;ASSIGNMENTS&gt;
+{chr(10).join(&#x27; &#x27; + r for r in asg)}
+&lt;/ASSIGNMENTS&gt;
+&lt;/ROOT&gt;
+&quot;&quot;&quot;
+open(sys.argv[2], &quot;w&quot;, encoding=&quot;utf-8&quot;, newline=&quot;\r\n&quot;).write(out)
+print(&quot;wrote&quot;, sys.argv[2], len(out), &quot;bytes,&quot;, len(reports), &quot;reports,&quot;, len(asg), &quot;assignments&quot;)</code></pre></details></section><section id='file-classify-probe-py'><h3 class='fname'>classify_probe.py</h3><details><summary>Show classify_probe.py</summary><pre><code class='language-python'>#!/usr/bin/env python
+&quot;&quot;&quot;Classification probe for the custom-reports migration (Phase 2).
+
+Produces the evidence needed to classify a gathered custom report as Outcome 1 / 2 / 3.
+Run this BEFORE deciding the outcome and paste its output into the engagement notes.
+A column-name comparison is NOT a classification - this probe compares DATA SOURCES,
+which is what actually decides whether a shipped Blitz Report can produce the rows.
+
+Example: a custom GL detail report looked like a two-column enhancement of the shipped
+&quot;GL Account Analysis&quot; from column-name overlap alone. The shipped report has ZERO India
+Localization references and 2 union branches; the custom report had 8 branches, 4 JAI tables
+and 25 calls to a customer package. It was Outcome 3.
+
+USAGE
+  # 1. dump the candidate shipped report&#x27;s SQL from the conversion instance FIRST:
+  #    (base table, NOT xxen_reports_v - the view truncates the CLOB at 32764 bytes)
+  #      select xr.sql_text from xxen_reports xr, xxen_reports_v v
+  #      where xr.report_id=v.report_id and v.report_name=&#x27;&lt;shipped report&gt;&#x27;;
+  #    save it as shipped.sql
+  #
+  # 2. python classify_probe.py --custom _extract/&lt;PROG&gt;_datamodel_1.sql \
+  #                             --shipped shipped.sql \
+  #                             --prefixes XX,YY
+  #
+  # --prefixes: ALL customer object prefixes, comma separated. Do not assume the one in
+  #   manifest.txt is complete - the gather itself only scans for that one, which is how
+  #   dependencies get missed (see `custom-reports-migration` skill &quot;Gathering - known gaps&quot;).
+
+VERDICT RULE (deterministic - do not override with judgement):
+  * any localization object (JAI_/JA_IN_) present in custom but absent in shipped  -&gt; OUTCOME 3
+  * any customer-owned object (matching a prefix) referenced by the custom SQL     -&gt; OUTCOME 3
+  * custom has materially more union branches than shipped                         -&gt; OUTCOME 3 (investigate)
+  * otherwise                                                                      -&gt; Outcome 1/2 candidate,
+                                                                                      continue with the column diff
+&quot;&quot;&quot;
+import argparse
+import os
+import re
+import sys
+
+ORACLE_STD = re.compile(
+    r&#x27;^(ap|ar|gl|po|inv|mtl|wip|bom|fa|pa|pn|ce|xla|hr|hz|per|fnd|ra|rcv|oe|ont|wsh|qp|cst|msc|&#x27;
+    r&#x27;jtf|okc|iby|ego|eam|gmd|gme|gmf|gmi|gmp|opm|cs|csi|cse|zx|xle|xdo|ak|alr|icx|jg|qa|bne|&#x27;
+    r&#x27;ben|pay|ota|pqh|pqp|ssp|pjm|pji|pjc|pn|igi|igc|igs|dual)_&#x27;,
+    re.I)
+
+FROM_RE = re.compile(
+    r&#x27;(?:\bfrom\b|\bjoin\b|,)\s*(?:([a-z][a-z0-9_$#]{0,60})\s*\.\s*)?([a-z][a-z0-9_$#]{2,60})\s*(?=[\s,);]|$)&#x27;, re.I)  # &#x27;;&#x27; - a table may be the last token of the statement
+PKG_RE = re.compile(r&#x27;(?&lt;![.\w])([a-z][a-z0-9_$#]{2,60})\s*\.\s*[a-z][a-z0-9_$#]*\s*\(&#x27;, re.I)
+FUNC_RE = re.compile(r&#x27;(?&lt;![.\w])([a-z][a-z0-9_$#]{2,60})\s*\(&#x27;, re.I)  # standalone function call, e.g. xx_item_attribute(
+SQL_KEYWORDS = {
+    &#x27;select&#x27;, &#x27;where&#x27;, &#x27;and&#x27;, &#x27;or&#x27;, &#x27;group&#x27;, &#x27;order&#x27;, &#x27;by&#x27;, &#x27;having&#x27;, &#x27;union&#x27;, &#x27;all&#x27;,
+    &#x27;from&#x27;, &#x27;join&#x27;, &#x27;on&#x27;, &#x27;as&#x27;, &#x27;case&#x27;, &#x27;when&#x27;, &#x27;then&#x27;, &#x27;else&#x27;, &#x27;end&#x27;, &#x27;null&#x27;, &#x27;not&#x27;,
+    &#x27;in&#x27;, &#x27;exists&#x27;, &#x27;is&#x27;, &#x27;dual&#x27;, &#x27;distinct&#x27;, &#x27;left&#x27;, &#x27;right&#x27;, &#x27;outer&#x27;, &#x27;inner&#x27;, &#x27;full&#x27;,
+    &#x27;connect&#x27;, &#x27;start&#x27;, &#x27;with&#x27;, &#x27;over&#x27;, &#x27;partition&#x27;, &#x27;rownum&#x27;, &#x27;decode&#x27;, &#x27;nvl&#x27;, &#x27;trunc&#x27;,
+    &#x27;to_char&#x27;, &#x27;to_date&#x27;, &#x27;to_number&#x27;, &#x27;substr&#x27;, &#x27;instr&#x27;, &#x27;sum&#x27;, &#x27;count&#x27;, &#x27;max&#x27;, &#x27;min&#x27;,
+    &#x27;avg&#x27;, &#x27;round&#x27;, &#x27;lower&#x27;, &#x27;upper&#x27;, &#x27;sysdate&#x27;, &#x27;userenv&#x27;, &#x27;set&#x27;, &#x27;values&#x27;, &#x27;into&#x27;,
+}
+
+
+def strip_noise(sql):
+    &quot;&quot;&quot;remove block/line comments and string literals so we only scan real identifiers&quot;&quot;&quot;
+    sql = re.sub(r&#x27;/\*.*?\*/&#x27;, &#x27; &#x27;, sql, flags=re.S)
+    sql = re.sub(r&#x27;--[^\n]*&#x27;, &#x27; &#x27;, sql)
+    sql = re.sub(r&quot;&#x27;(?:&#x27;&#x27;|[^&#x27;])*&#x27;&quot;, &quot; &#x27;&#x27; &quot;, sql)
+    return sql
+
+
+def objects(sql, prefixes):
+    def startswith_prefix(name):
+        return any(name.startswith(p.lower()) for p in prefixes)
+
+    # dynamic SQL built in string literals (a BeforeReport lexical) can call customer packages
+    literals = &#x27; &#x27;.join(re.findall(r&quot;&#x27;((?:&#x27;&#x27;|[^&#x27;])*)&#x27;&quot;, re.sub(r&#x27;--[^\n]*&#x27;, &#x27; &#x27;, re.sub(r&#x27;/\*.*?\*/&#x27;, &#x27; &#x27;, sql, flags=re.S))))
+    found = {m.group(1).lower() for r in (PKG_RE, FUNC_RE) for m in r.finditer(literals) if startswith_prefix(m.group(1).lower())}
+    sql = strip_noise(sql)
+
+    for m in FROM_RE.finditer(sql):
+        schema, obj = (m.group(1) or &#x27;&#x27;).lower(), m.group(2).lower()
+        # a schema-qualified table hides a customer object when only the SCHEMA carries
+        # the prefix (xxc.some_table); keep the qualified name so it is not read as standard
+        if schema and startswith_prefix(schema) and not startswith_prefix(obj):
+            found.add(&#x27;%s.%s&#x27; % (schema, obj))
+        else:
+            found.add(obj)
+    for m in PKG_RE.finditer(sql):
+        found.add(m.group(1).lower())
+    for m in FUNC_RE.finditer(sql):
+        if any(m.group(1).lower().startswith(p.lower()) for p in prefixes):
+            found.add(m.group(1).lower())
+    found = {f for f in found if f not in SQL_KEYWORDS and not f.isdigit()}
+
+    loc, cust, std, other = set(), set(), set(), set()
+    for f in found:
+        if f.startswith(&#x27;jai_&#x27;) or f.startswith(&#x27;ja_in&#x27;) or f.startswith(&#x27;jai&#x27;):
+            loc.add(f)
+        elif any(f.startswith(p.lower()) for p in prefixes):
+            cust.add(f)
+        elif ORACLE_STD.match(f):
+            std.add(f)
+        else:
+            other.add(f)
+    return loc, cust, std, other
+
+
+def branches(sql):
+    return len(re.findall(r&#x27;(?mi)^\s*union\s+all\s*$&#x27;, strip_noise(sql))) + 1
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument(&#x27;--custom&#x27;, required=True, help=&#x27;the gathered custom report SQL&#x27;)
+    ap.add_argument(&#x27;--shipped&#x27;, help=&#x27;the candidate shipped Blitz report SQL (from xxen_reports base table)&#x27;)
+    ap.add_argument(&#x27;--prefixes&#x27;, default=&#x27;XX&#x27;, help=&#x27;comma separated customer object prefixes&#x27;)
+    a = ap.parse_args()
+
+    prefixes = [p.strip() for p in a.prefixes.split(&#x27;,&#x27;) if p.strip()]
+    csql = open(a.custom, encoding=&#x27;utf-8&#x27;, errors=&#x27;replace&#x27;).read()
+    cloc, ccust, cstd, cother = objects(csql, prefixes)
+    cbr = branches(csql)
+
+    print(&#x27;=&#x27; * 78)
+    print(&#x27;CLASSIFICATION PROBE&#x27;)
+    print(&#x27;=&#x27; * 78)
+    print(&#x27;custom report : %s&#x27; % os.path.basename(a.custom))
+    print(&#x27;  union branches            : %d&#x27; % cbr)
+    print(&#x27;  localization objects (%d)  : %s&#x27; % (len(cloc), &#x27;, &#x27;.join(sorted(cloc)) or &#x27;-&#x27;))
+    print(&#x27;  customer objects     (%d)  : %s&#x27; % (len(ccust), &#x27;, &#x27;.join(sorted(ccust)) or &#x27;-&#x27;))
+    print(&#x27;  standard EBS objects (%d)&#x27; % len(cstd))
+    if cother:
+        print(&#x27;  UNCLASSIFIED         (%d)  : %s&#x27; % (len(cother), &#x27;, &#x27;.join(sorted(cother))))
+        print(&#x27;     ^ check these by hand - an unrecognised prefix hides customer objects&#x27;)
+
+    sloc = scust = sstd = set()
+    sbr = 0
+    if a.shipped:
+        ssql = open(a.shipped, encoding=&#x27;utf-8&#x27;, errors=&#x27;replace&#x27;).read()
+        sloc, scust, sstd, _ = objects(ssql, prefixes)
+        sbr = branches(ssql)
+        print()
+        print(&#x27;shipped report: %s&#x27; % os.path.basename(a.shipped))
+        print(&#x27;  union branches            : %d&#x27; % sbr)
+        print(&#x27;  localization objects (%d)  : %s&#x27; % (len(sloc), &#x27;, &#x27;.join(sorted(sloc)) or &#x27;-&#x27;))
+        print(&#x27;  standard EBS objects (%d)&#x27; % len(sstd))
+
+    missing_loc = cloc - sloc
+    print()
+    print(&#x27;-&#x27; * 78)
+    print(&#x27;VERDICT&#x27;)
+    print(&#x27;-&#x27; * 78)
+    reasons = []
+    if missing_loc:
+        reasons.append(&#x27;custom uses %d localization object(s) the shipped report does not: %s&#x27;
+                       % (len(missing_loc), &#x27;, &#x27;.join(sorted(missing_loc))))
+    if ccust:
+        reasons.append(&#x27;custom depends on %d customer-owned object(s): %s&#x27;
+                       % (len(ccust), &#x27;, &#x27;.join(sorted(ccust))))
+    if a.shipped and cbr &gt; sbr:
+        reasons.append(&#x27;custom has %d union branches vs %d in the shipped report&#x27; % (cbr, sbr))
+
+    if reasons:
+        print(&#x27;  OUTCOME 3 - build a new custom report&#x27;)
+        for r in reasons:
+            print(&#x27;    - %s&#x27; % r)
+        if ccust:
+            print()
+            print(&#x27;  ACTION: confirm every customer object above has a gathered .sql dependency&#x27;)
+            print(&#x27;          file. If not, request the source from the customer BEFORE building&#x27;)
+            print(&#x27;          (DBA Text Search report) - the gather only scans the ONE prefix in&#x27;)
+            print(&#x27;          manifest.txt, so objects under any other naming are silently missing.&#x27;)
+        rc = 3
+    else:
+        print(&#x27;  Outcome 1/2 CANDIDATE - no localization or customer-object blockers found.&#x27;)
+        print(&#x27;  Now do the column diff to decide between 1 (complete map) and 2 (enhance),&#x27;)
+        print(&#x27;  comparing against ALL templates of the shipped report, not just one.&#x27;)
+        rc = 0
+    print()
+    return rc
+
+
+if __name__ == &#x27;__main__&#x27;:
+    sys.exit(main())</code></pre></details></section><section id='file-field-inventory-py'><h3 class='fname'>field_inventory.py</h3><details><summary>Show field_inventory.py</summary><pre><code class='language-python'>#!/usr/bin/env python3
+&quot;&quot;&quot;Field inventory of an original Oracle report: every printed field traced to where the original computes it.
+
+usage: field_inventory.py &lt;program folder&gt; [&lt;PROG&gt;] [--out &lt;file.md&gt;]
+
+Reads what the gather put in the folder: &lt;PROG&gt;_rdf.xml (Oracle Reports, rwconverter XML) or &lt;PROG&gt;.rex (its text
+export, when rwconverter fails), a BI Publisher data
+template (*.xml with &lt;dataTemplate&gt;), the RTF layouts, and custom package bodies (*package_body.sql, *.pkb).
+Writes &lt;PROG&gt;_field_inventory.md next to them. The Blitz expression and Proof columns are filled in during the
+conversion; a printed field without a Blitz expression, and a row-control item without an implementation, is an
+open defect (`custom-reports-migration` skill, &quot;Value fidelity&quot;).
+&quot;&quot;&quot;
+import glob, html, os, re, sys
+import xml.etree.ElementTree as ET
+
+KEYWORDS = set(&quot;&quot;&quot;select from where and or not null is in like between case when then else end nvl nvl2 decode to_char
+to_number to_date trunc round substr substrb instr length upper lower trim ltrim rtrim replace sum count max min avg
+sysdate distinct as dbms_xmlgen convert abs sign coalesce exists any all true false&quot;&quot;&quot;.split())
+FLOW = re.compile(r&quot;^(for-each|for-each-group|end|if|choose|when|otherwise|call|template|import|sort|attribute|param|variable|split-by-page-break|section)\b&quot;, re.I)
+
+
+def read(p):
+    with open(p, &quot;rb&quot;) as f:
+        return f.read().decode(&quot;utf-8&quot;, &quot;replace&quot;)
+
+
+def strip_ns(root):
+    for e in root.iter():
+        if isinstance(e.tag, str) and &quot;}&quot; in e.tag:
+            e.tag = e.tag.split(&quot;}&quot;, 1)[1]
+    return root
+
+
+def first_lines(text, n=3, width=160):
+    lines = [l.strip() for l in (text or &quot;&quot;).splitlines() if l.strip()]
+    return &quot; / &quot;.join(lines[:n])[:width]
+
+
+def can_return_false(body):
+    code = re.sub(r&quot;/\*.*?\*/|--[^\n]*&quot;, &quot; &quot;, body or &quot;&quot;, flags=re.S)
+    return re.search(r&quot;return\s*\(?\s*false&quot;, code, re.I) is not None
+
+
+def cell(s):
+    return str(s if s is not None else &quot;&quot;).replace(&quot;|&quot;, &quot;\\|&quot;).replace(&quot;\n&quot;, &quot; &quot;)
+
+
+class Inventory:
+    def __init__(self, prog):
+        self.prog = prog
+        self.sources = {}      # UPPER name -&gt; (kind, definition)
+        self.units = {}        # lower function name -&gt; body
+        self.printed = []      # (name, use, context) in layout order
+        self.formulas = []
+        self.formula_unit = {} # UPPER formula name -&gt; lower function name
+        self.dt_elements = []  # data template elements in document order
+        self.row_control = []  # (kind, object, detail)
+        self.queries = []      # (name, sql)
+        self.package_out = []
+        self.notes = []
+
+    # ---------- Oracle Reports (rwconverter XML) ----------
+    def rdf(self, path):
+        try:
+            root = strip_ns(ET.fromstring(read(path).encode(&quot;utf-8&quot;)))
+        except ET.ParseError as e:
+            self.notes.append(&quot;%s does not parse as XML (%s): read it by hand or use rex_parse.py.&quot; % (os.path.basename(path), e))
+            return
+        for fn in root.iter(&quot;function&quot;):
+            src = fn.find(&quot;textSource&quot;)
+            self.units[(fn.get(&quot;name&quot;) or &quot;&quot;).lower()] = src.text if src is not None and src.text else &quot;&quot;
+        for p in list(root.iter(&quot;userParameter&quot;)) + list(root.iter(&quot;systemParameter&quot;)):
+            self.sources[p.get(&quot;name&quot;, &quot;&quot;).upper()] = (&quot;parameter&quot;, p.get(&quot;initialValue&quot;) and &quot;initial value %s&quot; % p.get(&quot;initialValue&quot;) or &quot;&quot;)
+        for ds in root.iter(&quot;dataSource&quot;):
+            sel = ds.find(&quot;select&quot;)
+            sql = sel.text if sel is not None and sel.text else &quot;&quot;
+            self.queries.append((ds.get(&quot;name&quot;), sql))
+            self._groups(ds, ds.get(&quot;name&quot;), None)
+        # formulas, placeholders and summaries outside any group (report level)
+        data = root.find(&quot;.//data&quot;)
+        if data is not None:
+            for child in data:
+                self._column(child, &quot;report level&quot;, None)
+        for link in root.iter(&quot;link&quot;):
+            self.row_control.append((&quot;link&quot;, &quot;%s -&gt; %s&quot; % (link.get(&quot;parentGroup&quot;), link.get(&quot;childQuery&quot;) or link.get(&quot;childGroup&quot;)),
+                                     &quot;a filter or empty parent group suppresses the child query&quot;))
+        for e in root.iter():
+            if e.tag == &quot;advancedLayout&quot;:
+                continue
+            trig = e.get(&quot;formatTrigger&quot;)
+            if not trig and e.find(&quot;advancedLayout&quot;) is not None:
+                trig = e.find(&quot;advancedLayout&quot;).get(&quot;formatTrigger&quot;)
+            if trig:
+                body = self.units.get(trig.lower(), &quot;&quot;)
+                if can_return_false(body):
+                    self.row_control.append((&quot;format trigger&quot;, &quot;%s %s (source %s)&quot; % (e.tag, e.get(&quot;name&quot;), e.get(&quot;source&quot;)),
+                                             &quot;%s can return FALSE: %s&quot; % (trig, first_lines(re.sub(r&quot;(?is)^.*?\bbegin\b&quot;, &quot;&quot;, body, count=1)))))
+        for e in root.iter(&quot;field&quot;):
+            self.printed.append((e.get(&quot;source&quot;) or e.get(&quot;name&quot;), &quot;paper layout field %s&quot; % e.get(&quot;name&quot;), &quot;&quot;))
+        for name, body in self.units.items():
+            if name in (&quot;beforereport&quot;, &quot;afterpform&quot;, &quot;afterreport&quot;, &quot;beforepform&quot;, &quot;betweenpages&quot;) or name.endswith(&quot;trigger&quot;) and &quot;format&quot; not in name:
+                lex = sorted(set(re.findall(r&quot;:(\w+)\s*:=&quot;, body)))
+                self.row_control.append((&quot;trigger&quot;, name, &quot;assigns %s&quot; % &quot;, &quot;.join(lex) if lex else first_lines(body, 2)))
+
+    def _formula(self, name, where, fn, datatype, null):
+        body = self.units.get(fn, &quot;&quot;)
+        assigns = sorted(set(m.upper() for m in re.findall(r&quot;:(\w+)\s*:=&quot;, body)))
+        refs = sorted(set(m.upper() for m in re.findall(r&quot;:(\w+)&quot;, body)) - set(assigns) - {name})
+        into = len(re.findall(r&quot;\binto\b&quot;, body, re.I))
+        handlers = [first_lines(h, 1, 80) for h in re.findall(r&quot;(?is)\bwhen\s+(?:others|no_data_found|too_many_rows)\b.*?(?=\bwhen\b|\bend\b)&quot;, body)]
+        self.sources[name] = (&quot;formula&quot;, &quot;%s: %s%s%s&quot; % (where, fn, &quot;, &quot; + datatype if datatype else &quot;&quot;, &quot;, null prints %s&quot; % null if null else &quot;&quot;))
+        self.formulas.append((name, where, fn, datatype, null, assigns, refs, into, handlers))
+        self.formula_unit[name] = fn
+
+    def _groups(self, node, query, group):
+        for child in node:
+            if child.tag == &quot;group&quot;:
+                g = child.get(&quot;name&quot;)
+                self._groups(child, query, g)
+            else:
+                self._column(child, query, group)
+
+    def _column(self, e, query, group):
+        name = (e.get(&quot;name&quot;) or &quot;&quot;).upper()
+        where = &quot;%s%s&quot; % (query, &quot; / &quot; + group if group else &quot;&quot;)
+        if e.tag == &quot;dataItem&quot;:
+            d = e.find(&quot;dataDescriptor&quot;)
+            self.sources[name] = (&quot;query column&quot;, &quot;%s: %s&quot; % (where, d.get(&quot;expression&quot;) if d is not None else &quot;&quot;))
+        elif e.tag == &quot;formula&quot;:
+            self._formula(name, where, (e.get(&quot;source&quot;) or &quot;&quot;).lower(), e.get(&quot;datatype&quot;), e.get(&quot;valueIfNull&quot;))
+        elif e.tag == &quot;placeholder&quot;:
+            self.sources[name] = (&quot;placeholder&quot;, &quot;%s, %s width %s%s&quot; % (where, e.get(&quot;datatype&quot;), e.get(&quot;width&quot;), &quot;, null prints %s&quot; % e.get(&quot;valueIfNull&quot;) if e.get(&quot;valueIfNull&quot;) else &quot;&quot;))
+        elif e.tag == &quot;summary&quot;:
+            self.sources[name] = (&quot;summary&quot;, &quot;%s: %s(%s) reset %s compute %s&quot; % (where, e.get(&quot;function&quot;), e.get(&quot;source&quot;), e.get(&quot;reset&quot;), e.get(&quot;compute&quot;)))
+        elif e.tag == &quot;filter&quot;:
+            if e.get(&quot;type&quot;) == &quot;plsql&quot;:
+                body = self.units.get((e.get(&quot;plsqlFilter&quot;) or &quot;&quot;).lower(), &quot;&quot;)
+                self.row_control.append((&quot;group filter&quot;, group, &quot;%s: %s&quot; % (e.get(&quot;plsqlFilter&quot;), first_lines(re.sub(r&quot;(?is)^.*?\bbegin\b&quot;, &quot;&quot;, body, count=1)))))
+            else:
+                self.row_control.append((&quot;group filter&quot;, group, &quot;%s %s records&quot; % (e.get(&quot;type&quot;), e.get(&quot;numberOfRecords&quot;))))
+
+    # ---------- Oracle Reports text export (.rex), when rwconverter fails ----------
+    def rex(self, path):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import rex_parse
+        recs = rex_parse.parse(path)
+        by_id = {r.get(&quot;ITEMID&quot;): r for r in recs if r.get(&quot;ITEMID&quot;)}
+        groups = {r.get(&quot;ITEMID&quot;): r for r in recs if r[&quot;_type&quot;] == &quot;SRW2_GROUP&quot;}
+        queries = {r.get(&quot;ITEMID&quot;): r.get(&quot;NAME&quot;) for r in recs if r[&quot;_type&quot;] == &quot;SRW2_QUERY&quot;}
+        owner = {}
+        for r in recs:
+            if r[&quot;_type&quot;] == &quot;SRW2_QUERY&quot;:
+                self.queries.append((r.get(&quot;NAME&quot;), r.get(&quot;QUERYLFID&quot;) or &quot;&quot;))
+            elif r[&quot;_type&quot;] == &quot;TOOL_PLSQL&quot;:
+                self.units[(r.get(&quot;NAME&quot;) or &quot;&quot;).lower()] = r.get(&quot;PLSLFID_ST&quot;) or &quot;&quot;
+                owner.setdefault(r.get(&quot;OBJECT_ID&quot;), []).append(r)
+        for r in recs:
+            if r[&quot;_type&quot;] != &quot;SRW2_COLUMN&quot;:
+                continue
+            g = groups.get(r.get(&quot;GROUP_ID&quot;), {})
+            where = &quot;%s / %s&quot; % (queries.get(g.get(&quot;QUERY_ID&quot;), &quot;report level&quot;), g.get(&quot;NAME&quot;)) if g else &quot;report level&quot;
+            name = (r.get(&quot;NAME&quot;) or &quot;&quot;).upper()
+            null = r.get(&quot;NULL_VALUE&quot;) if r.get(&quot;NULL_VALUE&quot;) not in (None, &quot;NULLP&quot;) else None
+            units = [u for u in owner.get(r.get(&quot;ITEMID&quot;), []) if u.get(&quot;TYPE&quot;) == &quot;4&quot;]
+            if units:
+                self._formula(name, where, units[0].get(&quot;NAME&quot;).lower(), &quot;&quot;, null)
+            else:
+                self.sources.setdefault(name, (&quot;column&quot;, &quot;%s (query column, summary, placeholder or parameter: see the .rex)%s&quot; % (where, &quot;, null prints %s&quot; % null if null else &quot;&quot;)))
+        for r in recs:
+            if r[&quot;_type&quot;] == &quot;TOOL_PLSQL&quot; and r.get(&quot;TYPE&quot;) != &quot;4&quot;:
+                o = by_id.get(r.get(&quot;OBJECT_ID&quot;), {})
+                body = r.get(&quot;PLSLFID_ST&quot;) or &quot;&quot;
+                if o.get(&quot;_type&quot;) in (&quot;SRW2_FRAME&quot;, &quot;SRW2_FIELD&quot;, &quot;SRW2_BOILERPLATE&quot;):
+                    if can_return_false(body):
+                        self.row_control.append((&quot;format trigger&quot;, &quot;%s %s&quot; % (o[&quot;_type&quot;][5:].lower(), o.get(&quot;NAME&quot;)),
+                                                 &quot;%s can return FALSE: %s&quot; % (r.get(&quot;NAME&quot;), first_lines(re.sub(r&quot;(?is)^.*?\bbegin\b&quot;, &quot;&quot;, body, count=1)))))
+                elif o.get(&quot;_type&quot;) == &quot;SRW2_GROUP&quot;:
+                    self.row_control.append((&quot;group filter&quot;, o.get(&quot;NAME&quot;), &quot;%s: %s&quot; % (r.get(&quot;NAME&quot;), first_lines(re.sub(r&quot;(?is)^.*?\bbegin\b&quot;, &quot;&quot;, body, count=1)))))
+                elif r.get(&quot;TYPE&quot;) in (&quot;7&quot;, &quot;8&quot;, &quot;9&quot;, &quot;10&quot;):
+                    lex = sorted(set(re.findall(r&quot;:(\w+)\s*:=&quot;, body)))
+                    self.row_control.append((&quot;trigger&quot;, r.get(&quot;NAME&quot;), &quot;assigns %s&quot; % &quot;, &quot;.join(lex) if lex else first_lines(body, 2)))
+            elif r[&quot;_type&quot;] == &quot;SRW2_LINK&quot;:
+                p, c = by_id.get(r.get(&quot;PARENT_ID&quot;), {}), by_id.get(r.get(&quot;CHILD_ID&quot;), {})
+                self.row_control.append((&quot;link&quot;, &quot;%s -&gt; %s&quot; % (p.get(&quot;NAME&quot;), c.get(&quot;NAME&quot;)), &quot;a filter or empty parent group suppresses the child&quot;))
+            elif r[&quot;_type&quot;] == &quot;SRW2_FIELD&quot;:
+                src = by_id.get(r.get(&quot;SOURCE_ID&quot;), {})
+                if src.get(&quot;NAME&quot;):
+                    self.printed.append((src.get(&quot;NAME&quot;), &quot;paper layout field %s&quot; % r.get(&quot;NAME&quot;), &quot;&quot;))
+
+    # ---------- BI Publisher data template ----------
+    def data_template(self, path):
+        try:
+            root = strip_ns(ET.fromstring(read(path).encode(&quot;utf-8&quot;)))
+        except ET.ParseError as e:
+            self.notes.append(&quot;%s does not parse as XML (%s).&quot; % (os.path.basename(path), e))
+            return
+        if root.get(&quot;defaultPackage&quot;):
+            self.notes.append(&quot;Data template %s uses default package %s: read its triggers and functions.&quot; % (os.path.basename(path), root.get(&quot;defaultPackage&quot;)))
+        for p in root.iter(&quot;parameter&quot;):
+            self.sources[(p.get(&quot;name&quot;) or &quot;&quot;).upper()] = (&quot;parameter&quot;, &quot;&quot;)
+        for q in root.iter(&quot;sqlStatement&quot;):
+            self.queries.append((q.get(&quot;name&quot;), q.text or &quot;&quot;))
+        for t in root.iter(&quot;dataTrigger&quot;):
+            self.row_control.append((&quot;data trigger&quot;, t.get(&quot;name&quot;), t.get(&quot;source&quot;)))
+        for g in root.iter(&quot;group&quot;):
+            if g.get(&quot;groupFilter&quot;):
+                self.row_control.append((&quot;group filter&quot;, g.get(&quot;name&quot;), g.get(&quot;groupFilter&quot;)))
+            for el in g.findall(&quot;element&quot;):
+                n = (el.get(&quot;name&quot;) or &quot;&quot;).strip().upper()
+                kind = &quot;summary&quot; if el.get(&quot;function&quot;) else &quot;query column&quot;
+                self.sources[n] = (kind, &quot;%s / %s: %s%s&quot; % (g.get(&quot;source&quot;), g.get(&quot;name&quot;), (el.get(&quot;value&quot;) or &quot;&quot;).strip(),
+                                   &quot; %s()&quot; % el.get(&quot;function&quot;) if el.get(&quot;function&quot;) else &quot;&quot;))
+                if g.get(&quot;name&quot;) != &quot;G_PARAMETERS&quot;:
+                    self.dt_elements.append(n)
+        for lk in root.iter(&quot;link&quot;):
+            self.row_control.append((&quot;link&quot;, &quot;%s -&gt; %s&quot; % (lk.get(&quot;parentQuery&quot;), lk.get(&quot;childQuery&quot;)), lk.get(&quot;condition&quot;) or &quot;&quot;))
+
+    # ---------- RTF layout ----------
+    def rtf(self, path):
+        text = read(path)
+        text = re.sub(r&quot;\\&#x27;[0-9a-fA-F]{2}&quot;, &quot;&quot;, text)
+        text = re.sub(r&quot;\\(rquote|lquote)\s?&quot;, &quot;&#x27;&quot;, text)
+        text = re.sub(r&quot;\\(rdblquote|ldblquote)\s?&quot;, &#x27;&quot;&#x27;, text)
+        text = re.sub(r&quot;\\[a-zA-Z]+-?\d* ?&quot;, &quot;&quot;, text)
+        text = re.sub(r&quot;[{}\r\n]&quot;, &quot;&quot;, text)
+        seen = set(n for n, _, _ in self.printed)
+        for tok in re.findall(r&quot;&lt;\?(.{1,400}?)\?&gt;&quot;, text):
+            tok = tok.strip()
+            names = [n.upper() for n in re.findall(r&quot;[A-Za-z_][A-Za-z0-9_]*&quot;, tok) if n.lower() not in KEYWORDS]
+            if FLOW.match(tok) or re.match(r&quot;^(xdoxslt|xdofx|xdoxliff):&quot;, tok, re.I) or not re.fullmatch(r&quot;[A-Za-z_][A-Za-z0-9_]*&quot;, tok):
+                known = [n for n in names if n in self.sources]
+                if re.match(r&quot;^(if|choose|when)\b&quot;, tok, re.I) or &quot;position()&quot; in tok:
+                    self.row_control.append((&quot;layout condition&quot;, os.path.basename(path), tok[:200]))
+                elif re.match(r&quot;^for-each&quot;, tok, re.I):
+                    self.row_control.append((&quot;layout loop&quot;, os.path.basename(path), tok[:200]))
+                elif known:
+                    for n in known:
+                        if n not in seen:
+                            seen.add(n)
+                            self.printed.append((n, &quot;layout expression&quot;, tok[:120]))
+                continue
+            n = tok.upper()
+            if n not in seen:
+                seen.add(n)
+                self.printed.append((n, &quot;layout field&quot;, os.path.basename(path)))
+
+    # ---------- PL/SQL package (execution method I, or a data template&#x27;s package) ----------
+    def package(self, path, entry=None):
+        &quot;&quot;&quot;entry: the executable&#x27;s procedure name; output is then read from that procedure only.&quot;&quot;&quot;
+        text = read(path)
+        lines = text.splitlines()
+        lo, hi = 0, len(text)
+        if entry:
+            # the definition, not a forward declaration: &#x27;is&#x27; or &#x27;as&#x27; comes before the first semicolon
+            starts = [m.start() for m in re.finditer(r&quot;(?im)^\s*procedure\s+%s\b&quot; % re.escape(entry), text)
+                      if re.search(r&quot;(?i)\b(is|as)\b&quot;, text[m.end():text.find(&quot;;&quot;, m.end())])]
+            if not starts:
+                return
+            lo = starts[-1]
+            end = re.compile(r&quot;(?im)^\s*end\s+%s\s*;&quot; % re.escape(entry)).search(text, lo)
+            nxt = re.compile(r&quot;(?im)^\s*(procedure|function)\s+\w+&quot;).search(text, lo + 10)
+            hi = end.end() if end else (nxt.start() if nxt else len(text))
+            self.notes.append(&quot;Output read from procedure %s of %s (lines %d-%d); procedures it calls that print are not followed: read them by hand.&quot; % (
+                entry, os.path.basename(path), text.count(&quot;\n&quot;, 0, lo) + 1, text.count(&quot;\n&quot;, 0, hi) + 1))
+        literal_cols = {}
+        for m in re.finditer(r&quot;(?is)(?:select|,)\s*(null|0|-?\d+(?:\.\d+)?|&#x27;[^&#x27;]*&#x27;)\s+(?:as\s+)?([a-z_][a-z0-9_$#]*)\s*(?=,|\bfrom\b)&quot;, text):
+            literal_cols.setdefault(m.group(2).lower(), m.group(1))
+        inserts = sorted(set(m.lower() for m in re.findall(r&quot;(?i)\binsert\s+into\s+([a-z0-9_$#.]+)&quot;, text[lo:hi])))
+        if inserts:
+            self.notes.append(&quot;%s inserts into %s: the rows the layout prints may be written by code, not selected.&quot; % (os.path.basename(path), &quot;, &quot;.join(inserts)))
+
+        def computed_at(expr):
+            where = []
+            for x in [x for x in re.findall(r&quot;[A-Za-z_][A-Za-z0-9_$#]*(?:\.[A-Za-z_][A-Za-z0-9_$#]*)?&quot;, re.sub(r&quot;&#x27;[^&#x27;]*&#x27;&quot;, &quot;&quot;, expr)) if x.lower() not in KEYWORDS]:
+                base = x.split(&quot;.&quot;)[-1].lower()
+                if &quot;.&quot; in x:
+                    if base in literal_cols:
+                        where.append(&quot;%s is the cursor literal %s: filled by loop code?&quot; % (x, literal_cols[base]))
+                    continue
+                hits = [str(j) for j, l in enumerate(lines, 1) if re.search(r&quot;(?i)\b%s\s*:=&quot; % re.escape(x), l) or re.search(r&quot;(?i)\binto\b.*\b%s\b&quot; % re.escape(x), l)]
+                if hits:
+                    where.append(&quot;%s assigned at line %s&quot; % (x, &quot;, &quot;.join(hits[:12]) + (&quot; ...&quot; if len(hits) &gt; 12 else &quot;&quot;)))
+            return &quot;; &quot;.join(where)
+
+        def add(name, line, expr):
+            self.package_out.append((name, line, expr.strip()[:120], computed_at(expr)))
+            self.sources.setdefault(name.upper(), (&quot;package output&quot;, &quot;%s line %d: %s&quot; % (os.path.basename(path), line, expr.strip()[:100])))
+
+        # XML elements: &#x27;&lt;TAG&gt;&#x27;||expr||&#x27;&lt;/TAG&gt;&#x27;
+        for m in re.finditer(r&quot;(?i)&#x27;\s*&lt;(\w+)&gt;\s*&#x27;\s*\|\|\s*(.+?)\s*\|\|\s*&#x27;\s*&lt;/\1&gt;\s*&#x27;&quot;, text[lo:hi]):
+            add(m.group(1).upper(), text.count(&quot;\n&quot;, 0, lo + m.start()) + 1, m.group(2))
+        # delimited text lines: a heading line of literals, then data lines of values joined with &#x27;|&#x27;, &#x27;,&#x27; or a tab
+        headings = []
+        for m in re.finditer(r&quot;(?i)\b(?:fnd_file\.put_line\s*\(\s*fnd_file\.output\s*,|fnd_file\.put\s*\(\s*fnd_file\.output\s*,|utl_file\.put_line\s*\(\s*\w+\s*,|utl_file\.put\s*\(\s*\w+\s*,)&quot;, text[lo:hi]):
+            start = lo + m.end()
+            expr, depth, q, i = None, 1, False, start
+            while i &lt; hi:
+                c = text[i]
+                if q:
+                    if c == &quot;&#x27;&quot;:
+                        if text[i + 1:i + 2] == &quot;&#x27;&quot;:
+                            i += 1
+                        else:
+                            q = False
+                elif c == &quot;&#x27;&quot;:
+                    q = True
+                elif c == &quot;(&quot;:
+                    depth += 1
+                elif c == &quot;)&quot;:
+                    depth -= 1
+                    if depth == 0:
+                        expr = text[start:i]
+                        break
+                i += 1
+            if expr is None or re.search(r&quot;(?i)&#x27;\s*&lt;\w+&gt;&quot;, expr):
+                continue
+            pieces, cur, depth, q = [], &quot;&quot;, 0, False
+            j = 0
+            while j &lt; len(expr):
+                c = expr[j]
+                if q:
+                    cur += c
+                    if c == &quot;&#x27;&quot;:
+                        if expr[j + 1:j + 2] == &quot;&#x27;&quot;:
+                            cur += &quot;&#x27;&quot;
+                            j += 1
+                        else:
+                            q = False
+                elif c == &quot;&#x27;&quot;:
+                    q = True
+                    cur += c
+                elif c == &quot;(&quot;:
+                    depth += 1
+                    cur += c
+                elif c == &quot;)&quot;:
+                    depth -= 1
+                    cur += c
+                elif expr.startswith(&quot;||&quot;, j) and depth == 0:
+                    pieces.append(cur.strip())
+                    cur = &quot;&quot;
+                    j += 1
+                else:
+                    cur += c
+                j += 1
+            pieces.append(cur.strip())
+            delim = lambda p: re.fullmatch(r&quot;(?i)chr\s*\(\s*(9|44|124)\s*\)|&#x27;[\s|,~;^\&quot;\t]*&#x27;&quot;, p) is not None
+            literal = lambda p: re.fullmatch(r&quot;&#x27;(?:[^&#x27;]|&#x27;&#x27;)*&#x27;&quot;, p) is not None
+            values = [p for p in pieces if p and not delim(p)]
+            line = text.count(&quot;\n&quot;, 0, start) + 1
+            if values and all(literal(p) for p in values):
+                heads = []
+                for p in values:
+                    heads += [h.strip() for h in re.split(r&quot;[|\t]|\\t&quot;, p[1:-1].replace(&quot;&#x27;&#x27;&quot;, &quot;&#x27;&quot;)) if h.strip()]
+                if len(heads) &gt; 1:
+                    headings = heads
+                continue
+            if len(values) &lt; 2:
+                continue
+            for k, v in enumerate(values):
+                add(headings[k] if len(headings) == len(values) else &quot;%s value %d&quot; % (os.path.basename(path).split(&quot;.&quot;)[1] if &quot;.&quot; in os.path.basename(path) else &quot;output&quot;, k + 1), line, v)
+
+    # ---------- report ----------
+    def write(self, out):
+        printed = list(self.printed or [(t, &quot;package output&quot;, &quot;&quot;) for t, _, _, _ in self.package_out])
+        if not printed and self.dt_elements:
+            self.notes.append(&quot;No layout file in the folder: the printed fields below are the data template&#x27;s elements. &quot;
+                              &quot;Take the printed set, order and headings from the customer&#x27;s layout or an ERP output.&quot;)
+            printed = [(n, &quot;data template element&quot;, &quot;&quot;) for n in self.dt_elements]
+        # a printed formula that concatenates other columns into a text line prints each of them
+        seen = set(n.upper() for n, _, _ in printed)
+        for n, _, _ in list(printed):
+            body = self.units.get(self.formula_unit.get(n.upper(), &quot;&quot;), &quot;&quot;)
+            if body.count(&quot;||&quot;) &gt;= 3:
+                for ref in re.findall(r&quot;:(\w+)&quot;, body):
+                    if ref.upper() not in seen and ref.upper() in self.sources:
+                        seen.add(ref.upper())
+                        printed.append((ref, &quot;printed inside %s&quot; % n, &quot;&quot;))
+        w = []
+        a = w.append
+        a(&quot;# Field inventory: %s&quot; % self.prog)
+        a(&quot;&quot;)
+        a(&quot;Every printed field, and everything that decides which rows print, traced to where the original computes it. Fill the &quot;
+          &quot;Blitz expression and Proof columns during the conversion; an empty Blitz expression or implementation is an open defect.&quot;)
+        a(&quot;&quot;)
+        for n in self.notes:
+            a(&quot;- &quot; + n)
+        if self.notes:
+            a(&quot;&quot;)
+        a(&quot;## 1. Printed fields (%d)&quot; % len(printed))
+        a(&quot;&quot;)
+        a(&quot;| # | Field | Where it is used | Source in the original | Blitz expression | Proof |&quot;)
+        a(&quot;|---|---|---|---|---|---|&quot;)
+        for i, (n, use, ctx) in enumerate(printed, 1):
+            kind, d = self.sources.get(n.upper(), (&quot;UNRESOLVED&quot;, &quot;not found in the data model: read the source&quot;))
+            a(&quot;| %d | %s | %s | %s: %s | | |&quot; % (i, cell(n), cell(use if not ctx else &quot;%s (%s)&quot; % (use, ctx)), kind, cell(d)))
+        a(&quot;&quot;)
+        a(&quot;## 2. Formula columns (%d)&quot; % len(self.formulas))
+        a(&quot;&quot;)
+        a(&quot;Each needs its SQL equivalent, including what its exception handlers print when a lookup finds no row or several, &quot;
+          &quot;and every placeholder it assigns.&quot;)
+        a(&quot;&quot;)
+        a(&quot;| Formula | Group | Function | Returns | Null prints | Assigns | Reads | select into | Handlers | Blitz expression |&quot;)
+        a(&quot;|---|---|---|---|---|---|---|---|---|---|&quot;)
+        for f in self.formulas:
+            a(&quot;| %s | %s | %s | %s | %s | %s | %s | %d | %s | |&quot; % (cell(f[0]), cell(f[1]), cell(f[2]), cell(f[3]), cell(f[4]),
+              cell(&quot;, &quot;.join(f[5])), cell(&quot;, &quot;.join(f[6])[:200]), f[7], cell(&quot;; &quot;.join(f[8])[:200])))
+        a(&quot;&quot;)
+        a(&quot;## 3. Row and section control (%d)&quot; % len(self.row_control))
+        a(&quot;&quot;)
+        a(&quot;Group filters, links, format triggers that can return FALSE, layout conditions and loops, and triggers that build &quot;
+          &quot;lexicals decide which rows and sections print. Each needs an implementation or a stated reason why it never fires.&quot;)
+        a(&quot;&quot;)
+        a(&quot;| Kind | Object | Detail | Implementation |&quot;)
+        a(&quot;|---|---|---|---|&quot;)
+        for k, o, d in self.row_control:
+            a(&quot;| %s | %s | %s | |&quot; % (cell(k), cell(o), cell(d)))
+        a(&quot;&quot;)
+        a(&quot;## 4. Queries (%d)&quot; % len(self.queries))
+        a(&quot;&quot;)
+        a(&quot;A `union` de-duplicates over its whole select list, ids and rowids included: keep the original&#x27;s operator and key. &quot;
+          &quot;Lexicals are filled by the triggers listed above.&quot;)
+        a(&quot;&quot;)
+        a(&quot;| Query | union | union all | order by | Lexicals |&quot;)
+        a(&quot;|---|---|---|---|---|&quot;)
+        for n, sql in self.queries:
+            s = re.sub(r&quot;--[^\n]*|/\*.*?\*/&quot;, &quot; &quot;, sql or &quot;&quot;, flags=re.S)
+            s = re.sub(r&quot;&#x27;[^&#x27;]*&#x27;&quot;, &quot;&#x27;&#x27;&quot;, s)
+            a(&quot;| %s | %d | %d | %s | %s |&quot; % (cell(n), len(re.findall(r&quot;(?i)\bunion\b(?!\s+all\b)&quot;, s)), len(re.findall(r&quot;(?i)\bunion\s+all\b&quot;, s)),
+              &quot;yes&quot; if re.search(r&quot;(?i)\border\s+by\b&quot;, s) else &quot;no&quot;, cell(&quot;, &quot;.join(sorted(set(re.findall(r&quot;&amp;(\w+)&quot;, s)))))))
+        if self.package_out:
+            a(&quot;&quot;)
+            a(&quot;## 5. Package output elements (%d)&quot; % len(self.package_out))
+            a(&quot;&quot;)
+            a(&quot;Values the program prints from variables are computed by its loop code, not by the cursor: replicate those &quot;
+              &quot;assignments. A cursor literal (`0 basic`, `null source`) is a placeholder the loop fills.&quot;)
+            a(&quot;&quot;)
+            a(&quot;| Element | Line | Expression | Computed at | Blitz expression |&quot;)
+            a(&quot;|---|---|---|---|---|&quot;)
+            for t, i, e, wh in self.package_out:
+                a(&quot;| %s | %d | %s | %s | |&quot; % (cell(t), i, cell(e), cell(wh)))
+        with open(out, &quot;w&quot;, encoding=&quot;utf-8&quot;, newline=&quot;\n&quot;) as fh:
+            fh.write(&quot;\n&quot;.join(w) + &quot;\n&quot;)
+        unresolved = sum(1 for n, _, _ in printed if n.upper() not in self.sources)
+        print(&quot;%s: %d printed fields (%d unresolved), %d formulas, %d row-control items, %d queries, %d package output elements -&gt; %s&quot; % (
+            self.prog, len(printed), unresolved, len(self.formulas), len(self.row_control), len(self.queries), len(self.package_out), out))
+
+
+def main():
+    args = sys.argv[1:]
+    out = None
+    if &quot;--out&quot; in args:
+        i = args.index(&quot;--out&quot;)
+        out = args[i + 1]
+        del args[i:i + 2]
+    if not args:
+        sys.exit(__doc__)
+    folder = args[0]
+    prog = args[1] if len(args) &gt; 1 else os.path.basename(os.path.normpath(folder))
+    inv = Inventory(prog)
+    # the RDF is named after the executable, which can differ from the program short name
+    rdf = next(iter([os.path.join(folder, prog + &quot;_rdf.xml&quot;)] if os.path.exists(os.path.join(folder, prog + &quot;_rdf.xml&quot;)) else sorted(glob.glob(os.path.join(folder, &quot;*_rdf.xml&quot;)))), None)
+    rex = next(iter(sorted(glob.glob(os.path.join(folder, &quot;*.rex&quot;)))), None)
+    if rdf:
+        inv.rdf(rdf)
+    elif rex:
+        inv.rex(rex)
+    elif glob.glob(os.path.join(folder, &quot;*.rdf&quot;)):
+        inv.notes.append(&quot;No _rdf.xml or .rex: rwconverter failed. Ask the customer for the .rex text export (Reports Builder: File &gt; Convert) and put it in this folder.&quot;)
+    for x in glob.glob(os.path.join(folder, &quot;*.xml&quot;)):
+        if x != rdf and &quot;&lt;dataTemplate&quot; in read(x)[:5000]:
+            inv.data_template(x)
+    # a PL/SQL program&#x27;s output comes from its executable: PKG.PROCEDURE, or a standalone procedure
+    pkg = proc = None
+    ldt = os.path.join(folder, prog + &quot;.ldt&quot;)
+    if os.path.exists(ldt):
+        m = re.search(r&#x27;(?s)BEGIN EXECUTABLE .*?EXECUTION_METHOD_CODE = &quot;(\w)&quot;.*?EXECUTION_FILE_NAME = &quot;([^&quot;]+)&quot;&#x27;, read(ldt))
+        if m and m.group(1) == &quot;I&quot;:
+            parts = m.group(2).split(&quot;.&quot;)
+            pkg, proc = (parts[-2].upper(), parts[-1]) if len(parts) &gt; 1 else (None, parts[-1])
+    code = sorted(glob.glob(os.path.join(folder, &quot;*package_body.sql&quot;)) + glob.glob(os.path.join(folder, &quot;*.pkb&quot;)) + glob.glob(os.path.join(folder, &quot;*procedure.sql&quot;)))
+    entry_files = [p for p in code if pkg and &quot;.%s.&quot; % pkg in os.path.basename(p).upper() or not pkg and proc and &quot;.%s.&quot; % proc.upper() in os.path.basename(p).upper()]
+    for p in entry_files or code:
+        inv.package(p, proc if pkg and p in entry_files else None)
+    for r in sorted(glob.glob(os.path.join(folder, &quot;*.rtf&quot;))):
+        inv.rtf(r)
+    inv.write(out or os.path.join(folder, prog + &quot;_field_inventory.md&quot;))
+
+
+if __name__ == &quot;__main__&quot;:
+    main()</code></pre></details></section><section id='file-references-fidelity-audit-prompt-md'><h3 class='fname'>references/fidelity-audit-prompt.md</h3><pre class='md'># Independent fidelity audit: agent prompt
+
+Give this prompt to a second agent (a subagent, or Codex with `codex exec`) before the first delivery of a converted report. The second agent must not see the converter&#x27;s reasoning, only the files. Fill in the two paths.
+
+---
+
+READ-ONLY AUDIT. Do not edit or create any file, do not connect to any database, do not propose rewritten code.
+
+Original program files: `&lt;gather folder of the program&gt;`: the `_rdf.xml` or `.rex`, the data template, the RTF layout, the custom package bodies and the `.ldt`. Converted Blitz Report: `&lt;report XML&gt;`. The SQL is the first `&lt;SQL_TEXT&gt;` after `&lt;GUID&gt;`. Each `&lt;PARAMETERS_ROW&gt;`&#x27;s `&lt;SQL_TEXT&gt;` is injected at its anchor (`1=1`, `2=2`, `&amp;lexical`); a `:bind` is bound directly.
+
+Enumerate EVERY value or row rule the original produces that reaches the printed output (an RTF field, a paper-layout field, an element the package writes), including everything it computes outside its main query:
+- formula columns (`CF_`), and placeholders (`CP_`) assigned inside formulas;
+- summaries (`CS_`) that a formula or the layout reads;
+- format triggers that return FALSE, and group filters, including one on a parent group that suppresses its linked child queries;
+- BeforeReport and AfterParameterForm triggers that build lexicals or derive binds;
+- BI Publisher data triggers, group filters and element expressions;
+- for a PL/SQL program, every variable its loop writes to the output.
+
+A cursor column selected as a literal (`0 basic`, `null source`) is a placeholder the loop fills later. Check every branch of a `union`, and the `union` versus `union all` key.
+
+For each item give:
+- **Item:** the name and the output field it feeds.
+- **Original:** what it computes, `file:line`, the essential code quoted briefly.
+- **Blitz:** the equivalent, `file:line` in the XML, or `none`.
+- **Verdict:** OK (same result), DIFFERENT (computed differently: say how), or MISSING.
+- **Consequence:** what the user sees for DIFFERENT or MISSING, such as a blank column, zero amount, wrong sign, rows shown that should be hidden, or a wrong filter.
+
+Check the edge behaviour too:
+- what the original prints when a lookup finds no row or several;
+- declared widths and number precision;
+- `nvl` defaults and `valueIfNull`;
+- dates printed as text;
+- row order and row grain;
+- serial numbers and running totals;
+- report modes;
+- parameters: what an empty optional parameter does to rows whose filtered column is null (`col=nvl(:p,col)` drops them), a value equal to an `nvl()` stand-in, a free-text value set that is upper case only, the exact date boundaries, which id or value each list passes;
+- name capture in PL/SQL cursors: a predicate that compares a column with an identifier that is both a column of the queried view and a procedure parameter.
+
+Ignore pure layout: fonts, page headers, the run date and parameter echo lines.
+
+Output: markdown, a table `Item | Original (file:line) | Blitz (file:line) | Verdict | Consequence` listing every output-relevant item, OK ones briefly. End with `&lt;report&gt;: N items, X DIFFERENT, Y MISSING`. If unsure whether two expressions are equivalent, say DIFFERENT and state what would need to be checked.
+
+---
+
+## Fix brief, when a round of corrections is delegated
+
+Give the fixing agent the audit&#x27;s table and these working rules:
+- Start from the currently delivered definition, not an older file.
+- Correct each DIFFERENT and MISSING item to what the original prints. Re-check each item against the source first. If the audit is wrong, say so and leave the item.
+- Work in its own folder: the build script, the resulting XML, and a NOTES.md with one row per item: FIXED with how and the proof, NOT FIXED with why, or AUDIT WRONG.
+- Pass the value fidelity gate (`value-fidelity.md`) on the result, including the full-fetch cost, before reporting.
+- No commits, no DML or DDL on shared instances; prefix every uploaded file with the report id.</pre></section><section id='file-references-value-fidelity-md'><h3 class='fname'>references/value-fidelity.md</h3><pre class='md'># Value fidelity gate
+
+A converted report is delivered only when it is proven to print what the original prints, for the same data and parameters. Parsing, running, returning rows, matching parameters and matching headings are necessary and prove none of this. The customer&#x27;s UAT is not the comparison: every defect it finds costs a round.
+
+The gate applies to the first delivery and to every correction. Record each result in the Proof column of the report&#x27;s field inventory.
+
+## Inputs
+
+- The field inventory, `field_inventory.py &lt;program folder&gt;`, with every row&#x27;s Blitz expression filled in.
+- The Blitz report imported on the conversion instance.
+- The customer&#x27;s reference output: one ERP output of the original program with its parameters (step 1 of the skill). An earlier Blitz output is never a reference.
+
+## Checks
+
+1. **Inventory complete.** Every printed field (section 1), formula (2), row-control item (3) and package output element (5) has a Blitz expression or implementation. The only other acceptable entry is a reason the item never reaches the output, citing the source: a formula the layout does not print, a trigger that returns TRUE for every value the program&#x27;s parameters allow. An empty cell is an open defect.
+2. **Formula port.** The original&#x27;s formula functions and per-row package code, ported as static PL/SQL with their binds as arguments, run on every row of the Blitz SQL and are compared with the Blitz columns: 0 differences on every column (skeleton A). Where the instance has no data for a path, feed identical stand-in rows to both sides (skeleton D).
+3. **Reference output.** Checked against the customer&#x27;s ERP output:
+   - The parsed columns match its columns, order and headings, apart from the rendering limits in the rules.
+   - Every relation the file lets you recompute holds on every row: totals equal their components, FC equals IC times rate, ages equal as-of minus due date, bucket sums equal outstanding.
+   - Row grain matches: one row per what the ERP prints one row for, with the same row order.
+4. **Old against new** (a correction of a delivered report): every column the change does not intend to alter has 0 differences, rows joined on the report&#x27;s key, and `minus` both ways on the key set (skeleton B). A performance rewrite that replaces correlated sub-queries with aggregates is also checked sub-query by sub-query: each aggregate&#x27;s key must equal the sub-query&#x27;s correlation, outer-join `(+)` predicates included, because the instance may hold no row that exercises the difference (an adjustment on an invoice with several instalments).
+5. **Full-fetch cost.** Fetch every output column of old and new over the same window, twice, and report elapsed seconds and buffer gets per row from the second run (skeleton C). A `count(*)` is not a measurement, because Oracle prunes the columns it does not reference. A new column that multiplies the cost is tuned before delivery.
+6. **Independent audit** before the first delivery: a second agent, given only the original&#x27;s files and the Blitz XML, lists every item and its verdict (`fidelity-audit-prompt.md`). Every DIFFERENT or MISSING is fixed or answered from the source before the file goes out.
+
+## Edge behaviour the original prints
+
+Reproduce these exactly. They are where conversions silently diverge.
+
+- **Single-row lookup** (`select ... into` in a formula): 0 or 2+ rows prints what the exception handler returns, usually blank or 0. Write it as `case when count(*)=1 then max(x) end`. When the handler does not reset the variable, PL/SQL leaves an undefined value that is in practice the first fetched row. Measure the shape on the instance before choosing: kept for a group-by and a unique-key join, not kept for an `in` list.
+- **Declared widths:** a `varchar2(n)` placeholder or variable overflows into its handler, so the value prints blank. `number(p,s)` rounds.
+- **Null defaults:** `nvl` defaults in the code (`&#x27;NA&#x27;`, `0`, `&#x27;No&#x27;`) and the RDF column&#x27;s `valueIfNull`.
+- **Dates:** a date the original prints as text in a fixed mask stays text in that mask. A date it prints as a date stays a date, without time where the original truncates.
+- **Row order:** the query&#x27;s `order by`, else the group break order.
+- **Row grain:** group and break keys, and the `union` key, which is the whole select list including ids and rowids the layout never prints.
+- **Per-row numbering and running totals** the layout prints: `row_number()` and analytic `sum()` over the report&#x27;s order.
+- **Report modes:** a summary option, sections switched by a parameter, and a group filter that suppresses a whole section each print what the original prints.
+- **Header values** printed once (legal entity, customer on a ledger) become a column on every row.
+- **Empty and odd parameter values:** with an empty parameter `col=nvl(:p,col)` drops the rows whose column is null; a value equal to the original&#x27;s `nvl()` stand-in also matches the empty rows; an upper-case-only value set upper-cases free text. Each is a test case of the proof, not only the filled, ordinary value.
+- **What the layout actually reads:** Oracle Reports writes a column under its XML tag, which can differ from the column name, and an RTF field whose name matches no tag prints blank. When the source cannot settle what the original prints, run it: the data template and RTF through the BI Publisher engine on the instance, or the package&#x27;s own procedure into its session temp table and roll back.
+
+## Skeletons
+
+Upload the Blitz SQL as a file and read it into a clob from the `TMP` directory. Resolve the anchors as a run would: replace each `n=n` with its predicates, and each `:bind` with a literal. Keep `dbms_output` lines under 255 bytes.
+
+**A. Formula port**, one function per ported formula, compared per row:
+
+```sql
+set serveroutput on size 1000000
+declare
+l_sql clob:=&lt;fread(&#x27;p_new.sql&#x27;)&gt;;
+l_cur sys_refcursor;
+r_invoice_id number;
+r_blitz_col varchar2(4000);
+l_diff pls_integer:=0;
+l_rows pls_integer:=0;
+--the original&#x27;s formula, its binds as parameters, its select into and handler unchanged
+function cf_x(p_invoice_id number) return varchar2 is
+l_v varchar2(240);
+begin
+  select ... into l_v from ... where ...=p_invoice_id;
+  return l_v;
+exception when others then
+  return null;
+end;
+begin
+  open l_cur for &#x27;select x.invoice_id, x.&quot;Heading&quot; from (&#x27;||l_sql||&#x27;) x&#x27;;
+  loop
+    fetch l_cur into r_invoice_id, r_blitz_col;
+    exit when l_cur%notfound;
+    l_rows:=l_rows+1;
+    if nvl(r_blitz_col,&#x27;&lt;null&gt;&#x27;)&lt;&gt;nvl(cf_x(r_invoice_id),&#x27;&lt;null&gt;&#x27;) then
+      l_diff:=l_diff+1;
+      if l_diff&lt;=3 then
+        dbms_output.put_line(&#x27;DIFF &#x27;||r_invoice_id||&#x27; blitz [&#x27;||r_blitz_col||&#x27;] original [&#x27;||cf_x(r_invoice_id)||&#x27;]&#x27;);
+      end if;
+    end if;
+  end loop;
+  dbms_output.put_line(&#x27;rows &#x27;||l_rows||&#x27;, Heading differences &#x27;||l_diff);
+end;
+/
+```
+
+Carry a key column (`invoice_id`) through the Blitz SQL for the harness only when the output does not already have one, and drop it from the delivered report.
+
+**B. Old against new**, per-column difference counts on joined rows:
+
+```sql
+select
+count(*) joined,
+sum(decode(o.col1,n.col1,0,1)) col1,
+sum(decode(o.col2,n.col2,0,1)) col2
+from
+(&lt;old sql&gt;) o,
+(&lt;new sql&gt;) n
+where
+o.key=n.key
+```
+
+`decode` treats two nulls as equal. Run `select key from (&lt;old&gt;) minus select key from (&lt;new&gt;)` and the reverse, which must both be empty unless the change intends to add or remove rows.
+
+**C. Full fetch.** Parse with `dbms_sql`, `describe_columns3`, define every column as `varchar2(4000)` (a date and number column converts), fetch every row, and read `session logical reads` from `v$mystat` before and after. Elapsed time comes from `dbms_utility.get_time`. Run old and new alternately, twice each, and report the second run.
+
+**D. Stand-in data**, for a table the instance has no rows for, such as India Localization tax lines or the customer&#x27;s own tables. Replace the table with the same inline view in both the ported original and the Blitz SQL:
+
+```sql
+(
+select 101 invoice_id, &#x27;TDS/CM/1&#x27; dm_invoice_num from dual union all
+select 102, &#x27;TDS/CM/1&#x27; from dual union all
+select 103, &#x27;TDS/CM/2&#x27; from dual
+) jati
+```
+
+Cover no match, one match, two or more matches with different values, a value in another operating unit, and a boundary such as the length limit or an invalid date. 0 differences on every case.</pre></section><section id='file-rex-parse-py'><h3 class='fname'>rex_parse.py</h3><details><summary>Show rex_parse.py</summary><pre><code class='language-python'>#!/usr/bin/env python
+&quot;&quot;&quot;Parse an Oracle Reports .rex text export (Reports Builder: File &gt; Convert, &quot;Report Definition file&quot; -&gt; &quot;Text file&quot;)
+into its DEFINE records, decoding &lt;&lt;&quot;...&quot;&gt;&gt; text and (BINARY)/(TLONG) blocks.
+
+Fallback when rwconverter segfaults on the .rdf (no &lt;PROG&gt;_rdf.xml): ask the customer for the .rex and run
+    python rex_parse.py &lt;folder-with-rex&gt; &lt;PROG&gt; [&lt;PROG&gt; ...]
+which prints the record-type counts, every SRW2_QUERY SQL, every non-trivial TOOL_PLSQL unit and the
+parameter columns (SRW2_COLUMN FUNCTION=3), and writes &lt;PROG&gt;_&lt;QUERY&gt;.sql + &lt;PROG&gt;_plsql.txt next to the .rex.
+Query variants that differ only in sort/group expressions collapse into one Blitz SQL; the LDT stays the parameter source.
+&quot;&quot;&quot;
+import re,io,sys,os,collections
+def parse(path):
+    with io.open(path,encoding=&#x27;latin-1&#x27;) as f: lines=f.read().split(&#x27;\n&#x27;)
+    recs=[];i=0;n=len(lines)
+    while i&lt;n:
+        m=re.match(r&#x27;^DEFINE\s+(\S+)&#x27;,lines[i])
+        if not m: i+=1; continue
+        typ=m.group(1); i+=1
+        assert lines[i].strip()==&#x27;BEGIN&#x27;,(path,i,lines[i]); i+=1
+        rec={&#x27;_type&#x27;:typ}
+        while i&lt;n and lines[i].strip()!=&#x27;END&#x27;:
+            l=lines[i]
+            fm=re.match(r&#x27;^\s*(\w+)\s*=\s*(.*)$&#x27;,l)
+            if fm:
+                k,v=fm.group(1),fm.group(2).strip()
+                if v.startswith(&#x27;(&#x27;) and v.endswith(&#x27;)&#x27;) or v==&#x27;&#x27;:
+                    # value follows as &lt;&lt;&quot; ... &quot;&gt;&gt; block
+                    i+=1
+                    buf=[]
+                    if lines[i].startswith(&#x27;&lt;&lt;&quot;&#x27;):
+                        first=lines[i][3:]
+                        if first.endswith(&#x27;&quot;&gt;&gt;&#x27;):
+                            buf.append(first[:-3]); i+=1
+                        else:
+                            buf.append(first); i+=1
+                            while i&lt;n and not lines[i].endswith(&#x27;&quot;&gt;&gt;&#x27;):
+                                buf.append(lines[i]); i+=1
+                            buf.append(lines[i][:-3]); i+=1
+                    raw=&#x27;\n&#x27;.join(buf)
+                    if v==&#x27;(BINARY)&#x27;:
+                        hx=re.sub(r&#x27;\s+&#x27;,&#x27;&#x27;,raw)
+                        try: txt=bytes.fromhex(hx).decode(&#x27;latin-1&#x27;).rstrip(&#x27;\x00&#x27;)
+                        except Exception: txt=raw
+                        rec[k]=txt
+                    else:
+                        rec[k]=raw
+                    continue
+                if v.startswith(&#x27;&lt;&lt;&quot;&#x27;):
+                    if v.endswith(&#x27;&quot;&gt;&gt;&#x27;): rec[k]=v[3:-3]; i+=1; continue
+                    buf=[v[3:]]; i+=1
+                    while i&lt;n and not lines[i].endswith(&#x27;&quot;&gt;&gt;&#x27;):
+                        buf.append(lines[i]); i+=1
+                    buf.append(lines[i][:-3]); i+=1
+                    rec[k]=&#x27;\n&#x27;.join(buf); continue
+                rec[k]=v.strip()
+            i+=1
+        recs.append(rec); i+=1
+    return recs
+if __name__==&#x27;__main__&#x27;:
+    M=sys.argv[1]
+    for prog in sys.argv[2:]:
+        recs=parse(os.path.join(M,prog+&#x27;.rex&#x27;))
+        print(&#x27;#&#x27;*20,prog,len(recs),&#x27;records&#x27;)
+        c=collections.Counter(r[&#x27;_type&#x27;] for r in recs)
+        print({k:v for k,v in c.items() if not k.startswith(&#x27;VG_&#x27;)})
+        plsql=[]
+        for r in recs:
+            t=r[&#x27;_type&#x27;]
+            if t==&#x27;SRW2_QUERY&#x27;:
+                sql=next((v for k,v in r.items() if isinstance(v,str) and len(v)&gt;40 and &#x27;select&#x27; in v.lower()),None)
+                fn=os.path.join(M,&#x27;%s_%s.sql&#x27;%(prog,r.get(&#x27;NAME&#x27;)))
+                if sql:
+                    with io.open(fn,&#x27;w&#x27;,encoding=&#x27;utf-8&#x27;,newline=&#x27;\n&#x27;) as f: f.write(sql)
+                print(&#x27;--- QUERY&#x27;,r.get(&#x27;NAME&#x27;),&#x27;-&gt;&#x27;,fn,&#x27;(%d chars)&#x27;%len(sql or &#x27;&#x27;))
+            if t==&#x27;TOOL_PLSQL&#x27;:
+                src=r.get(&#x27;PLSLFID_ST&#x27;) or &#x27;&#x27;
+                plsql.append(&#x27;=== PLSQL %s type %s\n%s&#x27;%(r.get(&#x27;NAME&#x27;),r.get(&#x27;TYPE&#x27;),src))
+                body=re.sub(r&#x27;/\*.*?\*/&#x27;,&#x27;&#x27;,src,flags=re.S); body=re.sub(r&#x27;--[^\n]*&#x27;,&#x27;&#x27;,body)
+                lines=[l for l in body.splitlines() if l.strip()]
+                trivial=len(lines)&lt;=6 and re.search(r&#x27;return\s*\(?\s*(true|false)\s*\)?\s*;&#x27;,body,re.I) and not re.search(r&#x27;select|:=&#x27;,body,re.I)
+                print(&#x27;--- PLSQL&#x27;,r.get(&#x27;NAME&#x27;),&#x27;type&#x27;,r.get(&#x27;TYPE&#x27;),&#x27;src&#x27;,len(src),&#x27;(trivial)&#x27; if trivial else &#x27;&#x27;)
+            if t in (&#x27;SRW2_PARAMETER&#x27;,&#x27;SRW2_USER_PARAM&#x27;,&#x27;SRW2_PARAM&#x27;):
+                print(&#x27;--- PARAM&#x27;,{k:v for k,v in r.items() if k in (&#x27;NAME&#x27;,&#x27;DATA_TYPE&#x27;,&#x27;INIT_VALUE&#x27;,&#x27;WIDTH&#x27;,&#x27;PARAM_TYPE&#x27;)})
+            if t==&#x27;SRW2_COLUMN&#x27; and str(r.get(&#x27;FUNCTION&#x27;))==&#x27;3&#x27;:
+                print(&#x27;--- PARAM&#x27;,r.get(&#x27;NAME&#x27;),&#x27;| datatype&#x27;,r.get(&#x27;DATA_TYPE&#x27;),&#x27;| width&#x27;,r.get(&#x27;WIDTH&#x27;))
+        with io.open(os.path.join(M,prog+&#x27;_plsql.txt&#x27;),&#x27;w&#x27;,encoding=&#x27;utf-8&#x27;,newline=&#x27;\n&#x27;) as f: f.write(&#x27;\n&#x27;.join(plsql))</code></pre></details></section><section id='file-verify-assignments-py'><h3 class='fname'>verify_assignments.py</h3><details><summary>Show verify_assignments.py</summary><pre><code class='language-python'>#!/usr/bin/env python
+&quot;&quot;&quot;Offline assignments gate for the custom-reports migration (Phase 2).
+
+Asserts that the &lt;ASSIGNMENTS&gt; block of each built report XML reproduces the gathered
+&lt;PROG&gt;_assignments.xml EXACTLY - every request group carried, each with its OWN application
+short name, and the level code normalised for the target instance.
+
+Needs NO database. That is the point: on a conversion instance the customer&#x27;s request groups
+do not exist, so the import legitimately reports 0 assignments and can tell you nothing about
+whether the XML was right. A zero there is UNVERIFIABLE, not PASSED - accepting it lets a
+defect ship (a few of the groups carried per report, all stamped with the customer&#x27;s custom
+application instead of JA / SQLAP / AR / JE / SQLGL).
+
+LEVEL CODE
+  Builds before 21-Jun-2026 use single letters; from that build on the import
+  decodes only the full words and SILENTLY SKIPS anything else. Gathered packages produced before
+  the converter fix carry &#x27;G&#x27;. Legacy mapping:
+      S-&gt;Site  A-&gt;Application  G-&gt;Request Group  R-&gt;Responsibility
+      U-&gt;User  F-&gt;Form         D-&gt;Report         (Function has no legacy letter)
+
+USAGE
+  python verify_assignments.py --gather &lt;CONV_folder&gt; --built &lt;folder-with-built-XMLs&gt; \
+                               --map map.json [--level &quot;Request Group&quot;]
+
+  map.json maps each built XML file to its source program(s). The deliverable is ONE category file,
+  so the normal shape maps that file to {&quot;&lt;Blitz report name&gt;&quot;: &quot;&lt;PROG&gt;&quot;, ...} and the gate checks each
+  report&#x27;s rows separately; a plain string value (one XML per program) is still accepted:
+      {&quot;reports_Custom_Reports_ABC_with_assignments_v01.xml&quot;: {&quot;ABC Item Extract&quot;: &quot;XX_ITEM_EXTRACT&quot;,
+                                                              &quot;ABC Asset Detail&quot;: &quot;XX_ASSET_DETAIL&quot;}}
+
+Exit code 0 = gate passed, 1 = gate failed.
+&quot;&quot;&quot;
+import argparse
+import html
+import json
+import os
+import re
+import sys
+
+LEGACY = {&#x27;S&#x27;: &#x27;Site&#x27;, &#x27;A&#x27;: &#x27;Application&#x27;, &#x27;G&#x27;: &#x27;Request Group&#x27;, &#x27;R&#x27;: &#x27;Responsibility&#x27;,
+          &#x27;U&#x27;: &#x27;User&#x27;, &#x27;F&#x27;: &#x27;Form&#x27;, &#x27;D&#x27;: &#x27;Report&#x27;}
+
+
+def rows(path, report_name=None):
+    &quot;&quot;&quot;(level_value, application_short_name, assignment_level) per ASSIGNMENTS_ROW, optionally of one report&quot;&quot;&quot;
+    x = open(path, encoding=&#x27;utf-8&#x27;).read()
+    out = []
+    for m in re.finditer(r&#x27;&lt;ASSIGNMENTS_ROW&gt;(.*?)&lt;/ASSIGNMENTS_ROW&gt;&#x27;, x, re.S):
+        r = m.group(1)
+        rn = re.search(r&#x27;&lt;REPORT_NAME&gt;(.*?)&lt;/REPORT_NAME&gt;&#x27;, r, re.S)
+        if report_name is not None and (not rn or html.unescape(rn.group(1)) != report_name):
+            continue
+        lv = re.search(r&#x27;&lt;LEVEL_VALUE&gt;(.*?)&lt;/LEVEL_VALUE&gt;&#x27;, r, re.S)
+        ap = re.search(r&#x27;&lt;APPLICATION_SHORT_NAME&gt;(.*?)&lt;/APPLICATION_SHORT_NAME&gt;&#x27;, r, re.S)
+        al = re.search(r&#x27;&lt;ASSIGNMENT_LEVEL&gt;(.*?)&lt;/ASSIGNMENT_LEVEL&gt;&#x27;, r, re.S)
+        out.append((html.unescape(lv.group(1)) if lv else &#x27;&#x27;,
+                    ap.group(1) if ap else &#x27;&#x27;,
+                    al.group(1) if al else &#x27;&#x27;))
+    return out
+
+
+def normalise(level):
+    return LEGACY.get(level, level)
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument(&#x27;--gather&#x27;, required=True, help=&#x27;extracted CONV_&lt;ABBR&gt;_... folder&#x27;)
+    p.add_argument(&#x27;--built&#x27;, required=True, help=&#x27;folder holding the built report XMLs&#x27;)
+    p.add_argument(&#x27;--map&#x27;, required=True, help=&#x27;JSON: {&quot;&lt;built xml&gt;&quot;: &quot;&lt;PROG&gt;&quot;}&#x27;)
+    p.add_argument(&#x27;--level&#x27;, default=&#x27;Request Group&#x27;,
+                   help=&#x27;level code the TARGET instance expects (default: full words)&#x27;)
+    a = p.parse_args()
+
+    mapping = json.load(open(a.map, encoding=&#x27;utf-8&#x27;))
+    fail = 0
+    checks = []
+    for xml in sorted(mapping):
+        if isinstance(mapping[xml], dict):
+            checks += [(xml, name, prog) for name, prog in sorted(mapping[xml].items())]
+        else:
+            checks.append((xml, None, mapping[xml]))
+    for xml, name, prog in checks:
+        label = (name or xml)[:50]
+        bpath = os.path.join(a.built, xml)
+        gpath = os.path.join(a.gather, prog, prog + &#x27;_assignments.xml&#x27;)
+        if not os.path.exists(gpath):
+            print(&#x27;%-52s NO GATHERED FILE (%s)&#x27; % (label, gpath))
+            fail += 1
+            continue
+        built, gathered = rows(bpath, name), rows(gpath)
+        b = {(v, ap) for v, ap, _ in built}
+        g = {(v, ap) for v, ap, _ in gathered}
+        bad_level = {l for _, _, l in built} - {a.level}
+        ok = not (g - b) and not (b - g) and not bad_level
+        print(&#x27;%-52s %2d/%2d  %s&#x27; % (label, len(built), len(gathered), &#x27;OK&#x27; if ok else &#x27;FAIL&#x27;))
+        for v, ap in sorted(g - b):
+            print(&#x27;      MISSING from built XML : %s @ %s&#x27; % (v, ap)); fail += 1
+        for v, ap in sorted(b - g):
+            print(&#x27;      NOT IN gathered file   : %s @ %s&#x27; % (v, ap)); fail += 1
+        for l in sorted(bad_level):
+            hint = &#x27; (legacy for %s - normalise it)&#x27; % normalise(l) if l in LEGACY else &#x27;&#x27;
+            print(&#x27;      WRONG level code       : %s, expected %s%s&#x27; % (l, a.level, hint)); fail += 1
+
+    print()
+    print(&#x27;ASSIGNMENTS GATE PASSED&#x27; if not fail else &#x27;ASSIGNMENTS GATE FAILED (%d problems)&#x27; % fail)
+    return 1 if fail else 0
+
+
+if __name__ == &#x27;__main__&#x27;:
+    sys.exit(main())</code></pre></details></section><section id='file-vs-parse-py'><h3 class='fname'>vs_parse.py</h3><details><summary>Show vs_parse.py</summary><pre><code class='language-python'>&quot;&quot;&quot;Print the value-set definitions from converter *_vs_*.ldt files (table, id/value columns, where clause).&quot;&quot;&quot;
+import glob,re,sys
+def attr(t,k):
+    i=t.find(k+&quot; =&quot;)
+    if i&lt;0: return None
+    j=t.index(&#x27;&quot;&#x27;,i)+1; out=[]
+    while True:
+        c=t[j]
+        if c==&quot;\\&quot;: out.append(t[j+1]); j+=2; continue
+        if c==&#x27;&quot;&#x27;: break
+        out.append(c); j+=1
+    return &quot;&quot;.join(out).replace(&quot;\n&quot;,&quot;\n&quot;)
+for f in sorted(glob.glob(&quot;*vs_*.ldt&quot;)):
+    t=open(f,encoding=&quot;utf-8&quot;,errors=&quot;replace&quot;).read()
+    print(&quot;==&quot;,re.search(r&#x27;BEGIN VALUE_SET &quot;([^&quot;]+)&quot;&#x27;,t).group(1),&quot;validation&quot;,attr(t,&quot;VALIDATION_TYPE&quot;))
+    for k in (&quot;TABLE_NAME&quot;,&quot;ID_COLUMN_NAME&quot;,&quot;VALUE_COLUMN_NAME&quot;,&quot;MEANING_COLUMN_NAME&quot;,&quot;ADDITIONAL_WHERE_CLAUSE&quot;):
+        v=attr(t,k)
+        if v: print(&quot;   &quot;,k,&quot;=&quot;,re.sub(r&quot;\s+&quot;,&quot; &quot;,v)[:900])</code></pre></details></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

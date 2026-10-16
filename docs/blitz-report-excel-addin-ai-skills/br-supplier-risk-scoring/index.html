@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Supplier Risk Scoring - Blitz Report Excel Add-in Skills</title><meta name="description" content="Score Oracle EBS suppliers on risk in Excel: have the br-run-reports skill extract spend, holds, price variance and delivery history, then combine dependency, reliability, price stability and anomaly signals into a ranked supplier risk register with a named driver per supplier.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-supplier-risk-scoring/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Supplier Risk Scoring - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Score Oracle EBS suppliers on risk in Excel: have the br-run-reports skill extract spend, holds, price variance and delivery history, then combine dependency, reliability, price stability and anomaly signals into a ranked supplier risk register with a named driver per supplier."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-supplier-risk-scoring/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-supplier-risk-scoring/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Purchasing</p><h1>Supplier Risk Scoring</h1><p class='name'>br-supplier-risk-scoring</p><p class='lead'>Score Oracle EBS suppliers on risk in Excel: have the br-run-reports skill extract spend, holds, price variance and delivery history, then combine dependency, reliability, price stability and anomaly signals into a ranked supplier risk register with a named driver per supplier.</p><h2>When to use</h2><p>Use when the user asks which suppliers are risky, supplier risk review, vendor scorecard, supplier dependency/concentration, or who to review before contract renewal.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-supplier-risk-scoring.zip'>Download br-supplier-risk-scoring.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-supplier-risk-scoring'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ap-suppliers/'>AP Suppliers</a></li><li><a href='https://www.enginatics.com/reports/po-invoice-price-variance/'>PO Invoice Price Variance</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-supplier-risk-scoring'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Supplier Risk Scoring (br-supplier-risk-scoring)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 10 minutes (multiple extracts).
+
+Produce a ranked supplier risk register in one workbook. You own the scoring model and the
+register; br-run-reports does extraction, **br-rfm-analysis** the spend-pattern segmentation,
+**br-anomaly-detection** the invoice-anomaly scan, br-data-dashboard the build. Run steps in order,
+keeping intermediate sheets.
+
+**Requires:** br-run-reports, br-rfm-analysis, br-anomaly-detection, br-data-dashboard.
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** Extraction is by **br-run-reports**; never call `br_*`
+functions or touch a result sheet mid-run. **Read-and-recommend only** — this skill never holds a
+supplier, changes sites, or blocks POs; it scores and routes to review.
+
+## 🚨 A score is a review queue, not a verdict
+This model sees only EBS transaction history — no financials, sanctions, ESG or news. A high score
+means *look at this supplier*, never *this supplier is failing*. Say so on the dashboard, and never
+auto-derive an action from the score.
+
+## When to use
+&quot;Which suppliers are risky&quot;, &quot;supplier risk assessment&quot;, &quot;vendor scorecard&quot;, &quot;how dependent are we
+on X&quot;, &quot;who should procurement review this quarter&quot;. For duplicate payments specifically, use
+**br-ap-duplicate-payments**; for holds, **br-ap-holds-analysis**.
+
+## Inputs
+- **Operating Unit** — required. **Lookback window** — default 12 months (spend/history);
+  the window drives extract size, so confirm it before a big pull.
+
+## Step 0 — Analysis depth  *(one `ask_user_question`, before any extraction)*
+Delivery performance costs an extra extract and is empty at sites not using supplier scheduling —
+ask once, nothing pre-selected:
+- **Standard** — spend, holds, price variance (3 extracts).
+- **+ Delivery performance** — adds the on-time-delivery extract.
+Skip the question when the request implies it (&quot;delivery risk&quot; → include; &quot;quick look&quot; → Standard).
+
+## Reports used (authoritative names — do NOT broad-search for them)
+Pass the **documented name directly**; search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+| Report (exact name) | Run with | Feeds |
+|---|---|---|
+| `AP Invoices and Lines` | OU + Invoice Date window | Spend, frequency, recency per supplier — the RFM base. **The heaviest extract**: restrict to the window, header-level template if offered. |
+| `AP Invoice on Hold` | OU | Holds count/aging per supplier — the friction signal. |
+| `PO Invoice Price Variance` | OU + date window | Price instability per supplier. |
+| `AP Suppliers` | (site filters as offered) | Master data: sites, terms, inactive flags — and the register&#x27;s display names. |
+| `PO Vendor Service Performance Analysis` *(optional — Step 0)* | OU + window | Delivery performance. **If empty/not found, score without it and say so** — never fake a delivery score. |
+
+## CONFIG — scoring model (edit weights to the customer)
+Score 0–100 per supplier = weighted sum of four 0–25 components:
+
+| Component | Source | High-risk signal |
+|---|---|---|
+| **Dependency** | Invoice spend | Share of OU spend (concentration), single-site supplier for that spend |
+| **Friction** | Holds | Holds per 100 invoices, aged holds outstanding |
+| **Price instability** | IPV | Variance $ / spend ratio, worsening trend across the window |
+| **Anomaly** | br-anomaly-detection over the supplier&#x27;s invoices | Outlier amounts, round-number clusters, duplicate-shaped patterns |
+
+*(With delivery data: reweight to five components × 20; late-delivery rate is the fifth.)*
+Band: **High ≥ 70, Medium 40–69, Low &lt; 40.** Every High supplier must carry a one-line **driver**
+(&quot;82% of spend in one site&quot;, &quot;14 aged holds&quot;, …) — a number with no reason is not reportable.
+Exclusions: intercompany suppliers, employees-as-suppliers, one-time suppliers under the $ floor
+(default $10k window spend).
+
+### Output sheets &amp; tab order (left to right)
+`Supplier_Risk` (dashboard, first), `Risk_Register` (every scored supplier), `AP_Invoices`,
+`AP_Holds`, `PO_IPV`, `AP_Suppliers`, [`PO_Delivery`] (last).
+
+## Pipeline
+1. **Extract — DELEGATE.** br-run-reports runs the Step-0 report set → their sheets. Wait for each;
+   the invoice extract is the long pole.
+2. **Anchor.** Supplier count, total window spend, holds count, IPV total $. Record per-sheet row
+   counts.
+3. **Segment  *(delegate to br-rfm-analysis if it fires; else inline)*.** RFM over the invoice
+   extract keyed on supplier — recency of activity, invoice frequency, monetary spend. Keep the
+   segment per supplier for the register.
+4. **Anomaly scan  *(delegate to br-anomaly-detection if it fires; else inline)*.** Over the
+   invoice extract grouped by supplier; carry each supplier&#x27;s anomaly count + worst finding.
+5. **Score  *(single `execute_office_js` call)*.** Join holds, IPV, (delivery), segments and
+   anomalies per supplier; apply CONFIG; write `Risk_Register` in one `.values =` call: supplier,
+   number, band, score, the four component scores, the driver line, window spend, segment.
+6. **Dashboard *(single call; charts second)*** (delegate to br-data-dashboard if it fires; else
+   inline). KPI cards (High count, spend at High, top concentration), band distribution and
+   spend-vs-score charts, top-10 High table with drivers. NEW sheet at **position 0**; don&#x27;t rename
+   report sheets; no multi-row `copyToRange`; clear strays; widen amount columns. Carry the &quot;review
+   queue, not a verdict&quot; line on the dashboard itself.
+7. **Narrative.** ≤5 bullets: the top risk and its driver, the concentration headline, any
+   systemic pattern, recommended first review. If delivery was skipped, label the model
+   &quot;excl. delivery&quot; — an unscored dimension must read as *not scored*, never as clean.
+8. **Arrange tabs + final validation.** Order per CONFIG; `Supplier_Risk` active. **One permitted
+   verification read:** register band counts and total spend tie to the Step-2 anchor.
+
+## Validation
+Every High has a driver; excluded suppliers listed, not silently dropped; component sources absent
+on the instance shown as &quot;not scored&quot;; register ties to raws.
+
+## Closed-loop (roadmap, not executed here)
+Findings route to procurement review; supplier-master fixes to the AP Supplier Upload; hold
+follow-ups to br-ap-holds-analysis. This skill scores; a human decides.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

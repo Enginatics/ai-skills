@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZIP Compatibility Fix - Blitz Report Development</title><meta name="description" content="Re-compress a ZIP file for Oracle compatibility.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/fix-zip-compatibility/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="ZIP Compatibility Fix - Blitz Report Development"><meta property="og:description" content="Re-compress a ZIP file for Oracle compatibility."><meta property="og:url" content="https://www.enginatics.com/ai-skills/fix-zip-compatibility/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/fix-zip-compatibility/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Testing and Tuning</p><h1>ZIP Compatibility Fix</h1><p class='name'>fix-zip-compatibility</p><p class='lead'>Re-compress a ZIP file for Oracle compatibility.</p><h2>When to use</h2><p>Use when Oracle unzip (UTL_COMPRESS/XXEN_REPORT) fails on a ZIP created by Windows 11 or other tools that use data descriptors, ZIP64, or non-standard extra fields.</p><h2>Use</h2><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p>Then ask Claude for the task, or run:</p><pre><code>/blitz-report-ai-skills:fix-zip-compatibility</code></pre><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/fix-zip-compatibility'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Fix ZIP Compatibility Skill
+
+Re-compresses a ZIP file to ensure compatibility with Oracle&#x27;s unzipping routines (UTL_COMPRESS, XXEN_REPORT, etc.). Windows 11 and some Linux tools create ZIPs with features that Oracle cannot parse.
+
+## When to Use
+
+- Oracle reports &quot;invalid zip&quot; or fails to extract a ZIP file
+- ZIP was created on Windows 11 (built-in &quot;Compress to ZIP&quot;) or Linux
+- Upload processing fails during ZIP extraction on the EBS server
+
+## Known Incompatibilities
+
+| Feature | Problem |
+|---------|---------|
+| **Data descriptor (bit 3)** | Compressed/uncompressed sizes are 0 in the local file header; actual sizes trail the file data. Windows 11 Explorer&#x27;s Compress to &gt; ZIP File writes this. Builds of XXEN_REPORT that read the sizes from the local header fail with `ORA-21560: argument 3 is null, invalid, or out of range` at `SYS.DBMS_LOB`; current builds read them from the central directory. |
+| **ZIP64 extensions** | Extended headers for files &gt;4GB. Oracle&#x27;s routines may not parse ZIP64 end-of-central-directory records. |
+| **Unix extra fields** (`0x7875` UID/GID, `0x5455` timestamps) | Non-standard extra field tags that Oracle may choke on. |
+| **UTF-8 flag (bit 11)** | Filenames encoded as UTF-8 instead of CP437. May cause name mismatch. |
+
+## Fix Procedure
+
+Run this Python script to re-create the ZIP with maximum Oracle compatibility:
+
+```python
+import zipfile, os, sys
+
+src = sys.argv[1]  # input zip path
+dst = sys.argv[2] if len(sys.argv) &gt; 2 else src.replace(&#x27;.zip&#x27;, &#x27;_fixed.zip&#x27;)
+
+with zipfile.ZipFile(src, &#x27;r&#x27;) as zin:
+    with zipfile.ZipFile(dst, &#x27;w&#x27;, compression=zipfile.ZIP_DEFLATED, allowZip64=False) as zout:
+        for info in zin.infolist():
+            data = zin.read(info.filename)
+            # Create clean ZipInfo — no extra fields, no data descriptor
+            new_info = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+            new_info.compress_type = zipfile.ZIP_DEFLATED
+            zout.writestr(new_info, data)
+
+print(f&#x27;Fixed: {dst}&#x27;)
+```
+
+### What the fix does
+
+1. **Clears data descriptor flag (bit 3)** — sizes written directly in local file header
+2. **Removes Unix extra fields** — no `0x7875` or `0x5455` tags
+3. **Disables ZIP64** — standard 32-bit headers only
+4. **Standard Deflate compression** — method 8, version 2.0
+
+### Verification
+
+After fixing, verify the output:
+
+```python
+import zipfile, struct
+
+with open(&#x27;fixed.zip&#x27;, &#x27;rb&#x27;) as f:
+    f.read(4)  # skip signature
+    header = f.read(26)
+    ver, flags, method = struct.unpack(&#x27;&lt;HHH&#x27;, header[:6])
+    print(f&#x27;Flags: {flags:#06x}, Data descriptor: {bool(flags &amp; 8)}, Method: {method}&#x27;)
+    # Expect: Flags: 0x0000, Data descriptor: False, Method: 8
+```
+
+## Diagnostic: Check a ZIP Before Fixing
+
+```python
+import zipfile
+
+zf = zipfile.ZipFile(&#x27;suspect.zip&#x27;, &#x27;r&#x27;)
+for info in zf.infolist():
+    method = {0: &#x27;Stored&#x27;, 8: &#x27;Deflated&#x27;, 9: &#x27;Deflate64&#x27;, 12: &#x27;BZIP2&#x27;, 14: &#x27;LZMA&#x27;}.get(
+        info.compress_type, f&#x27;Unknown({info.compress_type})&#x27;)
+    print(f&#x27;{info.filename}: method={method}, version={info.create_version}&#x27;)
+zf.close()
+```
+
+## XXEN_REPORT ZIP Parsing Context
+
+The Blitz Report ZIP parsing logic reads local file headers sequentially, expecting:
+- CRC and sizes from the central directory entry (older builds: from the local file header, so a data descriptor fails there)
+- Standard Deflate (method 8) or Stored (method 0)
+- No ZIP64 extended information extra fields</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

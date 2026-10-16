@@ -1,0 +1,63 @@
+---
+name: development-workflow
+description: Working method for Blitz Report content development: baseline, change, deploy, re-run, regression-diff, test data rules, no hard-coded credentials. Use for any change to an existing report or upload.
+user-invocable: false
+---
+
+# Development Workflow
+
+## Working style
+
+- Ask, don't guess: when an instruction is ambiguous or you are about to deviate from the stated direction, state the options and ask. Never add unrequested "polish" (a default, a fallback, a while-I'm-at-it tweak); match the surrounding code's conventions.
+- Plain language: spell out what you mean; no linter rule IDs or acronyms the reader must decode.
+- Concise: expert reader. Delete any sentence the reader can infer from the run screen, column headers, code or standard EBS behaviour. Applies to descriptions, comments, commit messages, rules files, chat.
+- Replicating a feature that exists elsewhere (another page, form, report): read the reference implementation first (items, triggers, processes, config) and replicate it completely in one pass; never implement partially and wait to be told what is missing.
+- Read the user's message fully; never propose something they said is already in place. Never guess screenshot contents — say when text is unreadable.
+- Diagnose from the error stack, not by blaming the environment: reproduce with `format_error_stack||format_error_backtrace`, check whether shipped content still works on the instance, walk back from the failing line. Common mis-diagnoses: `ORA-06502` in DBMS_LOB during template download = oversized LOV/default/validation CLOB in our XML; `ORA-01722` in Success SQL = display value joined to an id column; `ORA-01789` = Success SQL column count; "0 rows materialized" = column order/view name; `ORA-01830` at `to_date(:date_bind,'DD-MON-YY')` in a session run (FSG drilldown, `xxen_api.run_report`, add-in builds before `run_engine`) while the concurrent request works = the report re-converts a DATE bind through the session date format, which `mo_global_init` sets to the user's date-time mask outside a request (the request keeps the territory default); the report should bind the date as is.
+- Treat stable core EBS behaviour as an invariant, not a failure mode to defend against. A missing `mtl_system_items_tl` row for an installed language, a missing seeded lookup, a base table the release is documented to have: if any of these were broken the customer would have far larger problems than one upload or report, so code and diagnose on the assumption they hold. Do not add guards, outer joins or fallbacks for them, and do not offer them as candidate root causes. Same family as coding-standards #50.
+- Deploy, import and build through the documented command path, not a convenient equivalent assembled on the spot. A self-made variant fails in ways that belong to the variant, and those failures get reported as product defects.
+- Never run an expensive or exploratory query on a shared database (unbounded `connect by` CLOB splitting, per-row regexp over large sets, scans of `all_source`/`dba_objects`/APEX tables to find text).
+
+## Standard Workflow for Modifying an Existing Report or Upload (MANDATORY)
+
+When the user asks for a change to an existing report or upload (add a column, change a join, modify a default, etc.), the **default workflow is always**:
+
+1. **Capture baseline output** — submit the report on the development instance with restrictive parameters (specific customer, narrow date range) BEFORE making any change. Save the output XLSX.
+2. **Make the XML change** locally in the report/upload XML (and any PL/SQL change in the upload package if needed), including the descriptions: a new parameter gets its `<DESCRIPTION>` in the US translation row, and a user-visible behaviour change gets a sentence in the report description — in the same edit, never as a follow-up.
+3. **Deploy to the development instance** — `scp` + `import_xml` (which derives parameter and upload dependencies automatically).
+4. **Re-run with the SAME parameters** — same customer, same dates, same OU.
+5. **E2E-test the output** — verify the new/changed column appears and is populated correctly. For a new column, cross-check against the source table for at least one populated row.
+6. **Regression-test** — diff every shared column for every row against the baseline. Sums of key amounts (Original, Outstanding, Past Due, Functional Amount, etc.) must match exactly. Zero cell diffs in shared columns is the bar.
+7. **Check the EBS 11i side** — if the report/upload has a `<name> 11i` twin, apply the equivalent change to the twin; if it is dual-use (Enginatics category, no twin, not 'R12 only'), verify the changed SQL/LOV/default executes on an 11i instance. See `ebs-11i-compatibility` skill.
+8. **Report back** with concrete numbers (row count, sum match, populated-cell sample), not just "looks fine".
+
+**Why:** A "small SQL change" can silently break aggregation (extra GROUP BY column splits rows), break a join (changes outer→inner via filter), or shift bind positions. Without a before/after diff, those regressions ship to the customer. Telling the user "here's what to change" without testing it is the same failure mode — only worse, because the customer carries the regression risk instead of us.
+
+**Do not ask permission to do this.** It is the standard workflow for ANY content modification. The user should never have to say "and also test it" — that's part of the job.
+
+## Test Data Rules
+- NEVER use made-up values. Check required cols, LOV validations, value sets first.
+- Run "Blitz Upload Data" / upload history reports to see example data from previous uploads.
+- Start from a known-working XLSM and modify only the column being tested.
+
+## Masters and deployment
+
+- Put the new `VERSION_COMMENTS` in the content XML **before** the first import that changes its `SQL_TEXT`. A version row is inserted only when the sql text differs from the latest one, and it captures whatever comment the file carried at that moment; a later import that changes only metadata creates no version, so the comment cannot be corrected afterwards without another sql change. The export reads `VERSION_COMMENTS` back from the latest history row, so the file always arrives carrying the PREVIOUS version's comment: replace it outright, never append to it, or the new row restates a change already recorded against its own row and buries yours at the end. Getting the order wrong ships the previous author's comment against your change.
+
+## Never Hard-Code Credentials in Source Code
+
+**Authentication credentials for any application or system account must never be hard-coded in scripts, configuration / property files, or source code.** This covers database passwords, API tokens, OAuth client secrets, encryption keys, SSH private keys, signing certificates, and any other authentication material — in PL/SQL, VBA, shell scripts, Java, XML, JSON, `.properties`, `.env`, or any other tracked artifact.
+
+**Required approach:**
+- **Shell / install scripts:** read from environment variables (e.g. `$APPS_PWD`) or prompt the user at runtime.
+- **PL/SQL on EBS:** resolve secrets at runtime via EBS profile options (e.g. `XXEN_FUSION_BIP_PASSWORD`), Oracle Wallet, or `fnd_vault`. Never store plaintext passwords in `varchar2` constants, package globals, or comments.
+- **Webservice / API clients:** read tokens from EBS profile options or a credentials wallet; decrypt at the point of use; never log the decrypted value.
+- **CI / build pipelines (Bitbucket Pipelines etc.):** use the pipeline's secured-variable / secret-manager facility. Never check pipeline secrets into the repo.
+- **Customer-supplied credentials at install time:** prompt only, never log, never write to disk, never echo into the install log.
+
+**Verification:**
+- Code review must explicitly confirm no new secrets are introduced before merging to `master`.
+- Any secret accidentally committed must be immediately rotated at the upstream system (DB password change, token revocation, key rotation) — purging from git history alone is not sufficient.
+
+## No Orphaned or Unused Code
+When removing functionality, replacing a script, or cleaning up code, always remove all associated artifacts — function definitions, callers, imports, config references, helper scripts, and documentation. Never leave dead code, unused variables, stub functions, or skip messages behind. If something is no longer needed, delete it completely.

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RFM Analysis - Blitz Report Excel Add-in Skills</title><meta name="description" content="Score customers (or vendors) on Recency, Frequency, and Monetary value from a transactional Blitz Report and map them to named segments like Champions, Loyal, At Risk, and Hibernating.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-rfm-analysis/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="RFM Analysis - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Score customers (or vendors) on Recency, Frequency, and Monetary value from a transactional Blitz Report and map them to named segments like Champions, Loyal, At Risk, and Hibernating."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-rfm-analysis/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-rfm-analysis/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Analytics</p><h1>RFM Analysis</h1><p class='name'>br-rfm-analysis</p><p class='lead'>Score customers (or vendors) on Recency, Frequency, and Monetary value from a transactional Blitz Report and map them to named segments like Champions, Loyal, At Risk, and Hibernating.</p><h2>When to use</h2><p>Use this whenever the user wants RFM analysis, customer-value segmentation, to find their best / lapsing / at-risk customers, prioritise accounts, or target win-back and retention from an Oracle EBS / Blitz Report of invoices, orders, or sales. Trigger for &quot;who are our best customers&quot;, &quot;which customers are slipping away&quot;, &quot;segment customers by value&quot;, or any RFM request.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-rfm-analysis.zip'>Download br-rfm-analysis.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-rfm-analysis'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-rfm-analysis'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-rfm-md'>references/rfm.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># br-rfm-analysis — score and name customers by behaviour
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Take a transactional Blitz Report (AR invoices, sales orders, shipments) and turn it into a ranked,
+named customer segmentation a commercial team can act on the same day. Pure aggregation +
+quintile scoring — computed in the workbook with formulas (and light JS where convenient), so it
+stays transparent and refreshable. No ML black box: every score is explainable.
+
+## When to use / not use
+- **Use** for: customer/vendor value segmentation from dated, valued transactions; finding
+  Champions, At-Risk, Lapsed accounts; prioritising outreach.
+- **Don&#x27;t use** for: clustering on arbitrary behavioural features (`br-clustering`), or data without
+  a per-entity transaction history (no dates/amounts to score).
+
+## Shared conventions (the br_ analytics house style)
+1. **Source** = an existing Blitz Report sheet; row 1 is headers. **Never modify source columns.**
+2. **Scratch work** on `br_calc_`; delete when done.
+3. **Outputs (all four):** a results sheet `br_rfm_results` (`Customer | Recency | Frequency |
+   Monetary | R | F | M | RFM | Segment`); a chart; a dashboard (reuse `br-data-dashboard` for
+   KPI/slicer layout; slicer on `Segment`); a plain-English chat summary with per-segment actions.
+4. **Determinism:** quintile scoring is deterministic; state the as-of date and the scoring scheme.
+5. **Privacy:** operate only on the provided sheet.
+
+## Workflow — follow in order
+
+### Step 1 — Identify columns and the as-of date
+Read headers + sample rows. Identify the **entity key** (Customer/Account), the **transaction date**,
+the **monetary amount**, and optionally a **transaction/invoice id** for frequency. Set the **as-of
+date**:
+- default to the **latest date in the data** (so recency is measured against the extract, not
+  today — important for historical extracts),
+- offer &quot;today&quot; if the data is live.
+State which you used.
+
+### Steps 2-5 — Aggregate, score, segment + write results sheet  *(single `execute_office_js` call)*
+In one call: read the entity key + date + amount (+ optional id) columns, then aggregate per entity
+(Step 2), score R/F/M by quintile (Step 3), map to named segments (Step 4), and write the
+`br_rfm_results` sheet (Step 5) — all in the same JS block. Trust the values it returns; do not
+insert a verification read between aggregating, scoring, segmenting, and writing. The per-step
+detail (formulas, scoring scheme, segment matrix) follows.
+
+### Step 2 — Aggregate per entity
+For each customer compute:
+- **Recency** = as-of date − most recent transaction date, in **days** (lower = better).
+- **Frequency** = count of transactions (or distinct invoice/order ids).
+- **Monetary** = sum of amount. Decide gross vs net of returns/credits and say so; negatives need a
+  rule (exclude credits, or net them).
+Formulas (`MAXIFS`, `COUNTIFS`, `SUMIFS`) in `references/rfm.md`.
+
+### Step 3 — Score R, F, M on 1-5 by quintile
+Bin each measure into 1-5 by quintiles. **Recency is reverse-scored** (most recent → 5).
+Frequency and Monetary higher → 5. If a measure has fewer than 5 distinct values (e.g. many
+one-purchase customers), use fewer bins and note it rather than forcing 5. Quintile formulas in
+`references/rfm.md`.
+
+### Step 4 — Map to named segments
+Combine **R** with a **FM** score (average or max of F and M) and map to the standard segment names
+— Champions, Loyal, Potential Loyalist, New/Recent, Promising, Need Attention, About To Sleep, At
+Risk, Can&#x27;t Lose Them, Hibernating, Lost — using the matrix in `references/rfm.md`. Also keep the raw
+3-digit `RFM` cell (e.g. &quot;545&quot;) for power users.
+
+### Step 5 — Results sheet (written in the Steps 2-5 call)
+`br_rfm_results`: `Customer | Recency | Frequency | Monetary | R | F | M | RFM | Segment`, sorted by
+Monetary or by segment priority. This sheet is created and populated **inside the combined Steps 2-5
+`execute_office_js` call** — not as a separate write.
+
+### Step 6 — Charts  *(single `execute_office_js` call — the permitted separate charts call)*
+- a **segment-size bar** (customers per segment),
+- a **Recency-vs-Frequency bubble** chart sized by Monetary (shows where the valuable, active
+  customers sit) — or a segment-by-revenue bar if a bubble is awkward.
+
+### Step 7 — Dashboard
+Dashboard from `br_rfm_results` with KPI cards: **total customers**, **total monetary**,
+**% of revenue in top segments (Champions + Loyal)**, **count At-Risk/Can&#x27;t-Lose**. Slicer on
+`Segment` so the team can pull one segment&#x27;s customer list.
+
+### Step 8 — Chat summary
+Report: the segment distribution, **where the value concentrates** (e.g. &quot;Champions are 9% of
+customers but 38% of revenue&quot;), the at-risk value exposure, and **specific actions per priority
+segment** — retain/reward Champions, win back Can&#x27;t-Lose-Them and At-Risk before they lapse, nurture
+Potential Loyalists, re-engage Hibernating with a low-cost offer. End with where the sheet and
+dashboard are.
+
+## Gotchas
+- As-of date drives recency — for a historical extract use the data&#x27;s max date, not today, or every
+  customer looks lapsed.
+- Returns/credits create negative or inflated monetary; pick a rule (exclude vs net) and state it.
+- One-transaction customers cluster at Frequency = 1 and can break quintiles — bin on distinct
+  values and note reduced granularity.
+- Quintile ties: customers on a boundary may land in adjacent bins; that&#x27;s expected, don&#x27;t over-tune.
+- Tiny datasets don&#x27;t segment meaningfully — say so rather than forcing 11 segments onto 30 customers.</pre></section><section id='file-references-rfm-md'><h3 class='fname'>references/rfm.md</h3><pre class='md'># RFM — scoring formulas and segment matrix
+
+Excel formulas on the `br_calc_` sheet (read via `formula_results`); a little JS only if you prefer
+to bin in script. Adapt ranges to the data.
+
+## TOC
+1. Per-entity aggregation
+2. Quintile scoring (R reverse-scored)
+3. Segment matrix (R × FM → name)
+4. Edge cases
+
+---
+
+## 1. Per-entity aggregation
+With raw data Customer `Data!A`, Date `Data!D`, Amount `Data!E`, and an as-of date in `$Z$1`:
+```
+Last txn date:  =MAXIFS(Data!$D:$D, Data!$A:$A, &lt;Customer&gt;)
+Recency (days): =$Z$1 - &lt;Last txn date&gt;
+Frequency:      =COUNTIFS(Data!$A:$A, &lt;Customer&gt;)            &#x27; or COUNTIFS on distinct invoice ids
+Monetary:       =SUMIFS(Data!$E:$E, Data!$A:$A, &lt;Customer&gt;)  &#x27; decide gross vs net of credits
+```
+Build the distinct customer list first (Remove Duplicates on a copy of `Data!A`, or UNIQUE).
+
+## 2. Quintile scoring on 1-5
+Frequency and Monetary: higher value → higher score.
+```
+F score:  =MATCH(&lt;Freq&gt;, {q20,q40,q60,q80}, 1)        &#x27; returns 0..4; +1 for 1..5  -&gt; wrap: 1+MATCH(...)
+```
+Simpler with PERCENTRANK bands across the column `F2:F500`:
+```
+F score:  =CEILING.MATH(PERCENTRANK.INC($F$2:$F$500, F2)*5, 1)   &#x27; 1..5 (clamp 0 up to 1)
+M score:  =CEILING.MATH(PERCENTRANK.INC($M$2:$M$500, M2)*5, 1)
+```
+**Recency is reverse-scored** — most recent (smallest days) gets 5:
+```
+R score:  =6 - CEILING.MATH(PERCENTRANK.INC($R$2:$R$500, R2)*5, 1)   &#x27; 1..5, high = recent
+```
+Clamp any 0 result to 1. If a measure has &lt; 5 distinct values, score on the distinct values (e.g.
+1-3) and note the reduced granularity.
+
+## 3. Segment matrix (R score × FM score)
+Let `FM = ROUND((Fscore+Mscore)/2, 0)`. Map with this lookup (rows = R, cols = FM, both 1-5):
+
+```
+              FM=1            FM=2            FM=3            FM=4            FM=5
+R=5  New/Recent     Promising       Potential Loyal Loyal           Champions
+R=4  Promising      Potential Loyal Potential Loyal Loyal           Champions
+R=3  About To Sleep Need Attention  Need Attention  Loyal           Loyal
+R=2  At Risk        At Risk         Need Attention  Can&#x27;t Lose Them Can&#x27;t Lose Them
+R=1  Lost           Hibernating     At Risk         Can&#x27;t Lose Them Can&#x27;t Lose Them
+```
+
+Implement as a 5×5 lookup table on `br_calc_` and `INDEX(matrix, 6-Rscore, FM)` (rows listed R=5..1
+top-to-bottom as above), or as nested IFS. Keep the raw 3-digit `RFM = Rscore &amp; Fscore &amp; Mscore`
+(&quot;545&quot;) alongside the name for power users.
+
+Segment intent / action:
+- **Champions** (R high, FM high): reward, ask for referrals/reviews.
+- **Loyal** / **Potential Loyalist**: upsell, build into Champions.
+- **New/Recent**, **Promising**: onboard, encourage a second purchase.
+- **Need Attention**, **About To Sleep**: timely reactivation offers.
+- **At Risk**, **Can&#x27;t Lose Them** (were valuable, now slipping): win-back priority — highest revenue
+  exposure.
+- **Hibernating**, **Lost**: low-cost re-engagement; don&#x27;t over-invest.
+
+## 4. Edge cases
+- As-of date = data max (historical extract) vs today (live) — state which; it moves every R score.
+- Credits/returns → negative monetary: exclude or net, and say so.
+- Single-transaction customers pile at F=1; bin on distinct values.
+- Very small datasets: report fewer, coarser segments rather than the full 11.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

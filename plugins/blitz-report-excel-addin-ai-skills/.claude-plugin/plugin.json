@@ -1,0 +1,22 @@
+{
+  "name": "blitz-report-excel-addin-ai-skills",
+  "displayName": "Blitz Report Excel Add-in Skills",
+  "description": "AI skills for business users of the Blitz Report Excel add-in: Oracle E-Business Suite analysis, period close readiness and upload actions in Claude in Excel and Microsoft 365 Copilot in Excel. Installs and explains the skills; they run in Excel.",
+  "author": {
+    "name": "Enginatics",
+    "url": "https://www.enginatics.com"
+  },
+  "homepage": "https://www.enginatics.com/ai-skills/",
+  "keywords": [
+    "oracle",
+    "ebs",
+    "e-business suite",
+    "blitz report",
+    "excel",
+    "copilot",
+    "finance",
+    "period close"
+  ],
+  "version": "1.20261016.788",
+  "repository": "https://github.com/enginatics/ai-skills"
+}

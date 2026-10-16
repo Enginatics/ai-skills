@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR Period Close Readiness - Blitz Report Excel Add-in Skills</title><meta name="description" content="Assess Oracle EBS Accounts Receivable period-close readiness in Excel: have the br-run-reports skill extract unaccounted AR transactions, AutoInvoice interface errors, and the AR-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an AR close-readiness scorecard.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-close-readiness/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="AR Period Close Readiness - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Assess Oracle EBS Accounts Receivable period-close readiness in Excel: have the br-run-reports skill extract unaccounted AR transactions, AutoInvoice interface errors, and the AR-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an AR close-readiness scorecard."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-close-readiness/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-close-readiness/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>AR Period Close Readiness</h1><p class='name'>br-ar-close-readiness</p><p class='lead'>Assess Oracle EBS Accounts Receivable period-close readiness in Excel: have the br-run-reports skill extract unaccounted AR transactions, AutoInvoice interface errors, and the AR-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an AR close-readiness scorecard.</p><h2>When to use</h2><p>Use when the user asks &quot;can we close AR for {period}&quot;, &quot;AR period close readiness&quot;, unaccounted receivables, unapplied receipts, or AutoInvoice backlog.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-close-readiness.zip'>Download br-ar-close-readiness.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-close-readiness'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ar-autoinvoice-interface/'>AR Autoinvoice Interface</a></li><li><a href='https://www.enginatics.com/reports/cac-accounting-period-status/'>CAC Accounting Period Status</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-close-readiness'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># AR Period Close Readiness (br-ar-close-readiness)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Produce an AR close-readiness scorecard in one workbook. You own orchestration, scoring, and
+the verdict; br-run-reports does extraction and br-data-dashboard the build. Run
+steps in order, on separate turns, keeping intermediate sheets.
+
+**Requires:** br-run-reports, br-data-dashboard.
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports**
+(it owns connection, auth, async run, completion, cell population). Never call `br_*` functions,
+and never rename/read/sum the result sheet or start analysis until extraction is confirmed
+complete — touching the workbook mid-run stalls it. This skill is **read-and-recommend only**:
+it never sweeps, runs accounting, or uploads; it reports blockers and the recommended action.
+
+## When to use
+&quot;Can we close AR for May&quot;, &quot;AR period close readiness&quot;, unaccounted receivables/receipts,
+unapplied/unidentified receipts, AutoInvoice interface errors, AR↔GL out of balance.
+
+## Inputs
+- **Operating Unit** *or* **Ledger** (required); **Period Name** (or From/To Accounting Date).
+
+## Reports used (authoritative names — do NOT broad-search for them)
+These exact report names are known. When you ask br-run-reports to run one, pass the
+**documented name directly** — do NOT run a `br_report_list_external` discovery search first. Inspect
+parameters only if you need an exact LOV spelling. **Fallback:** only if a run returns
+`#BLITZ_REPORT_NOT_FOUND` (the instance renamed it, or the module isn&#x27;t installed) do a name search.
+
+| Report (exact name) | Run with | Notes |
+|---|---|---|
+| `AR Unaccounted Transaction Sweep` | **Reporting Level + Reporting Context** (e.g. Reporting Level=`Operating Unit`, Reporting Context=`&lt;OU&gt;`) + Period; **Sweep Now = No** (read-only list). It does **NOT** take a bare `Operating Unit` param. | **The verdict driver.** Receivables (always present) |
+| `CAC Accounting Period Status` | **Functional Area = Receivables** (the param is `Functional Area`, NOT `Application`) + OU/Ledger + Period | Period-status check (Step 1c). **Costing/CAC** — may be absent → note it and skip |
+| `AR Autoinvoice Interface Summary` | **Operating Unit only — no Period param** | Interface-error check |
+| `AR to GL Reconciliation` *(optional)* | Ledger + Period | AR↔GL tie-out — only if the user asks |
+
+**If a run returns a bare/uninformative `ERROR` (e.g. `ERROR: ERROR`), the param names didn&#x27;t match the report** — have br-run-reports inspect params (`br_report_params_external`) and adapt, then retry. Do NOT abandon the run.
+
+## CONFIG
+### Checks → class + remediation
+| Check (source report) | Class | Remediation |
+|---|---|---|
+| Unaccounted AR transactions (`AR Unaccounted Transaction Sweep`, **Sweep Now = No** = read-only list) | **Blocker** | Run **Create Accounting** (Receivables); or sweep to next period if policy allows |
+| AutoInvoice interface errors (`AR Autoinvoice Interface Summary`) | **Blocker** | Correct the interface rows and resubmit AutoInvoice Import |
+| Incomplete transactions (not completed → not accounted) | **Blocker** | Complete the transactions |
+| Unapplied / unidentified receipts | **Review** | Apply receipts (closed-loop: receipt application upload) |
+| AR↔GL variance (`AR to GL Reconciliation`) | **Blocker** | Investigate the reconciling difference |
+
+### Readiness (RAG)
+- **Red** — any Blocker (unaccounted, interface errors, incomplete, AR↔GL variance over materiality).
+- **Amber** — only Review-class items (e.g. unapplied receipts) the user accepts.
+- **Green** — no unaccounted, no interface errors, AR ties to GL.
+
+### Output sheets &amp; tab order (left to right)
+`AR_Close_Readiness` (first), [`AR_GL_Recon`], `AR_AutoInvoice_Errors`, `AR_Unaccounted` (last).
+
+## Pipeline
+1. **Extract — DELEGATE.** br-run-reports runs **&quot;AR Unaccounted Transaction Sweep&quot;** with **Reporting Level + Reporting Context** (e.g. Operating Unit = the OU) + Period and **Sweep Now = No** (read-only) → `AR_Unaccounted`; then **&quot;AR Autoinvoice Interface Summary&quot;** (Operating Unit only — no Period) → `AR_AutoInvoice_Errors`; optionally **&quot;AR to GL Reconciliation&quot;** → `AR_GL_Recon`. Wait for each to fully complete before the next; do nothing mid-run.
+1c. **Confirm the period is open (recommended).** Delegate to br-run-reports to run **&quot;CAC Accounting Period Status&quot;** (**Functional Area = Receivables** — the param is `Functional Area`, not `Application` — for the OU/Ledger + Period). Confirm the AR period is **Open** — a &quot;ready to close&quot; verdict is meaningless if it&#x27;s already Closed or still Future. Show the status on the scorecard. If the report isn&#x27;t found on the instance, note that and proceed (don&#x27;t block on it).
+2. **Anchor.** Record unaccounted count + $ and AutoInvoice error count. Clean → Green scorecard.
+3. **Score.** Apply CONFIG; rank blockers by $; attach remediation; flag runnable vs manual.
+4. **Scorecard *(single `execute_office_js` call)*** (delegate to br-data-dashboard if it fires; else build inline). Write all scorecard sections to `AR_Close_Readiness` in one call: RAG banner; unaccounted by class/$, AutoInvoice errors, AR↔GL variance, blocking-items list. KPIs tie to raw sheets. Any charts follow in a second call.
+   - **Build mechanics (learned on a real run):** build on a NEW sheet at **position 0** (first tab); leave each report on the sheet br-run-reports created (its report name) — do NOT rename it, the dashboard links to it. **Do NOT use a multi-row `copyToRange`** to fill formula rows (it can latch onto the wrong source box and duplicate headers into the data) — write each row&#x27;s formula explicitly. After building, scan **beyond** the dashboard&#x27;s column range, clear any stray cells, and widen amount columns so values don&#x27;t render as `######`.
+5. **Narrative.** ≤5 bullets: overall call, biggest blocker, $ unaccounted, recommended next action.
+6. **Arrange tabs + final validation.** Arrange tabs per CONFIG; make `AR_Close_Readiness` active. Only after the scorecard. **Then do the one permitted verification read:** confirm the scorecard&#x27;s unaccounted count + $ tie to the Step-2 anchor. This is the only explicit re-read allowed in the entire pipeline outside of the anchor step.
+
+## Validation
+Scorecard counts/$ tie to `AR_Unaccounted`; Red only if a Blocker exists.
+
+## Closed-loop (roadmap, not executed here)
+Receipt application is deliverable via a Blitz Upload; Create Accounting / AutoInvoice resubmit are concurrent submits. This skill recommends; a human runs it. (The `AR Unaccounted Transaction Sweep` report can itself sweep when Sweep Now = Yes — this skill keeps it OFF.)</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

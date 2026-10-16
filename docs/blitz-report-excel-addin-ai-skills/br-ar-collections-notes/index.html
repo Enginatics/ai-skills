@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR Collections Note Logging - Blitz Report Excel Add-in Skills</title><meta name="description" content="Log collection notes into Oracle EBS Advanced Collections from Excel: take the ranked customers and drafted dunning messages a br-ar-collections-worklist run produced, stage one note per customer via the &quot;IEX Collection Note Upload&quot;, and — on the user&#x27;s explicit confirmation — submit them so the col">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-collections-notes/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="AR Collections Note Logging - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Log collection notes into Oracle EBS Advanced Collections from Excel: take the ranked customers and drafted dunning messages a br-ar-collections-worklist run produced, stage one note per customer via the &quot;IEX Collection Note Upload&quot;, and — on the user&#x27;s explicit confirmation — submit them so the col"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-collections-notes/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-notes/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>AR Collections Note Logging</h1><p class='name'>br-ar-collections-notes</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Log collection notes into Oracle EBS Advanced Collections from Excel: take the ranked customers and drafted dunning messages a br-ar-collections-worklist run produced, stage one note per customer via the &quot;IEX Collection Note Upload&quot;, and — on the user&#x27;s explicit confirmation — submit them so the collections team sees the worklist as logged activity.</p><h2>When to use</h2><p>Use when the user asks to log the collection notes, post the worklist to Collections, record the dunning messages, or action a collections worklist. WRITES to Oracle EBS.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-collections-notes.zip'>Download br-ar-collections-notes.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-notes'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/iex-collection-note-upload/'>IEX Collection Note Upload</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-notes'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># AR Collections Note Logging (br-ar-collections-notes)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected).
+
+&gt; **Read `br-run-uploads` FIRST** (`read_skill(&quot;br-run-uploads&quot;)`) — it owns the upload mechanics
+&gt; (the `blitz_` helper sheet, sheet layout, column contract, trigger-cell placement,
+&gt; `_blitz_run_status` polling, the talk-in-the-user&#x27;s-language rule). This skill only adds what is
+&gt; specific to collection notes.
+
+## What this writes — and what it deliberately does not
+A collection note is an **internal activity record** in Advanced Collections — the lowest-risk write
+in the AP/AR family, but permanent and visible to every collector on the account. So:
+1. **One note per customer per run.** Never one per invoice — that floods the account history and
+   buries real activity. The invoice detail belongs INSIDE the one note&#x27;s text.
+2. **The note is a record, not an outbound dunning email.** This skill never contacts a customer.
+   Say so if the user seems to expect sending.
+3. **Confirm before submitting** — the user must see which customers get which text. Drafted
+   messages come from the worklist&#x27;s dunning tiers; the user may want to soften wording before it
+   becomes a permanent record.
+4. **Never log against excluded customers** — anyone the worklist excluded (disputes, legal,
+   payment plans) stays excluded here.
+
+## When to use
+&quot;Log the collection notes&quot;, &quot;post the worklist to Collections&quot;, &quot;record these follow-ups in EBS&quot;,
+&quot;action the collections worklist&quot;. For building the worklist, use **br-ar-collections-worklist**.
+
+## Inputs
+- **A `Worklist` sheet** from a br-ar-collections-worklist run in this workbook — the normal entry
+  (it carries the ranked customers, exposure, dunning tier, and drafted message). If absent, run
+  that skill first; do not re-derive a worklist here.
+- **Scope** — default: the tier the user names (&quot;log notes for the top tier&quot;); otherwise ask which
+  tiers/customers.
+- **Note Type** — from the LOV (below); the user picks once for the run.
+
+## The upload  (authoritative — do NOT broad-search for it)
+**`IEX Collection Note Upload`** (Type `U`). Logging is **adding NEW rows**, so download an empty
+grid: `=br_run_upload_external(&quot;IEX Collection Note Upload&quot;,&quot;Operating Unit=&lt;OU&gt;; Upload Mode=Create&quot;)`
+(omit the template argument unless the instance shows templates).
+
+### The column contract — per new note row
+Confirm with `=br_upload_columns_external(FALSE, &quot;&lt;Upload Sheet Name&gt;&quot;)` and write by Sheet Column
+letter:
+
+| Column | Write | Notes |
+|---|---|---|
+| `Account Number` (or `Party` / `Party Number`) | YES | The worklist&#x27;s customer key — prefer Account Number, it is what the worklist carries |
+| `Operating Unit` | YES | From the worklist run |
+| `Note Level` | YES | LOV — use the **Account** level for worklist notes. Transaction-level (with `Transaction Number` + `Installment`) only when the user asks for per-invoice notes |
+| `Note Type` | YES | LOV — look it up once (`br_column_values_external`), ask the user which their collections process uses |
+| `Note Status` | Only if the LOV requires it | Look up; otherwise leave blank for the server default |
+| **`Note`** | **YES — the drafted message** | The worklist&#x27;s dunning text for that customer&#x27;s tier, with the exposure figures resolved |
+| `Note Detail` | Optional | Overflow for long text; keep `Note` self-sufficient |
+| `Entered Date` | NO | Leave blank — server defaults it |
+| Attribute columns | NO | Unless the customer has a documented DFF convention |
+| Action / Status / Message | NO | The add-in owns them |
+
+### Drafting rule for the note text
+Per customer, resolve the tier&#x27;s drafted message with real numbers: total past due $, oldest
+invoice ref + days, promised/next action. Prefix with a run marker the collectors can recognise,
+e.g. `[Blitz worklist &lt;date&gt;]` — it is also how a later run detects already-logged customers. Keep
+each note under ~2000 characters; move overflow to `Note Detail`.
+
+## Pipeline
+
+### Step 1 — Build the proposal  *(single read call)*
+From `Worklist`: filter to scope, drop exclusions, resolve each customer&#x27;s drafted text, and check
+for the run marker from a previous logging run — a customer already logged this cycle is skipped
+(re-logging is noise, not diligence).
+
+### Step 2 — Confirm  *(one `ask_user_question`)*
+Show customer, tier, exposure $, and the exact note text (or a sample plus &quot;same pattern for the
+rest&quot; when &gt;10). Then:
+&gt; &quot;Log &lt;n&gt; collection notes in &lt;OU&gt; — one per customer, &lt;tier breakdown&gt;? These become permanent
+&gt; account activity visible to the collections team.&quot; → `Yes` / `Edit the wording first` / `Cancel`
+
+If they edit, apply the edit to the affected tier&#x27;s text and re-show.
+
+### Step 3 — Fill the grid  *(one write call)*
+Look up `Note Level` / `Note Type` (and `Note Status` if required) from the LOVs first — ask, never
+guess. Then paste all confirmed rows in ONE call, by Sheet Column letter.
+
+### Step 4 — Validate
+`=br_prepare_upload_external()` in row 1, a few columns right of the sheet&#x27;s **used range**. Poll,
+then `=br_validation_results_external(FALSE, ...)`. Typical refusals: an account number not found
+(worklist customer merged/renamed — drop and report), a required LOV column blank (fill from its
+LOV), an OU mismatch. Fix and re-prepare; stop after ~3 unproductive rounds.
+
+### Step 5 — Confirm again, then submit
+Second explicit confirmation on the validated set, then `=br_process_upload_external()`; poll for
+`DONE: &lt;n&gt; succeeded, &lt;n&gt; errored (request &lt;id&gt;)`. The add-in clears the trigger cell itself.
+
+### Step 6 — Report and cross-link
+Read `=br_validation_results_external(TRUE, ...)`; report logged / failed per customer + request id.
+A `DONE` with errors is a **partial success — the succeeded notes are live**; fix only the failures.
+Annotate `Worklist` with a `Logged &lt;date&gt;` column so the next worklist run shows follow-up state.
+
+## Validation (before declaring done)
+- One note per customer; every one individually visible (or pattern-approved) at Step 2.
+- No excluded customer logged; no transaction-level rows unless the user asked.
+- Reported count = Success rows. Upload sheet clean; `blitz_` deleted.
+
+## Re-run / refresh
+&quot;Log the next tier too&quot; → same grid, append rows, repeat Steps 4–6 (untouched rows already
+submitted are inert only if the sheet was not reprocessed — prefer a fresh Create-mode grid for a
+second batch). A fresh worklist run supersedes the old sheet; carry the `Logged` markers across by
+account number.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blitz Report Finder - Blitz Report Excel Add-in Skills</title><meta name="description" content="Find the right Oracle EBS Blitz Report by MEANING, not by name: load the full report library once into the workbook, then match the user&#x27;s business question (&quot;which report shows unapplied receipts by operating unit?&quot;) against every report&#x27;s name, category and description, explain the top candidates,">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-report-finder/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Blitz Report Finder - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Find the right Oracle EBS Blitz Report by MEANING, not by name: load the full report library once into the workbook, then match the user&#x27;s business question (&quot;which report shows unapplied receipts by operating unit?&quot;) against every report&#x27;s name, category and description, explain the top candidates,"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-report-finder/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-report-finder/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Getting Started</p><h1>Blitz Report Finder</h1><p class='name'>br-report-finder</p><p class='lead'>Find the right Oracle EBS Blitz Report by MEANING, not by name: load the full report library once into the workbook, then match the user&#x27;s business question (&quot;which report shows unapplied receipts by operating unit?&quot;) against every report&#x27;s name, category and description, explain the top candidates, and hand the chosen one to br-run-reports.</p><h2>When to use</h2><p>Use when the user doesn&#x27;t know a report&#x27;s name, asks &quot;is there a report that...&quot;, &quot;which report shows...&quot;, or a name search found nothing.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-report-finder.zip'>Download br-report-finder.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-report-finder'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-report-finder'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Blitz Report Finder (br-report-finder)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected).
+
+Turn a business question into the right report. `br_report_list_external(search)` is a plain
+substring match over names and descriptions — good when the user knows the name, useless for
+&quot;which report shows X&quot;. This skill loads the library once and does the matching itself: you read
+the catalog and reason over it, which is exactly what a substring search cannot do.
+
+**Requires:** br-run-reports (to run whatever is chosen).
+
+## When to use
+&quot;Is there a report that shows …&quot;, &quot;which report gives me …&quot;, &quot;I can&#x27;t find the report for …&quot;, &quot;what
+do you have for &lt;topic&gt;&quot;, or after a `br_report_list_external(&quot;&lt;name&gt;&quot;)` probe came back empty. If
+the user names a report exactly, skip this — pass the name straight to br-run-reports.
+
+## Scope honesty — say what the match is based on
+The library spill carries **Report Name | Category | Type | Description** — not the SQL, not the
+column list. So you match on what the description says, and a poorly-described report can hide.
+When confidence is low, say &quot;closest by description&quot; rather than presenting a guess as the answer.
+Confirm actual columns before promising a field: `=br_report_params_external(&quot;&lt;name&gt;&quot;)` shows the
+parameters, and a short filtered run shows the columns.
+
+## Step 1 — Load the library  *(once per workbook per environment)*
+Look for an existing `BR_Library` sheet first (cell A1 carries `Library: &lt;environment&gt; &lt;date&gt;`). If
+present and same environment, reuse it — do not re-pull. Otherwise, on a new sheet `BR_Library`:
+write the marker in A1, then `=br_report_list_external()` in A3 (no search argument — the FULL
+list) and read the spill: `Report Name | Category | Type | Description`, typically a few thousand
+rows. `#BLITZ_NOT_CONNECTED` → ask the user to connect via the Blitz Report ribbon, then retry.
+
+Keep the sheet — it is the cache, and re-runs of this skill in the same workbook must reuse it.
+
+## Step 2 — Translate the question into EBS vocabulary
+Users ask in business language; descriptions are written in EBS language. Map before matching —
+expand the question with the EBS terms it implies:
+
+| The user says | Match also on |
+|---|---|
+| unapplied cash / unmatched receipts | receipt, application, on account, AR |
+| open invoices we owe | AP invoice, payment schedule, due, aging |
+| what customers owe us | AR aging, past due, outstanding, balance |
+| stock / on hand | onhand, quantities, subinventory, INV |
+| POs not billed yet | uninvoiced receipts, accrual, received not invoiced |
+| journals / postings | GL journal, account analysis, balances |
+| who changed X | audit, history, last updated |
+| jobs on the shop floor | WIP, discrete job, entities |
+| duplicate payments | AP invoice, payment, supplier |
+
+Also note the module prefix convention — report names lead with the module (`GL `, `AP `, `AR `,
+`INV `, `PO `, `WIP `, `FA `, `CE `, `CST `, `ONT `, `HR `) — and `Type` distinguishes reports from
+uploads (`U`): **if the user wants to CHANGE data, filter to uploads and hand over to
+br-run-uploads instead.**
+
+## Step 3 — Match and rank  *(read `BR_Library`, reason in-context)*
+Read the four columns and score against the expanded question: name hit &gt; description hit &gt;
+category hit; prefer reports whose description mentions the user&#x27;s *dimension* (by operating unit,
+by period, by supplier) not just the noun. Produce the **top 3–5**, each with one line of *why* —
+quoting the description fragment that matched, never inventing capability. If nothing clears the
+bar, say so and show the nearest misses; do not force a winner.
+
+## Step 4 — Confirm the pick and hand over
+For the front-runner, show `=br_report_params_external(&quot;&lt;name&gt;&quot;)` so the user sees the parameters
+(the fastest capability check there is). Then offer: run it now → **br-run-reports** with the exact
+name; or show the next candidate. Never run anything wide-open from here.
+
+## Validation
+- Every recommendation quotes the description it matched — no claimed columns beyond it.
+- The library sheet is reused, not re-pulled, within a workbook/environment.
+- &quot;No good match&quot; is an allowed and honest answer; it should name what WAS searched (the expanded
+  terms) so the user can redirect.
+
+## Roadmap (not this version)
+Server-side semantic search — report name + description + SQL text embedded in an Oracle AI
+Database vector index, so matching sees what the SQL actually reads, not just what the description
+says. This skill&#x27;s contract (question in, ranked candidates with reasons out) stays the same; only
+Step 3&#x27;s engine changes.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

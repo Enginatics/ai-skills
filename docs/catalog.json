@@ -1,0 +1,779 @@
+[
+  {
+    "name": "blitz-environment-setup",
+    "title": "Environment Setup",
+    "type": "development",
+    "category": "Getting Started",
+    "description": "Set up the Blitz Report environment file (.claude/rules/blitz-environment.md) that the Blitz Report development skills use to reach the Oracle EBS development instance. Use on first use of the Blitz Report skills, when a skill cannot find blitz-environment.md, or when the user wants to change instance, connection or deploy details.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/blitz-environment-setup"
+  },
+  {
+    "name": "convert-bip-and-rdf-reports-to-blitz",
+    "title": "Convert Oracle Reports to Blitz Report",
+    "type": "development",
+    "category": "Migration",
+    "description": "End-to-end conversion of Oracle RDF, BI Publisher, or Concurrent Program reports to Blitz Reports. Includes conversion rules, deployment, testing, duplicate detection, and iterative performance optimization.",
+    "reports": [
+      "AP Period Close Exceptions",
+      "Blitz Reports",
+      "DBA SGA SQL Execution Plan History",
+      "DBA SGA SQL Performance Summary"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/convert-bip-and-rdf-reports-to-blitz"
+  },
+  {
+    "name": "migrate-custom-reports",
+    "title": "Migrate Custom Reports",
+    "type": "development",
+    "category": "Migration",
+    "description": "Phase-2 engagement workflow for migrating a customer's gathered custom Oracle EBS reports (the Blitz Report Custom Reports Converter zip output) into Blitz Reports \u2014 inventory, extract SQL, classify each report into one of three outcomes (complete map / enhance / new custom build), build/recommend, categorize as \"Custom Reports <ABBR>\", and prove each report prints what the original prints (field inventory + value fidelity gate) on the conversion instance.",
+    "reports": [
+      "Blitz Report Custom Reports Converter",
+      "FA Depreciation Projection",
+      "GL Trial Balance - Detail"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/migrate-custom-reports"
+  },
+  {
+    "name": "rdf-analyzer",
+    "title": "Oracle Report Analyzer",
+    "type": "development",
+    "category": "Migration",
+    "description": "Analyze Oracle EBS standard reports (.rdf and XML Publisher data templates) to extract SQL queries, parameters, output structure, and PL/SQL logic. Use when converting an Oracle report to Blitz Report format.",
+    "reports": [
+      "FA Tax Reserve Ledger"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/rdf-analyzer"
+  },
+  {
+    "name": "blitz-report-developer",
+    "title": "Blitz Report Developer",
+    "type": "development",
+    "category": "Report Development",
+    "description": "Create and update Blitz Reports and uploads for Oracle EBS. Use when user asks to create a new report, modify existing reports, create uploads, migrate reports from RDF/BI Publisher/XML/PL/SQL, or analyze Oracle forms validation logic.",
+    "reports": [
+      "Blitz Reports"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/blitz-report-developer"
+  },
+  {
+    "name": "fix-zip-compatibility",
+    "title": "ZIP Compatibility Fix",
+    "type": "development",
+    "category": "Testing and Tuning",
+    "description": "Re-compress a ZIP file for Oracle compatibility. Use when Oracle unzip (UTL_COMPRESS/XXEN_REPORT) fails on a ZIP created by Windows 11 or other tools that use data descriptors, ZIP64, or non-standard extra fields.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/fix-zip-compatibility"
+  },
+  {
+    "name": "report-tester",
+    "title": "Report Tester",
+    "type": "development",
+    "category": "Testing and Tuning",
+    "description": "Test a Blitz Report by running the original Oracle standard report and the Blitz version with the same parameters, then comparing output. Use after converting an RDF or BI Publisher report to Blitz.",
+    "reports": [
+      "FA Tax Reserve Ledger"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/report-tester"
+  },
+  {
+    "name": "tune-report-performance",
+    "title": "Report Performance Tuning",
+    "type": "development",
+    "category": "Testing and Tuning",
+    "description": "Tune Blitz Report SQL performance by measuring buffer IO per row, identifying expensive components, and applying targeted fixes. Use when a report has high MB/row or slow execution.",
+    "reports": [
+      "Blitz Reports",
+      "DBA SGA SQL Execution Plan History",
+      "DBA SGA SQL Performance Summary"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/tune-report-performance"
+  },
+  {
+    "name": "add-dff-to-upload",
+    "title": "Add DFF Handling to an Upload",
+    "type": "development",
+    "category": "Upload Development",
+    "description": "Add descriptive flexfield (DFF) handling to a Blitz Upload - context and attribute columns with context-dependent lists of values, segment prompts as column headers, Success SQL, and the PL/SQL that merges untouched segments, validates the DFF and converts display values to ids before the API call. Use when asked to add, validate or fix DFF / attribute columns of an upload, e.g. \"add validation for the attribute5 flexfield segment of my upload\".",
+    "reports": [
+      "FND Lookup Upload",
+      "INV Manufacturer Upload"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/add-dff-to-upload"
+  },
+  {
+    "name": "oracle-forms-analyzer",
+    "title": "Oracle Forms Analyzer",
+    "type": "development",
+    "category": "Upload Development",
+    "description": "Analyze Oracle EBS standard forms to extract field definitions, validation logic, LOV queries, defaulting rules, and API calls. Use when building or reviewing a Blitz Upload that replicates Oracle form functionality.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/oracle-forms-analyzer"
+  },
+  {
+    "name": "upload-builder",
+    "title": "Upload Builder",
+    "type": "development",
+    "category": "Upload Development",
+    "description": "Build Blitz Upload XML definitions and PL/SQL processing packages for Oracle EBS. Use when creating a new upload or significantly modifying an existing one.",
+    "reports": [
+      "FND User Upload",
+      "WIP Job Upload"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/upload-builder"
+  },
+  {
+    "name": "upload-validator",
+    "title": "Upload Validator",
+    "type": "development",
+    "category": "Upload Development",
+    "description": "Review a Blitz Upload against the Oracle standard form and run E2E tests. Use when user asks to review, validate, or test an upload \u2014 or after building/modifying an upload.",
+    "reports": [
+      "Blitz Upload Data",
+      "FA Asset Upload",
+      "GL Journal Upload"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/upload-validator"
+  },
+  {
+    "name": "br-anomaly-detection",
+    "title": "Anomaly Detection",
+    "type": "excel",
+    "category": "Analytics",
+    "description": "Find unusual or suspicious rows in a Blitz Report dataset \u2014 outlier transactions, duplicate invoices, abnormal amounts, data-quality errors \u2014 using robust statistics, Mahalanobis distance, Benford's Law, and duplicate detection. Use this whenever the user wants to detect anomalies, outliers, exceptions, \"things that look wrong\", duplicate or suspicious invoices, fraud signals, or data-quality issues in an Oracle EBS / Blitz Report sheet. Trigger it for \"flag anything unusual\", \"find outliers\", \"check for duplicates\", or \"what looks suspicious here\", even without a named method.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-anomaly-detection.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-anomaly-detection"
+  },
+  {
+    "name": "br-clustering",
+    "title": "Clustering",
+    "type": "excel",
+    "category": "Analytics",
+    "description": "Segment a Blitz Report dataset into natural groups using K-Means or DBSCAN, then profile and name each segment in plain business language. Use this whenever the user wants to cluster, segment, or group rows of an Oracle EBS / Blitz Report sheet \u2014 e.g. \"segment our customers\", \"group these vendors by spend behaviour\", \"find natural clusters in this data\", \"which items behave alike\", or any request to discover groupings the data isn't already labelled with. Trigger it even when the user says \"segment\" or \"group\" without naming an algorithm.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-clustering.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-clustering"
+  },
+  {
+    "name": "br-data-dashboard",
+    "title": "Data Dashboard",
+    "type": "excel",
+    "category": "Analytics",
+    "description": "Build an interactive dashboard on top of any tabular data sheet \u2014 KPI cards, charts, and slicers \u2014 without modifying the source columns. Use when the user asks for a dashboard, demo view, or interactive summary built from an existing data table or pivot.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-data-dashboard.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-data-dashboard"
+  },
+  {
+    "name": "br-forecasting",
+    "title": "Forecasting",
+    "type": "excel",
+    "category": "Analytics",
+    "description": "Forecast a time series from a Blitz Report \u2014 future demand, sales, GL trend, AR collections, cash, or inventory \u2014 using Excel's native FORECAST.ETS (Holt-Winters) with seasonality detection, confidence intervals, and a backtest accuracy check. Use this whenever the user wants to forecast, project, predict, or extrapolate future values of a dated metric in an Oracle EBS / Blitz Report sheet \u2014 \"forecast next quarter's sales\", \"project AR collections\", \"what will the GL trend look like\", \"predict demand\". Trigger it for any \"forecast / projection / what will happen next\" request over time.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-forecasting.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-forecasting"
+  },
+  {
+    "name": "br-rfm-analysis",
+    "title": "RFM Analysis",
+    "type": "excel",
+    "category": "Analytics",
+    "description": "Score customers (or vendors) on Recency, Frequency, and Monetary value from a transactional Blitz Report and map them to named segments like Champions, Loyal, At Risk, and Hibernating. Use this whenever the user wants RFM analysis, customer-value segmentation, to find their best / lapsing / at-risk customers, prioritise accounts, or target win-back and retention from an Oracle EBS / Blitz Report of invoices, orders, or sales. Trigger for \"who are our best customers\", \"which customers are slipping away\", \"segment customers by value\", or any RFM request.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-rfm-analysis.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-rfm-analysis"
+  },
+  {
+    "name": "br-audit-trail",
+    "title": "EBS Audit Trail & Access Review",
+    "type": "excel",
+    "category": "Audit and Security",
+    "description": "Answer \"who changed what, when\" across Oracle EBS setups and access: mine the FND Audit Trail reports for setup and profile changes by record and column, correlate with user login history and responsibility assignments, and produce a reviewable change narrative for an audit window or an incident. Read-only. Use when the user asks who changed a setup, wants a segregation-of-duties or access review, needs audit evidence for a period, or is investigating an unexpected configuration change.",
+    "writes": false,
+    "reports": [
+      "FND Audit Setup",
+      "FND Audit Table Changes by Column",
+      "FND Audit Table Changes by Record",
+      "FND User Login History",
+      "FND User Responsibilities",
+      "FND Users"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-audit-trail.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-audit-trail"
+  },
+  {
+    "name": "br-instance-diff",
+    "title": "Instance Diff",
+    "type": "excel",
+    "category": "Audit and Security",
+    "description": "Compare Oracle EBS instances through Blitz Reports in Excel: run the same report with the same parameters against two configured environments (DEV/TEST/PROD, pre/post-upgrade, source/clone) and explain the differences \u2014 row counts, missing and extra keys, changed values by column \u2014 or diff the two instances' report catalogs. Use when the user asks to compare environments, validate an upgrade or clone, check TEST against PROD, or \"why is this report different on X\".",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-instance-diff.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-instance-diff"
+  },
+  {
+    "name": "br-ce-recon-readiness",
+    "title": "Cash Management Reconciliation Readiness",
+    "type": "excel",
+    "category": "Cash Management",
+    "description": "Assess Oracle EBS Cash Management bank reconciliation / period-close readiness in Excel: have the br-run-reports skill extract unreconciled bank statement lines and the GL cash reconciliation, then give a red/amber/green verdict with remediation and build a CE reconciliation-readiness scorecard. Use when the user asks about bank reconciliation status, unreconciled statements, or cash management period close.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ce-recon-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ce-recon-readiness"
+  },
+  {
+    "name": "br-cash-working-capital",
+    "title": "Cash & Working-Capital Orchestrator",
+    "type": "excel",
+    "category": "Cash and Working Capital",
+    "description": "Orchestrate a full Oracle EBS cash & working-capital review in Excel: run the duplicate-payment recovery, AR collections worklist, and AP payment-run optimizer, cross-check the open duplicate invoices against the recommended pay-run (so you don't pay a duplicate you're about to claw back), then assemble one master scorecard with the total cash opportunity by lever (recover / protect / capture discounts / collect / DPO headroom), a combined net-cash-by-week view, and the ranked cross-lever action list. Use when the user asks for a working-capital review, \"where's our cash\", free up / find cash, a cash opportunities pack, or a combined AP/AR cash position.",
+    "writes": false,
+    "reports": [
+      "AP Cash Requirement"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-cash-working-capital.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-cash-working-capital"
+  },
+  {
+    "name": "br-fa-close-readiness",
+    "title": "FA Period Close Readiness",
+    "type": "excel",
+    "category": "Fixed Assets",
+    "description": "Assess Oracle EBS Fixed Assets period-close readiness in Excel: have the br-run-reports skill extract the mass-additions backlog, depreciation/reserve status, and FA-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an FA close-readiness scorecard. Use when the user asks \"can we close FA for {period}\", \"fixed assets period close readiness\", mass additions backlog, or depreciation not run.",
+    "writes": false,
+    "reports": [
+      "CAC Accounting Period Status",
+      "FA Depreciation Reserve",
+      "FA Journal Entry Reserve Ledger"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-fa-close-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fa-close-readiness"
+  },
+  {
+    "name": "br-fsg-conversion-review",
+    "title": "Finish a Spreadsheet Server / GL Wand conversion",
+    "type": "excel",
+    "category": "General Ledger",
+    "description": "Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency types, cells left unconverted), ask the user about the rest, and mark every log line. Use when the user asks to review, finish, fix or check a converted Spreadsheet Server or GL Wand workbook, its conversion log, or \"the warnings from the conversion\". Edits the workbook only; never writes to Oracle EBS.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-fsg-conversion-review.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review"
+  },
+  {
+    "name": "br-gl-account-coder",
+    "title": "GL Account Coding Assistant",
+    "type": "excel",
+    "category": "General Ledger",
+    "description": "Suggest GL account coding from the ledger's own history: given transactions to code (or re-code), mine GL Account Analysis for how this entity has historically coded the same supplier, source, category or description, and propose the account combination with a confidence level and the precedent shown. Optionally stage approved corrections as a journal via the GL Journal Upload \u2014 only on explicit user confirmation. Use when the user asks \"which account should this go to\", wants miscoding candidates found, or needs a reclass journal drafted. Recommend-first; WRITES to Oracle EBS only via the gated journal step.",
+    "writes": true,
+    "reports": [
+      "GL Journal Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-gl-account-coder.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-gl-account-coder"
+  },
+  {
+    "name": "br-gl-close-readiness",
+    "title": "GL Period Close Readiness",
+    "type": "excel",
+    "category": "General Ledger",
+    "description": "Assess Oracle EBS General Ledger period-close readiness in Excel: have the br-run-reports skill extract GL period statuses, unposted/error journals, and the trial balance, then give a red/amber/green verdict with remediation and build a GL close-readiness scorecard. Use when the user asks \"can we close GL for {period}\", \"GL period close readiness\", unposted journals, subledgers not closed, or out-of-balance.",
+    "writes": false,
+    "reports": [
+      "CAC Accounting Period Status",
+      "GL Period Status"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-gl-close-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-gl-close-readiness"
+  },
+  {
+    "name": "br-analytics-standards",
+    "title": "Analytics Standards",
+    "type": "excel",
+    "category": "Getting Started",
+    "description": "Shared performance and coding standards for all br_ analytics skills (br-ap-holds-analysis, br-ap-close-readiness, br-ar-close-readiness, br-gl-close-readiness, br-fa-close-readiness, br-inv-cost-close-readiness, br-ce-recon-readiness, br-subledger-gl-reconciliation, br-close-process-monitor, br-month-end-readiness). Read at the start of any br_ skill run via read_skill(\"br-analytics-standards\").",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-analytics-standards.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-analytics-standards"
+  },
+  {
+    "name": "br-report-finder",
+    "title": "Blitz Report Finder",
+    "type": "excel",
+    "category": "Getting Started",
+    "description": "Find the right Oracle EBS Blitz Report by MEANING, not by name: load the full report library once into the workbook, then match the user's business question (\"which report shows unapplied receipts by operating unit?\") against every report's name, category and description, explain the top candidates, and hand the chosen one to br-run-reports. Use when the user doesn't know a report's name, asks \"is there a report that...\", \"which report shows...\", or a name search found nothing.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-report-finder.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-report-finder"
+  },
+  {
+    "name": "br-run-reports",
+    "title": "Run Blitz Reports in Excel",
+    "type": "excel",
+    "category": "Getting Started",
+    "description": "Find, run, and analyze Oracle EBS Blitz Reports in Excel (GL, AP, AR, INV, PO, WIP, FA, HR and concurrent-program data). Use when the user wants to run or analyze an Oracle/EBS report.",
+    "writes": false,
+    "reports": [
+      "Blitz Reports"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-run-reports.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-run-reports"
+  },
+  {
+    "name": "br-run-uploads",
+    "title": "Run Blitz Uploads in Excel",
+    "type": "excel",
+    "category": "Getting Started",
+    "description": "Create, load or update Oracle EBS records from Excel with Blitz Uploads via the BLITZ REPORT ADD-IN (the br_* worksheet functions) - journals, invoices, purchase documents, items, suppliers, customers, assets and more (GL, AP, AR, PO, INV, WIP, HR, FA, CE). Use whenever the user says they want to UPLOAD, LOAD, POST, ENTER, CREATE or UPDATE any EBS data or document (\"upload a journal entry\", \"upload journals\", \"load invoices\", \"create a PO\", \"post a journal\"). In this add-in \"upload\" means sending data INTO Oracle EBS - it does NOT mean the user is attaching a file to the chat, so never ask them to attach one and never hand-build a mock table in the sheet instead. NOT for the standalone Blitz Upload template file (UploadTemplate.xlsm with bu_* functions) - that is bu-fill-upload's territory. This WRITES to Oracle EBS.",
+    "writes": true,
+    "reports": [
+      "FND Lookup Upload",
+      "FND Lookup Values",
+      "GL Journal Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-run-uploads.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-run-uploads"
+  },
+  {
+    "name": "excel-skills-setup",
+    "title": "Excel Skills Setup",
+    "type": "excel",
+    "category": "Getting Started",
+    "description": "Install the Blitz Report Excel add-in AI skills into Claude in Excel or Microsoft 365 Copilot in Excel, update them, and explain which skill fits a task. Use when the user wants to install, update or list the Blitz Report Excel skills, asks what they can do, or asks which skill to use for an Oracle EBS task in Excel.",
+    "writes": false,
+    "reports": [],
+    "path": "plugins/blitz-report-excel-addin-ai-skills/skills/excel-skills-setup"
+  },
+  {
+    "name": "br-inv-cost-close-readiness",
+    "title": "Inventory / Costing Period Close Readiness",
+    "type": "excel",
+    "category": "Inventory",
+    "description": "Assess Oracle EBS Inventory/Costing period-close readiness in Excel: have the br-run-reports skill extract pending inventory transactions, missing WIP/receiving accounting, and pending cost adjustments, then give a red/amber/green verdict with remediation and build an Inventory close-readiness scorecard. Use when the user asks \"can we close inventory for {period}\", \"inventory/costing period close readiness\", pending/uncosted transactions, stuck MTL interfaces, or missing accounting.",
+    "writes": false,
+    "reports": [
+      "CAC Accounting Period Status",
+      "CAC Missing Receiving Accounting Transactions",
+      "CAC Missing WIP Accounting Transactions",
+      "CST Period Close Subinventory Value",
+      "INV Period Close Pending Transactions"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-inv-cost-close-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cost-close-readiness"
+  },
+  {
+    "name": "br-inv-cycle-count-planner",
+    "title": "INV Cycle Count Planner",
+    "type": "excel",
+    "category": "Inventory",
+    "description": "Plan and steer Oracle EBS cycle counting: analyse count accuracy history, find never-counted and overdue items, recommend count priorities by value/velocity/accuracy (ABC-weighted), and surface the approval and adjustment backlog. Read-only \u2014 recommendations feed the customer's own cycle count scheduling in EBS. Use when the user asks what to count next, why inventory accuracy is slipping, which adjustments await approval, or wants a count program review.",
+    "writes": false,
+    "reports": [
+      "INV Onhand Quantities"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-inv-cycle-count-planner.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cycle-count-planner"
+  },
+  {
+    "name": "br-inv-exception-triage",
+    "title": "INV Exception Triage",
+    "type": "excel",
+    "category": "Inventory",
+    "description": "Triage Oracle EBS Inventory exceptions in Excel: have the br-run-reports skill extract negative on-hand balances, stuck interface/error transactions, and cycle counts pending approval, then rank everything by severity with a recommended owner and fix, and build one exception dashboard. Use when the user asks what's wrong in inventory, negative on-hand, stuck transactions, unprocessed material transactions, or an inventory exception review.",
+    "writes": false,
+    "reports": [
+      "INV Material Transactions",
+      "INV Onhand Quantities"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-inv-exception-triage.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-exception-triage"
+  },
+  {
+    "name": "br-inv-stock-optimizer",
+    "title": "INV Stock Level Optimizer",
+    "type": "excel",
+    "category": "Inventory",
+    "description": "Recommend min/max quantities, reorder points and safety stock per item and subinventory in Oracle EBS from actual demand history and on-hand position \u2014 then, only on explicit user confirmation, apply the approved recommendations back to EBS via the INV Item Subinventory Upload or INV Safety Stock Upload. Use when the user asks to optimize stock levels, review min/max settings, right-size safety stock, reduce excess inventory, or fix reorder points. WRITES to Oracle EBS (optional, gated).",
+    "writes": true,
+    "reports": [
+      "INV Item Subinventory Upload",
+      "INV Onhand Quantities",
+      "INV Safety Stock Upload",
+      "INV Safety Stocks"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-inv-stock-optimizer.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-stock-optimizer"
+  },
+  {
+    "name": "br-bom-validator",
+    "title": "BOM Accuracy Validator",
+    "type": "excel",
+    "category": "Manufacturing",
+    "description": "Validate Oracle EBS bill-of-material accuracy against how the shop floor actually consumes material: compare BOM structures with WIP component requirements and shortages, flag suspect components (never issued, always short, quantity drift), and stage approved BOM corrections via the BOM Bill of Materials Upload \u2014 only on explicit user confirmation. Use when the user asks whether BOMs are accurate, why jobs are always short the same part, or wants BOM cleanup done. Recommend-first; WRITES to Oracle EBS only via the gated correction step.",
+    "writes": true,
+    "reports": [
+      "WIP Required Components"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-bom-validator.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-bom-validator"
+  },
+  {
+    "name": "br-wip-variance-analysis",
+    "title": "WIP Job & Variance Analysis",
+    "type": "excel",
+    "category": "Manufacturing",
+    "description": "Analyze Oracle EBS WIP job health and cost exposure in Excel: have the br-run-reports skill extract job statuses, WIP value, and component shortages, then rank stuck and past-due jobs, surface value concentration and close candidates, and build one WIP analysis dashboard. Use when the user asks about open WIP jobs, jobs past due, WIP value, discrete job aging, component shortages, or which jobs should be closed.",
+    "writes": false,
+    "reports": [
+      "WIP Account Distribution",
+      "WIP Entities",
+      "WIP Job Upload",
+      "WIP Value Summary"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-wip-variance-analysis.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-wip-variance-analysis"
+  },
+  {
+    "name": "br-ap-close-readiness",
+    "title": "AP Period Close Readiness",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Assess Oracle EBS Accounts Payable period-close readiness in Excel: have the br-run-reports skill extract \"AP Period Close Exceptions\", summarise the blockers by exception type, give a red/amber/green readiness verdict with the remediation for each blocker, and build an AP close-readiness scorecard. Use when the user asks \"can we close AP for {period}\", \"AP period close readiness\", \"what's blocking the AP close\", unaccounted invoices/payments, or untransferred AP accounting.",
+    "writes": false,
+    "reports": [
+      "AP Period Close Exceptions",
+      "CAC Accounting Period Status"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-close-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-close-readiness"
+  },
+  {
+    "name": "br-ap-duplicate-hold",
+    "title": "AP Duplicate Invoice Hold Placement",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Stop payment of suspected duplicate AP invoices from Excel: take the unpaid duplicates a br-ap-duplicate-payments run identified, place a payment-blocking hold on each suspect copy via the \"AP Invoice Hold Upload\", and record the duplicate evidence in the hold reason \u2014 only on the user's explicit confirmation. Use when the user asks to block the duplicates, hold the suspect invoices, stop the double payment, or action a duplicate-payments analysis. WRITES to Oracle EBS.",
+    "writes": true,
+    "reports": [
+      "AP Invoice Hold Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-duplicate-hold.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-duplicate-hold"
+  },
+  {
+    "name": "br-ap-duplicate-payments",
+    "title": "AP Duplicate Payment Recovery",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Find duplicate and overpaid Oracle EBS Accounts Payable invoices/payments in Excel: have the br-run-reports skill extract the AP invoice universe, fuzzy-match it for duplicate-entry patterns (same supplier + amount, re-keyed invoice numbers, transposed digits, duplicate vendor masters, cross-OU double entry), separate recoverable (both paid) from preventable (one still open), and build a ranked recovery worklist with $-at-risk. Use when the user asks to find duplicate payments, duplicate invoices, overpayments, recover overpaid cash, or an AP recovery audit.",
+    "writes": false,
+    "reports": [
+      "AP Invoice Payments"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-duplicate-payments.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-duplicate-payments"
+  },
+  {
+    "name": "br-ap-hold-release",
+    "title": "AP Invoice Hold Release",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Release Oracle EBS AP invoice holds from Excel: take the holds that qualify for release, pre-populate the \"AP Invoice Hold Upload\" grid with the correct release reason per hold, validate it, show the user exactly what will be released, and \u2014 only on their explicit confirmation \u2014 submit it so Payables releases the holds. Use when the user asks to release invoice holds, action a holds analysis, clear matching holds, unblock invoices for payment, or \"release the ones we can\". WRITES to Oracle EBS.",
+    "writes": true,
+    "reports": [
+      "AP Invoice Hold Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-hold-release.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-hold-release"
+  },
+  {
+    "name": "br-ap-holds-analysis",
+    "title": "AP Invoice Holds Analysis",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Analyze Oracle EBS AP invoice holds in Excel: run the \"AP Invoice on Hold\" Blitz Report, categorise and age the holds, flag anomalies, build a holds dashboard, flag RELEASE CANDIDATES and offer to hand them to br-ap-hold-release for action. Use when the user asks for an AP holds analysis, an invoice-holds dashboard, \"what's on hold\", aged AP holds, holds by supplier / hold type, or to analyse and release holds.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-holds-analysis.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-holds-analysis"
+  },
+  {
+    "name": "br-ap-intelligence",
+    "title": "AP Intelligence Dashboard",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Build a live AP intelligence dashboard in Excel from Oracle EBS: run the \"AP Cash Requirement\" Blitz Report and lay out the five payables KPIs (invoices on hold, total AP outstanding, overdue 30+ days, approved due within 7 days, unapproved due within 15 days), a ranked AI action summary, an AI commentary per KPI, drill-down lists, due-bucket and supplier tables, and answer follow-up questions as new KPI cards. Use when the user asks for an AP dashboard, AP KPIs, the payables position, \"what's outstanding / overdue / on hold / unapproved\", an AI summary of accounts payable, or an AP intelligence view. Hands hold release, hold detail and pay-run planning to the specialist skills.",
+    "writes": false,
+    "reports": [
+      "AP Cash Requirement",
+      "AP Invoice Payments",
+      "AP Suppliers"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-intelligence.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-intelligence"
+  },
+  {
+    "name": "br-ap-invoice-upload",
+    "title": "AP Invoice Upload from documents",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Create Oracle EBS AP invoices from source documents using the BLITZ REPORT ADD-IN (the br_* worksheet functions) \u2014 supplier invoices, reimbursement vouchers, freight bills, utility statements, expense receipts \u2014 by reading the documents, running the AP Invoice Upload, filling its sheet, then validating against real EBS and self-correcting. Use when the user has invoices/bills/vouchers (PDF, image, Word, text, or typed out) and wants them entered into Oracle Payables via the Blitz Report add-in. NOT for the standalone Blitz Upload template file (UploadTemplate.xlsm with bu_* functions and a Parameters sheet) \u2014 that is the bu-ap-invoice-upload skill's territory.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-invoice-upload.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-invoice-upload"
+  },
+  {
+    "name": "br-ap-payment-actions",
+    "title": "AP Payment Actions",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Act on a br-ap-payment-optimizer run from Excel: produce the prioritized pay-run list for the invoices to pay now (discount capture), and \u2014 on explicit confirmation \u2014 place payment-blocking holds via the \"AP Invoice Hold Upload\" on the invoices the user chooses to defer. Use when the user asks to action the payment optimization, defer the deferrable invoices, block payments we want to delay, or prepare the pay run. WRITES to Oracle EBS (defer-holds only).",
+    "writes": true,
+    "reports": [
+      "AP Invoice Hold Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-payment-actions.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-payment-actions"
+  },
+  {
+    "name": "br-ap-payment-optimizer",
+    "title": "AP Payment-Run Optimizer",
+    "type": "excel",
+    "category": "Payables",
+    "description": "Optimize an Oracle EBS Accounts Payable payment run in Excel: have the br-run-reports skill extract the AP cash requirement (due invoices, available early-pay discounts, due dates, payment priority), classify each invoice as capture-discount / pay-to-avoid-late / defer-to-due / priority-must-pay, select the best pay run within a cash constraint by discount ROI, quantify the discount $ captured and DPO impact, and build a payment-run dashboard. Use when the user asks which invoices to pay and when, capture early-pay discounts, optimize a payment batch, plan a cash disbursement, or improve DPO.",
+    "writes": false,
+    "reports": [
+      "AP Cash Requirement"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-payment-optimizer.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-payment-optimizer"
+  },
+  {
+    "name": "br-close-process-monitor",
+    "title": "Close Process Monitor",
+    "type": "excel",
+    "category": "Period Close",
+    "description": "Monitor the Oracle EBS concurrent programs that drive a period close in Excel: have the br-run-reports skill extract recent Create Accounting / Transfer to GL / Cost Manager / Depreciation / Journal Import / AutoInvoice request status, flag errored, stuck, and long-running close jobs, and build a close-process monitor dashboard. Use when the user asks whether the close programs are running/erroring, \"CP manager status\", or stuck concurrent requests.",
+    "writes": false,
+    "reports": [
+      "FND SOA Runtime Error"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-close-process-monitor.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-close-process-monitor"
+  },
+  {
+    "name": "br-month-end-readiness",
+    "title": "Month-End Close Readiness Orchestrator",
+    "type": "excel",
+    "category": "Period Close",
+    "description": "Orchestrate a full Oracle EBS month-end close readiness assessment in Excel: run the per-module readiness checks (AP, AR, Inventory/Costing, FA, GL), the close-process monitor, and the subledger-to-GL reconciliation, then assemble one master scorecard with a per-module red/amber/green status, the ranked blockers, and the recommended close sequence. Use when the user asks \"are we ready to close {period}\", \"month-end readiness\", or a full close status.",
+    "writes": false,
+    "reports": [
+      "AP Period Close Exceptions",
+      "CAC Accounting Period Status",
+      "GL Period Status",
+      "INV Period Close Pending Transactions"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-month-end-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-month-end-readiness"
+  },
+  {
+    "name": "br-subledger-gl-reconciliation",
+    "title": "Subledger-to-GL Reconciliation",
+    "type": "excel",
+    "category": "Period Close",
+    "description": "Reconcile Oracle EBS subledgers to the General Ledger in Excel: have the br-run-reports skill extract AP, AR, Inventory and FA control balances and tie each to its GL control account, surfacing the variance per subledger with a red/amber/green verdict. Use when the user asks to reconcile AP/AR/INV/FA to GL, subledger-to-GL tie-out, or control account differences at period end.",
+    "writes": false,
+    "reports": [
+      "CST Period Close Subinventory Value",
+      "FA Journal Entry Reserve Ledger"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-subledger-gl-reconciliation.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-subledger-gl-reconciliation"
+  },
+  {
+    "name": "br-po-close-readiness",
+    "title": "PO Period Close Readiness",
+    "type": "excel",
+    "category": "Purchasing",
+    "description": "Assess Oracle EBS Purchasing period-close readiness in Excel: have the br-run-reports skill extract the AP/PO accrual reconciliation, the aged uninvoiced receipts, and the period status, then give a red/amber/green verdict with remediation and build a PO close-readiness scorecard. Use when the user asks \"can we close PO for {period}\", \"purchasing close readiness\", \"accrual reconciliation status\", or uninvoiced receipts backlog.",
+    "writes": false,
+    "reports": [
+      "CAC Accounting Period Status",
+      "PO Headers"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-po-close-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-close-readiness"
+  },
+  {
+    "name": "br-po-match-exceptions",
+    "title": "PO 3-Way Match Exception Triage",
+    "type": "excel",
+    "category": "Purchasing",
+    "description": "Triage Oracle EBS 3-way match exceptions \u2014 invoices held because PO, receipt and invoice disagree on quantity or price \u2014 explain the root cause per hold (not received, over-billed, price change, receipt discrepancy), and route each to the right resolver: receiving, buyer, or AP. Read-only. Use when the user asks about match holds, quantity/price mismatches, \"why is this invoice on match hold\", or wants the match-exception backlog worked down.",
+    "writes": false,
+    "reports": [
+      "PO Headers",
+      "PO Receipts/Deliveries Discrepancy"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-po-match-exceptions.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-match-exceptions"
+  },
+  {
+    "name": "br-supplier-risk-scoring",
+    "title": "Supplier Risk Scoring",
+    "type": "excel",
+    "category": "Purchasing",
+    "description": "Score Oracle EBS suppliers on risk in Excel: have the br-run-reports skill extract spend, holds, price variance and delivery history, then combine dependency, reliability, price stability and anomaly signals into a ranked supplier risk register with a named driver per supplier. Use when the user asks which suppliers are risky, supplier risk review, vendor scorecard, supplier dependency/concentration, or who to review before contract renewal.",
+    "writes": false,
+    "reports": [
+      "AP Suppliers",
+      "PO Invoice Price Variance"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-supplier-risk-scoring.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-supplier-risk-scoring"
+  },
+  {
+    "name": "br-ar-close-readiness",
+    "title": "AR Period Close Readiness",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Assess Oracle EBS Accounts Receivable period-close readiness in Excel: have the br-run-reports skill extract unaccounted AR transactions, AutoInvoice interface errors, and the AR-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an AR close-readiness scorecard. Use when the user asks \"can we close AR for {period}\", \"AR period close readiness\", unaccounted receivables, unapplied receipts, or AutoInvoice backlog.",
+    "writes": false,
+    "reports": [
+      "AR Autoinvoice Interface",
+      "CAC Accounting Period Status"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-close-readiness.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-close-readiness"
+  },
+  {
+    "name": "br-ar-collections-notes",
+    "title": "AR Collections Note Logging",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Log collection notes into Oracle EBS Advanced Collections from Excel: take the ranked customers and drafted dunning messages a br-ar-collections-worklist run produced, stage one note per customer via the \"IEX Collection Note Upload\", and \u2014 on the user's explicit confirmation \u2014 submit them so the collections team sees the worklist as logged activity. Use when the user asks to log the collection notes, post the worklist to Collections, record the dunning messages, or action a collections worklist. WRITES to Oracle EBS.",
+    "writes": true,
+    "reports": [
+      "IEX Collection Note Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-collections-notes.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-notes"
+  },
+  {
+    "name": "br-ar-collections-worklist",
+    "title": "AR Collections Worklist",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Build a prioritized Oracle EBS Accounts Receivable collections worklist in Excel: have the br-run-reports skill extract open AR aging, past-due detail and disputes, score each customer by collectible-$-at-risk (aging severity), exclude disputed balances, assign a dunning tier, draft the reminder text per tier, and build a collections dashboard. Payment-behaviour (receipt-history RFM) re-ranking is an add-on that runs only when the user asks for it. Use when the user asks for a collections worklist, who to chase, dunning priorities, reduce DSO, overdue receivables to call, or AR collections prioritization.",
+    "writes": false,
+    "reports": [
+      "AR Applied Receipts",
+      "AR Disputed Invoice"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-collections-worklist.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-worklist"
+  },
+  {
+    "name": "br-ar-credit-risk",
+    "title": "AR Credit Risk & DSO Analysis",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Score customer credit risk and analyse DSO from Oracle EBS Receivables: combine credit limits and utilization, aging severity, payment behaviour and balance trend into a per-customer risk grade with the drivers named, plus a DSO decomposition showing which segments and behaviours move it. Read-only. Use when the user asks which customers are a credit risk, wants credit limits reviewed, asks \"why is our DSO rising\", or needs a credit-review worklist.",
+    "writes": false,
+    "reports": [
+      "AR Applied Receipts",
+      "AR Customer Credit Limits",
+      "AR Customer Open Balances Period Lookback",
+      "AR Customer Profiles"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-credit-risk.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-credit-risk"
+  },
+  {
+    "name": "custom-reports-migration",
+    "title": "Custom Reports Migration Rules",
+    "type": "rules",
+    "category": "Migration",
+    "description": "Rules for migrating custom Oracle EBS reports gathered by the Blitz Report Custom Reports Converter into Blitz Reports. Use with the migrate-custom-reports skill.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/custom-reports-migration"
+  },
+  {
+    "name": "discoverer-migration",
+    "title": "Discoverer Migration Rules",
+    "type": "rules",
+    "category": "Migration",
+    "description": "Reviewing and finishing Oracle Discoverer workbooks converted to Blitz Reports. Use when working on Discoverer-converted reports.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/discoverer-migration"
+  },
+  {
+    "name": "report-development",
+    "title": "Report Development Rules",
+    "type": "rules",
+    "category": "Report Development",
+    "description": "Blitz Report XML rules: parameters, LOVs, anchors, lexicals, templates, assignments, columns, the report engine. Use whenever creating or editing a Blitz Report XML or its SQL.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/report-development"
+  },
+  {
+    "name": "coding-standards",
+    "title": "SQL and PL/SQL Coding Standards",
+    "type": "rules",
+    "category": "Standards",
+    "description": "SQL and PL/SQL coding standards for Blitz Report content: report SQL, LOV queries, upload packages. Use whenever writing or reviewing SQL or PL/SQL for a Blitz Report or Blitz Upload.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/coding-standards"
+  },
+  {
+    "name": "development-workflow",
+    "title": "Development Workflow",
+    "type": "rules",
+    "category": "Standards",
+    "description": "Working method for Blitz Report content development: baseline, change, deploy, re-run, regression-diff, test data rules, no hard-coded credentials. Use for any change to an existing report or upload.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/development-workflow"
+  },
+  {
+    "name": "ebs-11i-compatibility",
+    "title": "EBS 11i Compatibility",
+    "type": "rules",
+    "category": "Standards",
+    "description": "Making Blitz Report content work on Oracle EBS 11i and older databases: 11i twins, translations, version traps. Use when content must run on 11i or on an 11.2 database.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/ebs-11i-compatibility"
+  },
+  {
+    "name": "upload-api-patterns",
+    "title": "EBS API Patterns for Uploads",
+    "type": "rules",
+    "category": "Upload Development",
+    "description": "Oracle EBS module API specifics for Blitz Uploads (ONT, PO, INV, WIP, CST, AP, AR, HR, FA, CE, EAM, OPM, PA, QA and more). Use when an upload package calls an Oracle public API.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/upload-api-patterns"
+  },
+  {
+    "name": "upload-development",
+    "title": "Upload Development Rules",
+    "type": "rules",
+    "category": "Upload Development",
+    "description": "Blitz Upload XML and PL/SQL rules: upload columns, completeness checklist, processing package architecture, E2E testing. Use whenever creating or editing a Blitz Upload.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/upload-development"
+  }
+]

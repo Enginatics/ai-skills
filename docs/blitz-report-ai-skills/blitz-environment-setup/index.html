@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Environment Setup - Blitz Report Development</title><meta name="description" content="Set up the Blitz Report environment file (.claude/rules/blitz-environment.md) that the Blitz Report development skills use to reach the Oracle EBS development instance.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/blitz-environment-setup/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Environment Setup - Blitz Report Development"><meta property="og:description" content="Set up the Blitz Report environment file (.claude/rules/blitz-environment.md) that the Blitz Report development skills use to reach the Oracle EBS development instance."><meta property="og:url" content="https://www.enginatics.com/ai-skills/blitz-environment-setup/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/blitz-environment-setup/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Getting Started</p><h1>Environment Setup</h1><p class='name'>blitz-environment-setup</p><p class='lead'>Set up the Blitz Report environment file (.claude/rules/blitz-environment.md) that the Blitz Report development skills use to reach the Oracle EBS development instance.</p><h2>When to use</h2><p>Use on first use of the Blitz Report skills, when a skill cannot find blitz-environment.md, or when the user wants to change instance, connection or deploy details.</p><h2>Use</h2><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p>Then ask Claude for the task, or run:</p><pre><code>/blitz-report-ai-skills:blitz-environment-setup</code></pre><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/blitz-environment-setup'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Blitz Report Environment Setup
+
+1. Look for `.claude/rules/blitz-environment.md` in the project. If it exists, show the user its instance table and ask what to change.
+2. Otherwise copy `${CLAUDE_PLUGIN_ROOT}/templates/blitz-environment.md` there and fill it in with the user, one section at a time:
+   - development instance: host, port, service, EBS release, database version. Confirm Blitz Report is installed: `select xxen_report.version from dual` (or any `xxen_api` call) must work.
+   - database access: prefer the Oracle SQLcl MCP server with a saved connection; otherwise SQLcl or SQL*Plus from the shell. Test the connection with a `select` from `fnd_product_groups`.
+   - apps tier access: SSH or none.
+   - test user and responsibilities for `fnd_global.apps_initialize`, resolved from one row of `fnd_user_resp_groups_direct` joined to `fnd_responsibility_vl`.
+3. Never write a password into the file. Use `$APPS_PWD` and tell the user to set it in their shell.
+4. Refuse to configure a production instance as the development or conversion instance.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

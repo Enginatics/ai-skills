@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inventory / Costing Period Close Readiness - Blitz Report Excel Add-in Skills</title><meta name="description" content="Assess Oracle EBS Inventory/Costing period-close readiness in Excel: have the br-run-reports skill extract pending inventory transactions, missing WIP/receiving accounting, and pending cost adjustments, then give a red/amber/green verdict with remediation and build an Inventory close-readiness score">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-inv-cost-close-readiness/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Inventory / Costing Period Close Readiness - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Assess Oracle EBS Inventory/Costing period-close readiness in Excel: have the br-run-reports skill extract pending inventory transactions, missing WIP/receiving accounting, and pending cost adjustments, then give a red/amber/green verdict with remediation and build an Inventory close-readiness score"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-inv-cost-close-readiness/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cost-close-readiness/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Inventory</p><h1>Inventory / Costing Period Close Readiness</h1><p class='name'>br-inv-cost-close-readiness</p><p class='lead'>Assess Oracle EBS Inventory/Costing period-close readiness in Excel: have the br-run-reports skill extract pending inventory transactions, missing WIP/receiving accounting, and pending cost adjustments, then give a red/amber/green verdict with remediation and build an Inventory close-readiness scorecard.</p><h2>When to use</h2><p>Use when the user asks &quot;can we close inventory for {period}&quot;, &quot;inventory/costing period close readiness&quot;, pending/uncosted transactions, stuck MTL interfaces, or missing accounting.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-inv-cost-close-readiness.zip'>Download br-inv-cost-close-readiness.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cost-close-readiness'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/cac-accounting-period-status/'>CAC Accounting Period Status</a></li><li><a href='https://www.enginatics.com/reports/cac-missing-receiving-accounting-transactions/'>CAC Missing Receiving Accounting Transactions</a></li><li><a href='https://www.enginatics.com/reports/cac-missing-wip-accounting-transactions/'>CAC Missing WIP Accounting Transactions</a></li><li><a href='https://www.enginatics.com/reports/cst-period-close-subinventory-value/'>CST Period Close Subinventory Value</a></li><li><a href='https://www.enginatics.com/reports/inv-period-close-pending-transactions/'>INV Period Close Pending Transactions</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-inv-cost-close-readiness'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Inventory / Costing Period Close Readiness (br-inv-cost-close-readiness)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Produce an inventory/costing close-readiness scorecard in one workbook. You own orchestration,
+scoring, and the verdict; br-run-reports does extraction and br-data-dashboard the
+build. Run steps in order, on separate turns, keeping intermediate sheets.
+
+**Requires:** br-run-reports, br-data-dashboard.
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports**
+(connection, auth, async run, completion, cell population). Never call `br_*` functions, and never
+rename/read/sum the result sheet or start analysis until extraction is confirmed complete —
+touching the workbook mid-run stalls it. This skill is **read-and-recommend only**: it never runs
+the cost manager, resubmits interfaces, or uploads; it reports blockers and the recommended action.
+
+## When to use
+&quot;Can we close inventory for May&quot;, &quot;costing period close readiness&quot;, pending/uncosted material
+transactions, stuck MTL_TRANSACTIONS_INTERFACE / pending receiving, missing WIP/receiving
+accounting, pending cost adjustments.
+
+## Inputs
+- **Organization Code** (one or several; ask which orgs) — required; **Period** (Period From / Period To).
+
+## Reports used (authoritative names — do NOT broad-search for them)
+These exact report names are known. When you ask br-run-reports to run one, pass the
+**documented name directly** — do NOT run a `br_report_list_external` discovery search first. Inspect
+parameters only if you need an exact LOV spelling. **Fallback:** only if a run returns
+`#BLITZ_REPORT_NOT_FOUND` (the instance renamed it, or the module isn&#x27;t installed) do a name search.
+
+| Report (exact name) | Run with | Notes |
+|---|---|---|
+| `INV Period Close Pending Transactions` | Organization Code + Period | **The verdict driver.** Inventory |
+| `CAC Accounting Period Status` | **Functional Area = Inventory** (the param is `Functional Area`, NOT `Application`) + Org/Ledger + Period | Period-status check (Step 1c) — per-org INV period |
+| `CAC Missing WIP Accounting Transactions` | Organization Code + Period | Missing-WIP-accounting check |
+| `CAC Missing Receiving Accounting Transactions` | Organization Code + Period | Missing-receiving-accounting check |
+| `CAC Inventory Pending Cost Adjustment` | Organization Code + Period | Pending cost adjustments |
+| `CST Uninvoiced Receipts` / `CST AP and PO Accrual Reconciliation` *(optional)* | Org / Ledger + Period | Accrual recon (Review) |
+| `CST Period Close Subinventory Value` *(optional)* | Organization Code + Period | Inventory↔GL tie-out |
+
+## CONFIG
+### Checks → class + remediation
+| Check (source report) | Class | Remediation |
+|---|---|---|
+| Pending material transactions / interface backlog (`INV Period Close Pending Transactions`) | **Blocker** | Resolve pending rows; resubmit the relevant interface manager |
+| Missing WIP accounting (`CAC Missing WIP Accounting Transactions`) | **Blocker** | Run the **Cost Manager** / create accounting for WIP |
+| Missing receiving accounting (`CAC Missing Receiving Accounting Transactions`) | **Blocker** | Run **Create Accounting** for receiving |
+| Pending cost adjustments (`CAC Inventory Pending Cost Adjustment`, `CAC ICP PII WIP Pending Cost Adjustment`) | **Blocker** | Process the pending cost adjustment |
+| Uninvoiced receipts / accrual recon (`CST Uninvoiced Receipts`, `CST AP and PO Accrual Reconciliation`) | **Review** | Period-end accrual; reconcile to GL |
+| Subinventory value vs GL (`CST Period Close Subinventory Value`) | **Review** | Inventory↔GL tie-out |
+
+### Readiness (RAG)
+- **Red** — any pending transactions, missing accounting, or pending cost adjustments.
+- **Amber** — only Review-class accrual/recon items within materiality.
+- **Green** — no pending transactions and all accounting created for the org+period.
+
+### Output sheets &amp; tab order (left to right)
+`INV_Close_Readiness` (first), [`Accrual_Recon`], `Missing_Accounting`, `Pending_Transactions` (last).
+
+## Pipeline
+1. **Extract — DELEGATE.** br-run-reports runs **&quot;INV Period Close Pending Transactions&quot;** (Organization Code + Period) → `Pending_Transactions`; then **&quot;CAC Missing WIP Accounting Transactions&quot;** and **&quot;CAC Missing Receiving Accounting Transactions&quot;** → `Missing_Accounting`; then **&quot;CAC Inventory Pending Cost Adjustment&quot;** (append). Optionally `CST Uninvoiced Receipts` / `CST AP and PO Accrual Reconciliation` → `Accrual_Recon`. Wait for each; do nothing mid-run. For multiple orgs, run per org and stack.
+1c. **Confirm the period is open (recommended).** Delegate to br-run-reports to run **&quot;CAC Accounting Period Status&quot;** (**Functional Area = Inventory** — the param is `Functional Area`, not `Application` — for the Org/Ledger + Period). INV periods are **per-org** — confirm the org(s) you&#x27;re assessing show **Open**, not Closed or Never Opened. Show the status on the scorecard. If the report isn&#x27;t found on the instance, note that and proceed (don&#x27;t block on it).
+2. **Anchor.** Record pending-transaction count, missing-accounting count, pending-cost-adj count by org. Clean → Green scorecard.
+3. **Score.** Apply CONFIG; rank blockers; attach remediation (which manager/program to run).
+4. **Scorecard *(single `execute_office_js` call)*** (delegate to br-data-dashboard if it fires; else build inline). Write all scorecard sections to `INV_Close_Readiness` in one call: RAG banner (org+period); pending by type per org; missing-accounting counts; pending cost adj; blocking-items list. Any charts follow in a second call.
+   - **Build mechanics (learned on a real run):** build on a NEW sheet at **position 0** (first tab); leave each report on the sheet br-run-reports created (its report name) — do NOT rename it, the dashboard links to it. **Do NOT use a multi-row `copyToRange`** to fill formula rows (it can latch onto the wrong source box and duplicate headers into the data) — write each row&#x27;s formula explicitly. After building, scan **beyond** the dashboard&#x27;s column range, clear any stray cells, and widen amount columns so values don&#x27;t render as `######`.
+5. **Narrative.** ≤5 bullets: overall call, biggest blocker, which org is worst, recommended next program to run.
+6. **Arrange tabs + final validation.** Arrange tabs per CONFIG; make `INV_Close_Readiness` active. Only after the scorecard. **Then do the one permitted verification read:** confirm the scorecard&#x27;s pending-transaction, missing-accounting and pending-cost-adj counts tie to the Step-2 anchor. This is the only explicit re-read allowed in the entire pipeline outside of the anchor step.
+
+## Validation
+Scorecard counts tie to the raw sheets; Red only if a Blocker exists.
+
+## Closed-loop (roadmap, not executed here)
+Cost Manager / interface resubmit are concurrent submits. This skill recommends; a human runs it.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

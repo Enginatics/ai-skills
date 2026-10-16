@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blitz Report Developer - Blitz Report Development</title><meta name="description" content="Create and update Blitz Reports and uploads for Oracle EBS.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/blitz-report-developer/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Blitz Report Developer - Blitz Report Development"><meta property="og:description" content="Create and update Blitz Reports and uploads for Oracle EBS."><meta property="og:url" content="https://www.enginatics.com/ai-skills/blitz-report-developer/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/blitz-report-developer/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Report Development</p><h1>Blitz Report Developer</h1><p class='name'>blitz-report-developer</p><p class='lead'>Create and update Blitz Reports and uploads for Oracle EBS.</p><h2>When to use</h2><p>Use when user asks to create a new report, modify existing reports, create uploads, migrate reports from RDF/BI Publisher/XML/PL/SQL, or analyze Oracle forms validation logic.</p><h2>Use</h2><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p>Then ask Claude for the task, or run:</p><pre><code>/blitz-report-ai-skills:blitz-report-developer</code></pre><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/blitz-reports/'>Blitz Reports</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/blitz-report-developer'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-reference-sql-patterns-md'>reference-sql-patterns.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Blitz Report Developer Skill
+
+This skill helps create and maintain Blitz Reports and uploads for Oracle E-Business Suite (EBS).
+
+## Capabilities
+
+1. **Create new Blitz Reports** from scratch or by migrating from other technologies
+2. **Modify/update existing reports** - add columns, parameters, fix data issues
+3. **Create uploads** (data import templates) with proper validation logic
+4. **Migrate reports** from Oracle Reports Builder (RDF), BI Publisher, XML, or custom PL/SQL
+5. **Analyze Oracle EBS forms** to replicate validation logic in uploads
+
+## Key Resources
+
+### Documentation
+- Developer Guide: https://www.enginatics.com/blitz-report-developer-guide/
+- Training Video: https://youtu.be/C7jRstrvA-A
+
+### Example Reports (in content/r12/reports/)
+- **Simple**: `AP_Suppliers.xml` - basic supplier listing with joins
+- **Medium**: `GL_Account_Analysis_Distributions.xml` - GL distributions with parameters
+- **Complex**: `AR_Aging.xml` - migrated from Oracle standard with bucket calculations
+
+### Example Uploads (in content/r12/uploads/)
+- **Simple**: `Blitz_Report_Assignment_Upload.xml` - basic upload with validation function
+- **Complex**: `AP_Supplier_Upload.xml` - multi-table upload with extensive validation
+
+### Test Environment
+- **Ledger**: Vision Operations (USA)
+- **Operating Unit**: Vision Operations
+- **Inventory Org**: M1
+
+## Report XML Structure
+
+The `&lt;CATEGORIES&gt;` section is **required** — it defines the category before `&lt;REPORTS&gt;` so the import can create/find it. Without it, `&lt;CATEGORY_ASSIGNMENTS&gt;` inside the report will silently fail.
+
+```xml
+&lt;ROOT&gt;
+ &lt;APPS_INITIALIZE_DATA&gt;
+  &lt;USER_NAME&gt;ENGINATICS&lt;/USER_NAME&gt;
+  &lt;RESPONSIBILITY_KEY&gt;SYSTEM_ADMINISTRATOR&lt;/RESPONSIBILITY_KEY&gt;
+  &lt;APPLICATION_SHORT_NAME&gt;SYSADMIN&lt;/APPLICATION_SHORT_NAME&gt;
+ &lt;/APPS_INITIALIZE_DATA&gt;
+&lt;CATEGORIES&gt;
+&lt;!-- loader xml for Enginatics Blitz Report category: Category Name --&gt;
+ &lt;CATEGORIES_ROW&gt;
+  &lt;BASE_CATEGORY&gt;Category Name&lt;/BASE_CATEGORY&gt;
+  &lt;CATEGORY_TRANSLATIONS&gt;
+   &lt;CATEGORY_TRANSLATIONS_ROW&gt;
+    &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
+    &lt;CATEGORY&gt;Category Name&lt;/CATEGORY&gt;
+   &lt;/CATEGORY_TRANSLATIONS_ROW&gt;
+  &lt;/CATEGORY_TRANSLATIONS&gt;
+ &lt;/CATEGORIES_ROW&gt;
+&lt;/CATEGORIES&gt;
+&lt;REPORTS&gt;
+&lt;!-- loader xml for Enginatics Blitz Report: Report Name --&gt;
+ &lt;REPORTS_ROW&gt;
+  &lt;GUID&gt;...&lt;/GUID&gt;
+  &lt;SQL_TEXT&gt;select ... from ...&lt;/SQL_TEXT&gt;
+  &lt;ENABLED&gt;Y&lt;/ENABLED&gt;
+  &lt;REPORT_TRANSLATIONS&gt;...&lt;/REPORT_TRANSLATIONS&gt;
+  &lt;CATEGORY_ASSIGNMENTS&gt;
+   &lt;CATEGORY_ASSIGNMENTS_ROW&gt;
+    &lt;CATEGORY&gt;Category Name&lt;/CATEGORY&gt;
+   &lt;/CATEGORY_ASSIGNMENTS_ROW&gt;
+  &lt;/CATEGORY_ASSIGNMENTS&gt;
+  &lt;ANCHORS&gt;...&lt;/ANCHORS&gt;
+  &lt;PARAMETERS&gt;...&lt;/PARAMETERS&gt;
+  &lt;COLUMNS&gt;...&lt;/COLUMNS&gt;
+ &lt;/REPORTS_ROW&gt;
+&lt;/REPORTS&gt;
+&lt;/ROOT&gt;
+```
+
+## Upload XML Structure
+
+**IMPORTANT:** For regular reports, do NOT include a `&lt;TYPE&gt;` element at all — omitting it leaves TYPE blank (correct for reports). Only uploads use `&lt;TYPE&gt;U&lt;/TYPE&gt;`. If after importing a report the UI shows TYPE as &quot;Upload&quot;, clear it manually in the setup form. This can happen if a randomly generated GUID collides with an existing upload record during import.
+
+Uploads have additional elements:
+- `&lt;TYPE&gt;U&lt;/TYPE&gt;` - marks as upload
+- `&lt;UPLOAD_TYPE&gt;A&lt;/UPLOAD_TYPE&gt;` - A=API, I=Interface table
+- `&lt;UPLOAD_OBJECT&gt;package.procedure&lt;/UPLOAD_OBJECT&gt;` - processing procedure
+- `&lt;UPLOAD_EXCEL_VALIDATION&gt;...&lt;/UPLOAD_EXCEL_VALIDATION&gt;` - validation PL/SQL
+
+Standard upload columns (always first):
+```sql
+select
+null action_,
+null status_,
+null message_,
+null modified_columns_,
+-- actual data columns follow
+```
+
+## Workflow
+
+### Creating/Updating Reports
+
+1. **Analyze requirements** - understand what data is needed
+2. **Find existing similar reports** - search in content/r12/reports/
+3. **Build SQL query** - follow coding standards from `coding-standards` skill
+4. **Create/update XML** - use proper structure; every new parameter gets a `&lt;DESCRIPTION&gt;` in its US translation row, and user-visible behaviour changes get a report description update in the same edit (see `report-development` skill)
+5. **Import &amp; test on the development instance (see `blitz-environment.md`)** — `import_xml` derives the parameter and upload dependencies automatically from the `:$flex$`/`:$column$` references, so there is no separate regeneration step:
+   - **Reports:** copy the XML to the apps tier of the development instance and run `$XXEN_TOP/bin/import_xml $APPS_PWD &lt;file&gt;` (or import the file content with `xxen_api.import_xml(&lt;clob&gt;)`); see `blitz-environment.md` for how to reach the instance.
+   - **Uploads:** lint the XML with `${CLAUDE_PLUGIN_ROOT}/scripts/lint_upload_xml.py`, import it, then check every LOV parses (the deploy procedure in `blitz-environment.md`).
+   - Exact commands + rules: `report-development` skill (&quot;XML Import&quot;) and `upload-development` skill (&quot;Upload Dependencies&quot;).
+6. **Run report via API**:
+   ```sql
+   select xxen_report.run_report_api(
+     p_report_name=&gt;&#x27;Report Name&#x27;,
+     p_operating_unit=&gt;&#x27;Vision Operations&#x27;
+   ) from dual;
+   ```
+7. **Review results** and iterate
+
+### Creating Uploads
+
+1. **Understand target tables/APIs** - what Oracle API or tables to use
+2. **Analyze Oracle forms validation** - use oracle-forms-analyzer subagent
+3. **Create download SQL** - query existing data for template
+4. **Create validation function** in appropriate package (usually xxen_upload or module-specific)
+5. **Create processing procedure** for actual data import
+6. **Build XML with validation references**
+7. **Test with sample data**
+
+### Migrating Reports
+
+**From RDF (Oracle Reports Builder)**:
+1. Extract SQL from report definition
+2. Simplify: move function logic into main SQL where possible
+3. Convert parameters to Blitz format
+4. Replace Oracle report functions with SQL equivalents
+
+**From BI Publisher**:
+1. Extract data template SQL
+2. Convert parameters
+3. Simplify nested data sets into single query with joins
+
+**From Custom PL/SQL**:
+1. Analyze cursor/query logic
+2. Convert to single SQL statement where possible
+3. Move procedural logic to SQL CASE/DECODE statements
+
+## SQL Coding Standards
+
+Follow all rules in the **PL/SQL Coding Standards** section of `coding-standards` skill. Key rules for reports: lowercase everything, no spaces around operators, proper table aliases, use `xxen_util.meaning()` for lookups, bind variables (not literals), no redundant code.
+
+## Common Patterns
+
+### Operating Unit Parameter
+```sql
+where haouv.name=:p_operating_unit
+```
+
+### Ledger Parameter
+```sql
+where gl.name=:p_ledger
+```
+
+### Date Range Parameters
+```sql
+where trunc(aia.invoice_date) between :p_date_from and :p_date_to
+```
+
+### Multi-value LOV Parameter
+```sql
+where 1=1
+and :p_supplier_name=:p_supplier_name  -- anchor
+-- with SQL: aps.vendor_name in (select regexp_substr(:p_supplier_name,&#x27;[^,]+&#x27;,1,level) from dual connect by level&lt;=regexp_count(:p_supplier_name,&#x27;,&#x27;)+1)
+```
+
+## Using Oracle Forms Analyzer
+
+When creating uploads that need to replicate Oracle standard form validations:
+
+Use the `oracle-forms-analyzer` subagent to:
+1. Analyze Oracle EBS standard forms (.fmb/.fmx)
+2. Extract validation logic, triggers, and API calls
+3. Document SQL queries used by the form
+4. Identify required fields and business rules
+
+Example use cases:
+- Creating AP Invoice upload -&gt; analyze APXINWKB form
+- Creating PO Requisition upload -&gt; analyze POXRQERQ form
+- Creating Supplier upload -&gt; analyze APXVDMVD form
+
+## PL/SQL Packages
+
+### Core Packages (in sql/)
+- `XXEN_REPORT.pkb/pks` - main report engine
+- `XXEN_UPLOAD.pkb/pks` - upload processing engine
+- `XXEN_UTIL.pkb/pks` - utility functions
+- `XXEN_REPORT_EBS.pkb/pks` - EBS-specific utilities
+
+### Upload Validation Pattern
+```sql
+function validate_something(
+  p_field1 in varchar2,
+  p_field2 in varchar2
+) return varchar2 is
+begin
+  if p_field1 is null then
+    return &#x27;Field1 is required&#x27;;
+  end if;
+  -- more validations
+  return null; -- null means valid
+end;
+```
+
+## Finding Reports
+
+Search existing reports:
+```bash
+# Find by module
+ls content/r12/reports/AP_*.xml
+ls content/r12/reports/GL_*.xml
+ls content/r12/reports/AR_*.xml
+
+# Find by keyword in SQL
+grep -l &quot;ap_invoices&quot; content/r12/reports/*.xml
+```
+
+## Important Rules
+
+### REQUIRED_PARAMETERS vs REQUIRED Flag
+
+- **`&lt;REQUIRED&gt;Y&lt;/REQUIRED&gt;`** on a parameter: Use this to make a parameter mandatory. The system enforces this automatically.
+- **`&lt;REQUIRED_PARAMETERS&gt;`** on the report: Use this ONLY for advanced validation of **optional** parameter combinations.
+
+**WRONG**: Using REQUIRED_PARAMETERS to check if required parameters are filled:
+```xml
+&lt;REQUIRED_PARAMETERS&gt;:p_from_date is not null&lt;/REQUIRED_PARAMETERS&gt;  &lt;!-- WRONG - redundant --&gt;
+```
+
+**CORRECT**: Using REQUIRED_PARAMETERS for optional parameter dependencies:
+```xml
+&lt;REQUIRED_PARAMETERS&gt;:p_detail_level=&#x27;Detail&#x27; or :p_show_amounts is null&lt;/REQUIRED_PARAMETERS&gt;
+```
+
+If all your key parameters already have `&lt;REQUIRED&gt;Y&lt;/REQUIRED&gt;`, leave `&lt;REQUIRED_PARAMETERS&gt;` empty/null.
+
+## Tips
+
+1. **Start from existing reports** - find similar reports and modify
+2. **Test incrementally** - import and run after each significant change
+3. **Use meaningful column aliases** - they become Excel headers
+4. **Keep SQL readable** - use proper indentation and line breaks
+5. **Document complex logic** - add comments in XML description
+
+
+## Access Assignments (MANDATORY)
+
+Every new/converted report MUST ship with a top-level `&lt;ASSIGNMENTS&gt;` block (sibling of `&lt;REPORTS&gt;`) or no responsibility can see it. Generate it **data-driven from the report&#x27;s SQL data domain**, not the name prefix (an INV report may also serve Manufacturing/BOM/Cost/WMS). Full methodology in `report-development` skill &quot;Report Assignments&quot;:
+- **#1** mirror each relevant application with the request groups its normal responsibilities use (Inventory→`All Inclusive GUI`@INV, Payables→`All Reports`@SQLAP, Cost Management→`Cost Management`/`-SLA`@BOM, ...).
+- **#4** add major-country localization request groups (India `JAI_&lt;Module&gt;_RG` + DE/FR/IT/ES/BR/MX/CN/JP/AU).
+- **#3** never use Application=`Human Resources` (290 self-service responsibilities) — use HR request groups; same caution for Assets/iSupplier/OTL/Learning.
+- **#5** add `Form`-level zoom assignments (with `FORM_PARAMETERS`) for the report&#x27;s primary Oracle entity form where applicable.
+- **Uploads** (TYPE=U) get `Function`-level assignments to update-enabled functions ONLY — see `upload-development` skill I7.</pre></section><section id='file-reference-sql-patterns-md'><h3 class='fname'>reference-sql-patterns.md</h3><pre class='md'># Common SQL Patterns for Blitz Reports
+
+## EBS Module Tables Reference
+
+### Accounts Payable (AP)
+```sql
+-- Suppliers
+ap_suppliers aps
+ap_supplier_sites_all assa
+
+-- Invoices
+ap_invoices_all aia
+ap_invoice_lines_all aila
+ap_invoice_distributions_all aida
+
+-- Payments
+ap_checks_all aca
+ap_invoice_payments_all aipa
+```
+
+### Accounts Receivable (AR)
+```sql
+-- Customers
+hz_parties hp
+hz_cust_accounts hca
+hz_cust_account_sites_all hcasa
+hz_cust_site_uses_all hcsua
+
+-- Transactions
+ra_customer_trx_all rcta
+ra_customer_trx_lines_all rctla
+ar_payment_schedules_all apsa
+
+-- Receipts
+ar_cash_receipts_all acra
+ar_receivable_applications_all araa
+```
+
+### General Ledger (GL)
+```sql
+-- Ledgers and COA
+gl_ledgers gl
+gl_code_combinations gcc
+gl_code_combinations_kfv gcck  -- with concatenated segments
+
+-- Journals
+gl_je_batches gjb
+gl_je_headers gjh
+gl_je_lines gjl
+
+-- Balances
+gl_balances gb
+```
+
+### Inventory (INV)
+```sql
+-- Items
+mtl_system_items_b msib
+mtl_system_items_vl msiv
+
+-- Organizations
+mtl_parameters mp
+hr_all_organization_units haou
+
+-- Transactions
+mtl_material_transactions mmt
+mtl_transaction_types mtt
+
+-- On-hand
+mtl_onhand_quantities_detail moqd
+```
+
+### Order Management (OM/ONT)
+```sql
+-- Orders
+oe_order_headers_all ooha
+oe_order_lines_all oola
+
+-- Lookups
+oe_transaction_types_tl ottt
+oe_lookups ol
+```
+
+### Purchasing (PO)
+```sql
+-- Purchase Orders
+po_headers_all pha
+po_lines_all pla
+po_line_locations_all plla
+po_distributions_all pda
+
+-- Requisitions
+po_requisition_headers_all prha
+po_requisition_lines_all prla
+
+-- Receipts
+rcv_transactions rt
+rcv_shipment_headers rsh
+rcv_shipment_lines rsl
+```
+
+## Common Join Patterns
+
+### Operating Unit Join
+```sql
+from
+hr_all_organization_units_vl haouv,
+ap_invoices_all aia
+where
+aia.org_id=haouv.organization_id and
+haouv.name=:p_operating_unit
+```
+
+### Ledger Join
+```sql
+from
+gl_ledgers gl,
+gl_je_headers gjh
+where
+gjh.ledger_id=gl.ledger_id and
+gl.name=:p_ledger
+```
+
+### Item Join with Inventory Org
+```sql
+from
+mtl_parameters mp,
+mtl_system_items_vl msiv
+where
+msiv.organization_id=mp.organization_id and
+mp.organization_code=:p_organization
+```
+
+### Customer Join
+```sql
+from
+hz_parties hp,
+hz_cust_accounts hca,
+ra_customer_trx_all rcta
+where
+rcta.bill_to_customer_id=hca.cust_account_id and
+hca.party_id=hp.party_id
+```
+
+### Supplier Join
+```sql
+from
+ap_suppliers aps,
+ap_supplier_sites_all assa,
+ap_invoices_all aia
+where
+aia.vendor_id=aps.vendor_id and
+aia.vendor_site_id=assa.vendor_site_id
+```
+
+## Utility Functions
+
+### Display Lookup Value
+```sql
+xxen_util.meaning(aia.invoice_type_lookup_code,&#x27;INVOICE TYPE&#x27;,200) invoice_type
+```
+
+### Display Yes/No Flag
+```sql
+xxen_util.yes(aps.hold_flag) hold
+```
+
+### Display User Name
+```sql
+xxen_util.user_name(aia.created_by) created_by
+```
+
+### Display Date in Client Timezone
+```sql
+xxen_util.client_time(aia.creation_date) creation_date
+```
+
+### Get Concatenated Segments
+```sql
+(select gcck.concatenated_segments from gl_code_combinations_kfv gcck
+ where gcck.code_combination_id=aida.dist_code_combination_id) account
+```
+
+### Get Description from KFV
+```sql
+(select gcck.concatenated_segments||&#x27; - &#x27;||gcck.description from gl_code_combinations_kfv gcck
+ where gcck.code_combination_id=aida.dist_code_combination_id) account_desc
+```
+
+## Parameter Patterns
+
+### Operating Unit LOV
+```xml
+&lt;PARAMETER_TYPE_DSP&gt;LOV&lt;/PARAMETER_TYPE_DSP&gt;
+&lt;LOV_NAME&gt;Operating Unit&lt;/LOV_NAME&gt;
+```
+
+### Ledger LOV
+```xml
+&lt;PARAMETER_TYPE_DSP&gt;LOV&lt;/PARAMETER_TYPE_DSP&gt;
+&lt;LOV_NAME&gt;Ledger&lt;/LOV_NAME&gt;
+```
+
+### Date Range
+```xml
+&lt;PARAMETERS_ROW&gt;
+  &lt;PARAMETER_TYPE_DSP&gt;Date&lt;/PARAMETER_TYPE_DSP&gt;
+  &lt;PARAMETER_TRANSLATIONS&gt;
+    &lt;PARAMETER_TRANSLATIONS_ROW&gt;
+      &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
+      &lt;PARAMETER_NAME&gt;Date From&lt;/PARAMETER_NAME&gt;
+    &lt;/PARAMETER_TRANSLATIONS_ROW&gt;
+  &lt;/PARAMETER_TRANSLATIONS&gt;
+&lt;/PARAMETERS_ROW&gt;
+```
+
+### Multi-Select LOV
+Use anchor pattern with SQL injection:
+```xml
+&lt;ANCHOR&gt;:p_supplier_name&lt;/ANCHOR&gt;
+&lt;SQL_TEXT&gt;aps.vendor_name in (select regexp_substr(:p_supplier_name,&#x27;[^~]+&#x27;,1,level) from dual connect by level&amp;lt;=regexp_count(:p_supplier_name,&#x27;~&#x27;)+1)&lt;/SQL_TEXT&gt;
+```
+
+## Upload Standard Columns
+
+Always start uploads with:
+```sql
+select
+null action_,
+null status_,
+null message_,
+null modified_columns_,
+-- data columns follow
+```
+
+## Common Subqueries
+
+### Last Invoice Date
+```sql
+(select trunc(max(aia.invoice_date)) from ap_invoices_all aia
+ where aia.vendor_id=aps.vendor_id) last_invoice_date
+```
+
+### Open Balance
+```sql
+(select sum(apsa.amount_due_remaining) from ar_payment_schedules_all apsa
+ where apsa.customer_trx_id=rcta.customer_trx_id) open_balance
+```
+
+### Item On-Hand
+```sql
+(select sum(moqd.transaction_quantity) from mtl_onhand_quantities_detail moqd
+ where moqd.inventory_item_id=msib.inventory_item_id
+ and moqd.organization_id=msib.organization_id) on_hand_qty
+```</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

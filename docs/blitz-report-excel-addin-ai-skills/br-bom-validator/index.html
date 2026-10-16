@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BOM Accuracy Validator - Blitz Report Excel Add-in Skills</title><meta name="description" content="Validate Oracle EBS bill-of-material accuracy against how the shop floor actually consumes material: compare BOM structures with WIP component requirements and shortages, flag suspect components (never issued, always short, quantity drift), and stage approved BOM corrections via the BOM Bill of Mate">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-bom-validator/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="BOM Accuracy Validator - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Validate Oracle EBS bill-of-material accuracy against how the shop floor actually consumes material: compare BOM structures with WIP component requirements and shortages, flag suspect components (never issued, always short, quantity drift), and stage approved BOM corrections via the BOM Bill of Mate"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-bom-validator/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-bom-validator/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Manufacturing</p><h1>BOM Accuracy Validator</h1><p class='name'>br-bom-validator</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Validate Oracle EBS bill-of-material accuracy against how the shop floor actually consumes material: compare BOM structures with WIP component requirements and shortages, flag suspect components (never issued, always short, quantity drift), and stage approved BOM corrections via the BOM Bill of Materials Upload — only on explicit user confirmation.</p><h2>When to use</h2><p>Use when the user asks whether BOMs are accurate, why jobs are always short the same part, or wants BOM cleanup done. Recommend-first; WRITES to Oracle EBS only via the gated correction step.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-bom-validator.zip'>Download br-bom-validator.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-bom-validator'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/wip-required-components/'>WIP Required Components</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-bom-validator'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># BOM Accuracy Validator (br-bom-validator)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. For the correction step,
+&gt; **read `br-run-uploads` FIRST**.
+
+## When to use
+&quot;Are our BOMs accurate&quot;, &quot;why is every job short part X&quot;, &quot;clean up the BOM for assembly Y&quot;,
+&quot;which BOM components are dead&quot;. For job-level health and WIP value use
+**br-wip-variance-analysis**; this skill judges the BILL, using the jobs as evidence.
+
+## Inputs
+- **Organization Code** (required) — ask if not supplied.
+- **Assembly scope** — an assembly, a range, or org-wide (warn on org-wide size; narrow if the user
+  can).
+- **Evidence window** — default 12 months of WIP history; say so.
+
+## Reports and uploads used (authoritative names — do NOT broad-search for them)
+| Name | Type | Role |
+|---|---|---|
+| `BOM Bill of Material Structure` | Report | the bills as defined — components, quantities, yields, effectivity |
+| `WIP Required Components` | Report | what jobs actually required/issued per component |
+| `WIP Discrete Job Shortage` | Report | recurring shortages — the &quot;bill says X, floor needs more&quot; signal |
+| `WIP Component Report` | Report | issue detail cross-check on suspect components |
+| `BOM Bill of Materials Upload` | Upload | **write path** for approved corrections |
+
+Pass the exact names; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+Engineering-change (ECN) impact is out of scope — no ECN report ships; say so if asked.
+
+## Workflow
+1. **Extract** the BOM structures for the scope and the WIP evidence for the window (one call per
+   report).
+2. **Score each BOM component** against the evidence:
+   - **DEAD** — on the bill, never required/issued by any job in the window (candidate to remove or
+     end-date).
+   - **UNDER-QUANTITY** — jobs consistently issue/require more than the bill quantity, or the part
+     recurs on shortages across jobs (candidate to raise qty or fix yield).
+   - **OVER-QUANTITY** — jobs consistently consume less (candidate to lower qty; scrap-factor
+     suspects called out).
+   - **OFF-BOM USAGE** — components jobs issue that are NOT on the bill (candidate to add).
+   - **OK** — evidence matches the bill.
+   Every non-OK class carries its evidence inline: jobs counted, average actual vs bill quantity.
+3. **Rank** by financial effect (quantity drift × component cost × annual build volume) so the
+   cleanup list starts where it pays.
+4. **Deliverable**: per-assembly validation sheet + the ranked correction candidates + dashboard
+   (br-data-dashboard).
+5. **Correct (optional, gated)**: only for corrections the user explicitly approves — download the
+   `BOM Bill of Materials Upload` for the assemblies, apply ONLY the approved changes (quantity
+   updates, end-dates, additions), validate, show assembly/component count and before/after values,
+   submit on a second explicit confirmation. Remind the user a changed bill affects future jobs
+   and cost rollups — existing jobs keep their snapshots.
+
+## Hard rules
+- Evidence below a minimum job count (default 5 jobs — CONFIG, label it) → the component is
+  INSUFFICIENT-EVIDENCE, never a candidate.
+- Alternate/option-class structures: validate only the standard bill unless the user names an
+  alternate; say which bill was judged.
+- Never propose removing a component that appears on open jobs&#x27; requirements.
+
+## Degradation rules
+- No WIP history for an assembly (never built in the window) → the bill is UNVERIFIABLE, listed
+  separately — absence of evidence is not accuracy.
+
+## Talk in the user&#x27;s language
+Assemblies, components, quantities, jobs — never `br_*` functions or helper sheets.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

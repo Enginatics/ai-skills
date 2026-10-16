@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Report Development Rules - Blitz Report Development</title><meta name="description" content="Blitz Report XML rules: parameters, LOVs, anchors, lexicals, templates, assignments, columns, the report engine.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/report-development/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Report Development Rules - Blitz Report Development"><meta property="og:description" content="Blitz Report XML rules: parameters, LOVs, anchors, lexicals, templates, assignments, columns, the report engine."><meta property="og:url" content="https://www.enginatics.com/ai-skills/report-development/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/report-development/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Report Development</p><h1>Report Development Rules</h1><p class='name'>report-development</p><p class='lead'>Blitz Report XML rules: parameters, LOVs, anchors, lexicals, templates, assignments, columns, the report engine.</p><h2>When to use</h2><p>Use whenever creating or editing a Blitz Report XML or its SQL.</p><h2>Use</h2><p>Part of <code>blitz-report-ai-skills</code>. Claude loads these rules automatically when a task needs them.</p><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/report-development'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Report Development
+
+## Import and deploy
+
+- Import only via `$XXEN_TOP/bin/import_xml` (`scp` to `/tmp` first). Never sqlplus spool for export (pads CLOBs). Never direct DML on `xxen_*` content tables.
+- `import_xml` derives parameter and upload dependencies from `:$flex$.`/`:$column$.` references; do not put `PARAMETER_DEPENDENCIES`/`UPLOAD_DEPENDENCIES` in the XML. Verify each intended dependency formed (`xxen_report_param_dependencies` / `xxen_upload_dependencies`) — a token matching no parameter/column NAME silently binds NULL. For `type=&#x27;U&#x27;` it also rebuilds the upload view (`xxen_upload.create_upload_view`), so columns added through the XML are usable on the target immediately; it does not re-derive the column list from the main SQL (see `ebs-11i-compatibility` skill).
+- `$flex$`/`$column$` resolve by parameter/column NAME (spaces→underscores, case-insensitive), never the anchor/bind name. Keep anchor and name aligned.
+- Every new/changed report is imported and E2E-tested on the development instance as `OPERATIONS` with restrictive parameters before reporting done. Baseline before, rerun after with identical parameters, diff all shared columns and key sums.
+- Report SQL is a CLOB and not capped at 32k, on either release or in the 11i export.
+- The setup form greys out a report SQL longer than 32,767 characters. Tell a customer to double-click it, which downloads the full SQL as a file, then load the edited file back through Tools &gt; Upload Large SQL (UTF-8 if it contains non-ASCII characters; developer guide section 6.8, anchor `Upload_SQL`), not through an XML export and import.
+- XML Upload and `bin/import_xml` take a `.zip`: `.xml` entries are imported in zip order and the first failing entry stops the import (named in the error, earlier entries stay imported); `workbook_&lt;doc_id&gt;.eex` entries go to the Discoverer staging table and `.rdl` entries to SSRS. FNDGFU stores `application/x-compress` for any `.zip` and `text/xml; charset=UTF-8` for an `.xml` whatever its `CONTENT_TYPE` argument, so `import_xml_file` recognises a zip by name, while the form&#x27;s `validate_xml` gates on the browser&#x27;s type (`application/%zip%`, `text/xml`): a test that loads files with FNDGFU must set the browser&#x27;s content type before calling `validate_xml`. Make files sent to customers 7-bit ASCII (replace en dashes); `LPX-00217 invalid character 0` on import = a NUL byte injected in transit, not an encoding/charset issue.
+- `xxen_report.sql_to_xml` with a multi-row cursor needs a non-null rowset tag.
+
+## XML structure
+
+- `GUID` required. `&amp;apos;` in SQL. Report name in `REPORT_TRANSLATIONS_ROW`, parameter names in `PARAMETER_TRANSLATIONS_ROW`.
+- `&lt;DESCRIPTION&gt;` goes inside `REPORT_TRANSLATIONS_ROW` (elsewhere it is silently ignored), broken into short flush-left paragraphs with blank lines, max 4000 bytes incl. CRLF (`ORA-01706` on import). Content: only what the reader cannot infer from the run screen or column headers — grain, derived/as-of columns, cost/date basis, why a column is blank.
+- `&lt;VERSION_COMMENTS&gt;` immediately after `&lt;/SQL_TEXT&gt;`, fresh on EVERY import (omitting it carries the previous comment forward), max 4000 bytes. Decision: a description-only change keeps the previous VERSION_COMMENTS unchanged — version comments describe SQL/parameter changes only. `xxen_reports_h` logs the OUTGOING version at each import, so the newest history row shows the replaced version&#x27;s comment, not the current one. The history row is written only when `sql_text` changed; to fix a comment on an already-imported version, update `xxen_reports_h.comments` of the latest row directly (the one sanctioned exception).
+- **`SORT_ORDER` is the parameter upsert key.** Never renumber existing rows; add new parameters at `max(sort_order)+1` (query it first). The import re-sequences to document order, so a mid-file insert re-keys everything after it — verify with a set comparison of `(name, anchor, normalised sql_text)`, never positionally. For substantial restructures: `xxen_api.delete_report(id,&#x27;Y&#x27;)` then fresh import. Post-import check: no `1=1`/`&amp;lexical` anchor parameter with blank `SQL_TEXT`.
+- Copying a `TEMPLATES_ROW` between reports needs a fresh GUID (templates are matched by GUID globally; reuse overwrites the source&#x27;s template). Remap `DEFAULT_TEMPLATES_ROW/TEMPLATE_GUID` too.
+- A template without a `TEMPLATE_SHARING` row can be picked only by its owner and template super users, and a global default template applies only to users who can pick it: give every delivered template a Site sharing row.
+- `export_report` exports only the session language and omits `&lt;APPS_INITIALIZE_DATA&gt;` and `&lt;ASSIGNMENTS&gt;`. Set `nls_language=&#x27;AMERICAN&#x27;` before exporting on a client whose locale maps to an uninstalled language.
+- Every shipped import file containing `&lt;REPORTS&gt;` must carry `&lt;USER_NAME&gt;ENGINATICS&lt;/USER_NAME&gt;` (seeded marker), or the upgrade import deletes every customer-added parameter. Customer-specific parameters on a seeded report survive upgrades only when imported through the frontend as a real user (`created_by` not -1/ENGINATICS) from a full-copy XML without the marker.
+
+## Report / Upload DESCRIPTION (and parameter text) — use line breaks, NEVER one run-on paragraph
+
+**A report or upload `&lt;DESCRIPTION&gt;` (and any multi-sentence parameter description) MUST be broken into short paragraphs separated by blank lines — never a single run-on block of text.** This has been raised more than once and keeps regressing — treat it as mandatory on every report/upload, not a polish step.
+
+**Why:** the description is rendered **verbatim** in the Forms &quot;Blitz Reports Setup&quot; description editor (a plain multi-line text box with no auto-paragraphing) and on the website report-library page. A wall of text with no breaks is unreadable in both places — the editor shows one long wrapped line.
+
+**Placement — `&lt;DESCRIPTION&gt;` goes INSIDE `&lt;REPORT_TRANSLATIONS_ROW&gt;`, next to `&lt;REPORT_NAME&gt;` — NOT loose in `REPORTS_ROW`.** The description is a *translated* field (stored per language in `xxen_reports_tl.description`). A `&lt;DESCRIPTION&gt;` placed directly under `REPORTS_ROW` (as a sibling of `SQL_TEXT` / `VERSION_COMMENTS`) is **silently ignored on import** — it parses fine, the report/upload imports &quot;successfully&quot;, but `xxen_reports_tl.description` stays NULL and the Forms setup screen and website library page show no description. It must sit in the same translation row as the (translated) report name. Same for uploads (TYPE=U).
+
+**Content — only what the reader cannot work out for themselves.** A description states what the report is for and the non-obvious mechanics behind its numbers; it never repeats what the run screen and the column headers already say. Do NOT document: that a parameter is optional/required or what it defaults to (both visible on the run screen), org-security or any other standard EBS behaviour, which columns a parameter feeds, or the rationale for an obvious design choice. DO document: the grain of a row, a column that is as-of/derived rather than live, the cost or date basis of a value, why a column is legitimately blank, and anything a user would otherwise raise as a bug. Descriptions run long far more often than short — the review question is always &quot;which sentences can go?&quot;, never &quot;what else could I add?&quot;.
+
+**`xxen_reports_tl.description` is `varchar2(4000)`.** A description already near the limit makes an import fail with `ORA-01706: user function result value was too large`, raised from `XXEN_REPORT_EBS.import_xml_file` — the file upload succeeds and only the import step fails, so it reads as a corrupt file rather than an oversized field. Measure the stored description (`select lengthb(xrt.description) from xxen_reports_tl xrt where xrt.report_id=... and xrt.language=&#x27;US&#x27;`) before adding a sentence to a long one.
+
+**Descriptions are part of every enhancement, never a follow-up.** A change that adds a parameter or alters user-visible behaviour updates, in the same edit: the new/changed parameter’s `&lt;DESCRIPTION&gt;` (inside its US `PARAMETER_TRANSLATIONS_ROW`, next to `PARAMETER_NAME` — the run-screen tooltip; 1–2 sentences covering only what the name and LOV values do not already say), and the report `&lt;DESCRIPTION&gt;` when the behaviour deserves a sentence there. A shipped feature nobody can find or understand from the run screen is half-delivered.
+
+**How to apply in the XML:** put **real newlines** inside the `&lt;DESCRIPTION&gt;` element, with a **blank line between paragraphs**. Keep continuation lines **flush-left (no indentation)** — leading spaces in the XML become literal leading spaces in the stored text (mirror how `&lt;SQL_TEXT&gt;` lines sit flush-left). One idea per paragraph: what it lists/does → the why/cause/caveat → any usage hint (e.g. &quot;Use the Category parameter to limit the scope.&quot;).
+
+```xml
+  &lt;REPORT_TRANSLATIONS&gt;
+   &lt;REPORT_TRANSLATIONS_ROW&gt;
+    &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
+    &lt;REPORT_NAME&gt;My Report&lt;/REPORT_NAME&gt;
+    &lt;DESCRIPTION&gt;First sentence - what the report lists or does.
+
+Second paragraph - the why / cause / important caveat.
+
+Final short line - any usage hint.&lt;/DESCRIPTION&gt;
+   &lt;/REPORT_TRANSLATIONS_ROW&gt;
+  &lt;/REPORT_TRANSLATIONS&gt;
+```
+
+**The description is capped at 4000 bytes (`xxen_reports_tl.description varchar2(4000)`) — a longer `&lt;DESCRIPTION&gt;` makes the whole `import_xml` fail with `ORA-01706: user function result value was too large`** (an unhelpful stack inside `XXEN_REPORT`/`XXEN_REPORT_EBS` with no mention of the description). The stored value keeps the XML&#x27;s CRLF line breaks (2 bytes per break). When extending an already-long description, count the unescaped bytes including CRLF and trim wordy prose to stay under 4000 — don&#x27;t drop content.
+
+**`&lt;VERSION_COMMENTS&gt;` is capped at 4000 bytes too (`xxen_reports_h.comments varchar2(4000)`) and fails the SAME way, with the SAME stack — so `ORA-01706` on an import does NOT always mean the description.** The stack is identical to the description case (`XXEN_REPORT` ~4469/4952 → `XXEN_REPORT_EBS` ~1112), so it names neither element. **Measure BOTH elements before hunting** — `python -c &quot;import re;d=open(f,&#x27;rb&#x27;).read();[print(t,len(re.search(b&#x27;&lt;&#x27;+t+b&#x27;&gt;(.*?)&lt;/&#x27;+t+b&#x27;&gt;&#x27;,d,re.S).group(1))) for t in (b&#x27;VERSION_COMMENTS&#x27;,b&#x27;DESCRIPTION&#x27;)]&quot;` — and note this bites hardest when a *review* adds a &quot;what changed and why&quot; paragraph on top of an already-detailed comment, i.e. exactly when the comment matters most. Trim the prose; never drop the record of the change.
+
+**Verify after import** — a NULL/empty `description` (or no row) means **wrong placement** (the `&lt;DESCRIPTION&gt;` wasn&#x27;t inside `REPORT_TRANSLATIONS_ROW`); a non-null description with `newlines=0` is the run-on regression:
+```sql
+select dbms_lob.getlength(xrt.description) desc_len, regexp_count(xrt.description,chr(10)) newlines
+from xxen_reports_tl xrt, xxen_reports_v xrv
+where xrt.report_id=xrv.report_id and xrt.language=&#x27;US&#x27; and xrv.report_name=&#x27;&lt;Report Name&gt;&#x27;;
+```
+Applies to `/build-upload`, `/review-upload`, report conversion, and every hand-authored report/upload XML — write the description with breaks the first time.
+
+## Parameters
+
+### Anchors
+
+- `1=1`/`2=2`... WHERE anchors: `SQL_TEXT` is the bare predicate (never prefixed with `and`). The anchor must be unique in the SQL (the framework injects at every literal occurrence). Use a different anchor only for genuinely different SQL positions (separate UNION branches).
+- `&amp;lexical` anchors: `&amp;amp;` in XML. `build_sql` replaces every occurrence of a lexical anchor, and concatenates the `SQL_TEXT`s of several parameters on the same lexical anchor with no separator (a `1=1` anchor gets ` and` appended, a lexical nothing), so give each parameter its own lexical anchor. A lexical anchor may live inside another lexical parameter&#x27;s `SQL_TEXT` — liveness is transitive; never judge &quot;dead anchor&quot; from the main SQL alone, and match on word boundaries.
+- `:bind` anchors bind the value directly, no `SQL_TEXT`. A self-referencing no-op anchor takes `nvl(:b,&#x27;Y&#x27;)=nvl(:b,&#x27;Y&#x27;)` only when the parameter is optional.
+- Multi-anchor parameters: same name, sub-rows without `DISPLAY_SEQUENCE`; sub-rows never carry `DEFAULT_VALUE`, LOV settings or `REQUIRED`. Hidden parameter = negative `DISPLAY_SEQUENCE` (not omitted).
+- All anchors used must be declared in `&lt;ANCHORS&gt;`, WHERE anchors included: the import fills `xxen_report_parameter_anchors` from that section and `build_sql` injects a parameter&#x27;s `SQL_TEXT` only for a registered anchor. A new `n=n` anchor on an existing report whose `&lt;ANCHORS&gt;` lacks it imports cleanly, the run executes the literal `n=n` and the filter is silently ignored; the executed SQL in the output&#x27;s Parameters sheet is the proof.
+- A filter `SQL_TEXT` naming a column the main SQL does not produce imports cleanly and parses on every run that leaves the parameter EMPTY, because the engine injects a parameter’s fragment only when it has a value. It fails the moment someone uses the parameter, as `ORA-00904: &quot;X&quot;.&quot;&lt;COLUMN&gt;&quot;: invalid identifier` with `ORA-06512: at &quot;SYS.DBMS_SQL&quot;` and the fragment quoted in the message. So a parameter can ship broken for years and every regression test still passes. After changing a report’s select list, check each parameter’s `SQL_TEXT` column against the columns actually produced, and test a run WITH each filter populated, not just the unfiltered one.
+- On a `DB_PACKAGE` report, a selection parameter the package already filters on STILL keeps its `1=1` anchor and `col=:bind` `SQL_TEXT`, and the report must produce that column. The outer predicate is redundant as a filter, but it is what makes the parameter multi-select: moving it to a `:bind` anchor silently drops the run screen’s multiple-values option, since the engine offers that only for an `n=n` anchor with a straightforward `col=:bind` (verify with `xxen_api.multiple_values_allowed`). `QP Customer Pricing Engine Request` keeps `x.pricing_item_code=:p_item` and `x.pricing_category_segments=:p_category` for exactly this reason, even though `XXEN_QP_PREQ`’s item-selection cursors already apply both. The column the filter names must be the one for the entity the package filters on, not the one shown to the user: that report carries the priced item’s category as `category_segments` for display beside the generated Family/Class columns, and the requested item’s as `pricing_category_segments` for the filter, because the engine selects items by the requested item’s category and the two differ on a promotional-goods row. So this is the one place a predicate that cannot change the result set is correct rather than a #50 violation — do not &quot;simplify&quot; it away.
+- Filtering a scalar-subquery-derived column: visible row on a new anchor in the outermost WHERE (`x.derived&gt;=:b`) plus a hidden sub-row with a lossless `exists` semi-join on the inner `1=1` for pruning.
+- A `DB_PACKAGE` report writes each parameter value into a package variable named after the parameter&#x27;s ANCHOR, not the name chosen in the package spec, and only for a parameter that HAS a value. An optional parameter&#x27;s global therefore keeps the previous run&#x27;s value whenever the session is reused (concurrent manager process reuse, add-in session pool), so `beforereport` must copy the globals into private body variables and null the public ones immediately; nulling them in `afterreport` is not enough, as it does not run when the main SQL fails. A value the main SQL binds from the package (a per-run process or sequence id, bound through `xxen_xdo.value`) stays public, is set at the start of every `beforereport`, and needs a hidden `Number` parameter on its bind without a value: the engine binds an untyped package value as a DATE whenever it parses under the session date mask (with a user mask `DD.MM.RRRR` an add-in run binds process id 10075232 as 10-JUL-5232, `ORA-00932`).
+- The engine&#x27;s package binds and `afterreport` call take the `DB_PACKAGE` last set by `xxen_xdo.db_package(&lt;report id&gt;)`: by building a report&#x27;s SQL, and by `xxen_api.db_package(&lt;report id&gt;)` on a result-cache miss. A `beforereport` that parses other reports switches it to theirs, so it must end with `xxen_xdo.clear_db_package` (as `XXEN_REPORT_COLS` does), which also skips its own package binds and `afterreport` for the rest of that run.
+- The engine discards a `DB_PACKAGE` trigger&#x27;s return value (`xxen_xdo.execute_trigger` assigns it to an unused local), so `return false` does not stop the run, and any exception ends the request in Error with the full stack. For an input the user has to correct, end the request in Warning instead: write one log line, call `fnd_concurrent.set_completion_status(&#x27;WARNING&#x27;,&lt;message&gt;)` and return from the trigger; the status is written autonomously, so a `rollback` in `afterreport` does not undo it. A run outside a request (Excel add-in, `fnd_global.conc_request_id=-1`) has no status, so raise the message there: the add-in shows it from `xxen_report_runs.completion_message`. Reference: `XXEN_BOM.warning`.
+- India Localization columns: hidden Char parameter (`1=1`, `SQL_TEXT :India_Localization=:India_Localization`, `MATCHING_VALUE Y`, default `xxen_util.jai_installed`) + one `&amp;il_*` lexical sub-row per fragment. `jai_party_regs` rows serve suppliers and customers (`supplier_flag`/`customer_flag` required in every join; `party_site_id` = `vendor_site_id` or `cust_acct_site_id`). Parse both branches: on a JAI instance and a non-JAI one.
+
+### LOV binding
+
+- A LOV with an `id` column passes the id to `SQL_TEXT`, `$flex$` and bind anchors; without one, the display value. Compare ids to id columns.
+- Multi-select parents in a dependent LOV: `xxen_util.contains(:$flex$.P, col)=&#x27;Y&#x27;`. A parameter is multi-select when its anchor is `n=n`, it is not Date/matching-value, and `SQL_TEXT` is a straightforward `col=:bind` (also inside compound/OR/`in (select...)` shapes). Verify with `xxen_api.multiple_values_allowed(parameter_id)`.
+- A scalar subquery that needs the latest N child rows (notes, comments): use an uncorrelated inline view with `row_number() over (partition by &lt;key&gt; order by &lt;id&gt; desc) rn` and correlate on the key outside it. The two-level form (an ordered inline view with `rownum` inside an `in` list correlated to the outer row) parses standalone on 19c but crashes the session (`ORA-03113`, empty request log, `Program exited with status 1`) once embedded in a large report SQL.
+- Multiple values: `col=:bind`, `&lt;&gt;`, `like`, `not like`, or `col=f(:bind)`; column on the left; `1=1`/lexical anchors only. Never `xxen_util.contains` in `SQL_TEXT`. Lookup-code parameters: `col=to_number(xxen_util.lookup_code(:p,&#x27;TYPE&#x27;,app))`, never wrap the column in `meaning()`.
+- Bind naming: no `p_` prefix; `_id` suffix when the LOV returns an id; plain name otherwise. Never name a bind after an Oracle reserved word (`:resource`, `:level`, `:size`, `:mode`, `:comment`, `:file`): the run fails with `ORA-01745: invalid host/bind variable name`, but only when that parameter has a value, so unfiltered test runs pass.
+- A template default of a validate-from-list parameter is checked against the LOV when the run is initialised (`set_default_and_validate`: a value the LOV does not return is dropped without a message - an organization LOV lists only the organizations the submitting responsibility can access) and again at run time by `xxen_report_ebs.validate_parameter_values`, so a scheduled run of such a template silently runs without that filter. `validate_from_list_dsp` is `nvl(&lt;LOV&#x27;s flag&gt;,&lt;parameter&#x27;s flag&gt;)`: a shared LOV&#x27;s `Y` cannot be switched off on the parameter; to bind a value the list rejects (a schedule-only copy of a report), remove the LOV from the parameter (`parameter_type` Char, `lov_id` null). Detect a dropped default by the empty value in `xxen_report_run_param_vals_tmp` after `initialize_parameter_values`.
+- A parameter&#x27;s `SQL_TEXT` may reference ANOTHER parameter&#x27;s bind (e.g. `:period_name_from` inside a different parameter&#x27;s predicate) — the engine binds every bind in the assembled SQL by name across all active fragments. A foreign bind is null when its parameter is empty, so guard each one (`:b is null or ...`) unless the fragment should only act when that parameter is set. The same holds for the main SQL, and a bind absent from the assembled SQL is skipped: a restriction needed in several query blocks (plan and instance in `MSC Pegging Hierarchy`) is a hidden parameter with a `:bind` anchor used directly in each block, not one `n=n` sub-row per block.
+- A bind in the main SQL takes the value of the parameter whose bind variable has that name, whether or not that parameter&#x27;s anchor occurs in the SQL; a bind that matches no parameter&#x27;s bind variable is bound null without an error. So after renaming a bind in the main SQL, or moving a filter out of an `n=n` anchor into an inline view, check every bind against the parameters&#x27; bind names (a rate view binding `:p_conversion_date1` while the parameter binds `:p_curr_conv_date1` finds no rate and converts at 1).
+- `xxen_api.set_parameter_value_` stores raw values (no LOV resolution): pass ids for id LOVs and `DD-MON-YYYY` dates; to test a multiple-values run, prefix the delimited list with the engine’s marker (`&lt;multiple_values&gt;A;B`) — a bare `A;B` is stored as one literal value and silently matches nothing; it does not evaluate hidden defaults — feed them by evaluating each hidden `DEFAULT_VALUE` with `:$flex$` substituted (filter `display_sequence&lt;0`).
+- Every visible parameter needs a `PARAMETER_TYPE_DSP` (a null type disables the multi-value `like` expansion).
+
+### Matching values, defaults, dependencies
+
+- Different WHERE logic per LOV value → one `PARAMETERS_ROW` per `MATCHING_VALUE` (primary with `DISPLAY_SEQUENCE`, sub-rows without), same anchor; `MATCHING_VALUE` is the LOV id. Never `decode`/`case` in one `SQL_TEXT`.
+- From/To pairs: To defaults from From (`:$flex$.from_param`; dates `last_day(:$flex$.date_from)`).
+- A template parameter default with `LOCKED=Y` (`xxen_report_param_default_vals.locked`) is fixed for template users (`XXEN_REPORT_ACCESS` D/S exempt): `initialize_parameter_values` greys it (`required=&#x27;N&#x27;`, the same sentinel as an empty dependent LOV), `xxen_report.apply_locked_defaults` forces it onto the run values whatever the client submitted (one request-log line per changed parameter), and the required parameters condition (`check_required_params_missing`) is evaluated on the final values after the lock. Shipped example: `BOM Standard Operations Upload`.
+- Dependency handling: `(:$flex$.P is null or col=:$flex$.P)`.
+- `DEFAULT_VALUE` is evaluated single-row (`execute immediate ... into`): 0 or 2+ rows → no default; use `select distinct` when a value can repeat; no `count(...)=1` guard. It is the display value for id LOVs when the id is passed directly. Keep default and LOV restrictions aligned. Don&#x27;t reuse a multi-value download filter as an upload-column default.
+- A `LOV Oracle` parameter takes filter before display from the value set&#x27;s Long List flag (`fnd_flex_value_sets.longlist_flag`, `XXEN_REPORT_PARAMETERS_V`); the import drops `FILTER_BEFORE_DISPLAY_DSP` for it. A value set listing a large master table (all suppliers) is therefore a `LOV custom` with the value set&#x27;s id/value columns and `FILTER_BEFORE_DISPLAY_DSP=Y`, or the add-in downloads the whole list on every open.
+- `LOV Oracle` value sets: `PARAMETER_TYPE_DSP=LOV Oracle` + `LOV_NAME`. Yes/No parameters use the `Yes_No` value set (matching-value pattern for Y/null flags: `Y` → `col=&#x27;Y&#x27;`, `N` sub-row → `col is null`); the shared single-value `Yes` LOV is for on/off filters. Genuinely custom two-option labels stay custom.
+- Shared LOVs first (`content/lovs.xml`; `LOV`+`LOV_NAME`+`LOV_GUID`); `VALIDATE_FROM_LIST=Y` by default; `FILTER_BEFORE_DISPLAY` only for 100k+ LOVs (Item LOVs always). Exported `VALIDATE_FROM_LIST_DSP`/`LOV_QUERY_DSP` next to a shared LOV are the fallback payload for a target lacking it — never strip them; only a literal `N` is invalid.
+- Custom LOV over a security-scoped master table: take the shipped LOV&#x27;s `where` clause verbatim, change only the select list. Standard LOVs: HR Operating Unit `8E2FF36EDEB979D2E0530100007F1FF2`, FND User Name `8E2FF36EDE8479D2E0530100007F1FF2`, FND Responsibility Name `8E2FF36EDE9E79D2E0530100007F1FF2`, GL Ledger `8E2FF36EDEB879D2E0530100007F1FF2`, Yes `8E2FF36EDEA679D2E0530100007F1FF2` (all name-only).
+- Parameter names signal the operator: `X` (exact), `X like` (user wildcards, validate off), `X starts with`.
+- Grey-out until a parent is set: `VALIDATE_FROM_LIST=Y` + flex-dependent LOV with both `id` and `value` returning zero rows until the parent qualifies; incompatible with free typing.
+- Excluding a parameter per template requires it non-required; enforce its effective default in the consuming column (`nvl(:$flex$.p,&#x27;X&#x27;)`); `PARAMETER_EXCLUSION_ROW` name must match exactly.
+- A report XML exported by a current build (no `&lt;PARAMETER_DEPENDENCIES&gt;` element) imported into an older build that still reads it wipes that report&#x27;s dependencies; run `xxen_report.update_parameter_dependencies(report_id)` there after import.
+
+### Access
+
+- `&lt;ASSIGNMENTS&gt;` is a top-level sibling of `&lt;REPORTS&gt;` (nested = silently ignored), rows keyed by `REPORT_NAME`. Levels are full words (`Site`, `Application`, `Request Group`, `Responsibility`, `User`, `Form`, `Function`, `Report`); `APPLICATION_SHORT_NAME` required for Request Group/Form; omit `&lt;DISABLED&gt;` for active rows. Not round-tripped by `export_report`.
+- Reports: derive from the module&#x27;s data — Application level only where no low-privilege responsibility is owned by it; request groups the normal responsibilities use; major-country localization groups; HR via request groups, never Application=Human Resources. Uploads: **Function level only**, update-enabled `type=&#x27;FORM&#x27;` functions (never query-only, never OAF/JSP — such uploads get no assignment).
+- MOAC: pick ONE — (1) `org_id in (select organization_id from mo_glob_org_access_tmp union select fnd_global.org_id from dual where fnd_release.major_version=11)` + optional OU parameter (preferred), (2) required OU parameter with restricted LOV, (3) Ledger/OU advanced-required. `SQL_TEXT` binds `haouv.name=:operating_unit`.
+- INV data with an optional Organization Code parameter: add `mp.organization_id in (select oav.organization_id from org_access_view oav where oav.resp_application_id=fnd_global.resp_appl_id and oav.responsibility_id=fnd_global.resp_id)` to the main SQL (not the Success SQL).
+- FA book security is a VPD policy, not a view predicate: `fa_book_controls_sec` is the APPS synonym of `fa.fa_book_controls` under policy `FA_POLICY` (`fa_security.build_predicate`), which adds `org_id is null or org_id in (select organization_id from per_organization_list where security_profile_id=&lt;FA: Security Profile&gt;)` and nothing at all when the responsibility has no `FA_SECURITY_PROFILE_ID`. FA has no security tables of its own; the profile is an HR security profile. To evaluate book access for a responsibility other than the session&#x27;s, apply that predicate to `fa_book_controls` with `fnd_profile.value_specific(&#x27;FA_SECURITY_PROFILE_ID&#x27;,user,responsibility,application)`.
+- GL flex value security: `(&lt;segment alias&gt;.security_enabled_flag=&#x27;N&#x27; or xxen_util.flex_value_accessible(resp_appl_id,resp_id,value_set_id,value)=&#x27;Y&#x27;)` / `flex_ccid_accessible(...)`, never `gl_security_pkg`. Oracle applies a value set&#x27;s security rules only through segments with Security Enabled, so a value set shared by a secured segment (company) and an unsecured one (intercompany) restricts only the secured one; always test the flag of the segment the list belongs to. In main SQL apply `flex_ccid_accessible` only through the hidden `GL Flex Value Security` parameter (`&amp;gl_flex_value_security` lexical, default `x`, `SQL_TEXT` returning the predicate `from dual where xxen_util.has_flex_value_security=&#x27;Y&#x27;`), never inline: an inline call, even OR-gated on `has_flex_value_security`, runs per row for responsibilities without rules (cache-based, needs init, Discoverer-only on 11i). Acceptance: `Blitz Report Text Search` for `gl_security_pkg` returns 0 rows.
+- KFF segment LOVs: `xxen_util.kff_segment_lov(...)` (returns `id~value~description`), never `fnd_flex_values_vl` (empty for table-validated sets; over-lists dependent segments). Pass all sibling segments as `:$column$` for uploads; shared report LOVs stay parent-less by design.
+
+## Parameter LOV Defaults
+
+- **Reuse existing LOVs first**: Before creating a `LOV custom`, always check `content/lovs.xml` for an existing predefined Blitz Report LOV or Oracle standard LOV that matches. Use `PARAMETER_TYPE_DSP&gt;LOV` + `LOV_NAME` + `LOV_GUID` to reference it. Only create `LOV custom` when no suitable predefined LOV exists. This applies to both reports and uploads.
+- **Validate From List**: Always checked (`Y`) by default on all parameter LOVs
+- **Filter Before Display**: Unchecked by default. Only set it for LOVs with very large datasets (100K+ records) — large master tables (customers, suppliers, items) or large transaction tables (SO orders, AR invoices, etc.). Do NOT set it for small/medium LOVs (form functions, lookups, organizations, etc.) as it adds unnecessary navigation steps. When in doubt, scan `xxen_report_parameter_lovs` for existing LOVs on the same data source to see if they use Filter Before Display.
+- **Default values with ID LOVs**: When the parameter LOV has an `id` column, the `DEFAULT_VALUE` can be the ID directly (e.g. `fnd_profile.value(&#x27;PER_BUSINESS_GROUP_ID&#x27;)`) — no need for a subquery to resolve the display name. The framework displays the corresponding `value` column automatically. The engine validates an evaluated default of an id/value LOV as the id first and falls back to the display value, so a literal default must be the display value.
+- **A function call is a valid `DEFAULT_VALUE` on its own — never wrap it in `select … from dual`.** `xxen_report.default_value_query` turns `fnd_profile.value(&#x27;ORG_ID&#x27;)`, `fnd_global.*`, `xxen_util.*`, `sys_context(...)`, `:$flex$.*` expressions, `sysdate` arithmetic on a Date parameter, a `case … end` and calls of the standard SQL functions (`is_function`) into `select &lt;expression&gt; from dual` itself; only text it does not recognise as a function or a select is taken as a literal.
+- **DEFAULT_VALUE evaluation is single-row, not multi-row** — the framework wraps the expression in a query that effectively does `select &lt;expr&gt; from (&lt;param values&gt;) where rownum=1`. The expression NEVER sees the full multi-value list at once. Two consequences:
+  - You cannot write `case when length(:$flex$.X) - length(replace(:$flex$.X,&#x27;,&#x27;)) &gt; 0 then ... end` to detect multi-value selection inside a DEFAULT_VALUE — the substitution gives you a single value, the comma count is always zero. Such conditionals are non-functional.
+  - If a multi-value report parameter is used as `DEFAULT_VALUE` for an upload column (e.g. `:$flex$.organization_code`), the framework picks ONE of the selected values for the default. That may not be what the user expects.
+- **A `DEFAULT_VALUE` that is a SELECT query defaults ONLY when it returns exactly ONE row — no `count(...)=1` guard needed; use `select distinct` when a value can legitimately repeat.** The framework evaluates a query-form default via `execute immediate &lt;default_query&gt; into &lt;single_var&gt;`, so: 0 rows → `NO_DATA_FOUND` → no default; 1 row → that value is the default; **2+ rows → `TOO_MANY_ROWS` → no default** (it does NOT pick an arbitrary first row). Consequences:
+  - **Never wrap the query in a `(select count(...) …)=1` single-occurrence guard** — it is redundant with the `execute … into` single-row enforcement. Just write the plain query.
+  - **When the query CAN return the same value more than once** (a join fans out duplicate rows of the *same* value), add `select distinct` so those duplicates collapse to one row and the default still applies. When the multiple rows are genuinely *different* values (an ambiguous key), `distinct` won&#x27;t collapse them and no-default is the correct outcome.
+  - **The default query&#x27;s restrictions/joins should match its column&#x27;s LOV query** — same customer/entity universe — so the auto-defaulted value is always one the LOV would also offer. Keep the two in sync (a default keyed off `hz_cust_accounts.status=&#x27;A&#x27;` while its LOV uses a party-usage restriction can default a value the LOV then rejects).
+- **Don&#x27;t reuse a download-filter parameter as an upload-column default** — report parameters whose purpose is to restrict the *download* set (e.g. `Organization Code` filtering which existing locators appear in the template) are a different concept from &quot;what should a brand-new upload row default to&quot;. They look interchangeable but they aren&#x27;t: a multi-value download filter doesn&#x27;t have a well-defined &quot;default value&quot; semantic, and forcing one (by inheriting the parameter) silently picks one of several. For Required upload columns where no single sensible default exists, leave the `DEFAULT_VALUE` unset — `REQUIRED=Y` will surface the choice to the user per row.
+- **Hidden parameters**: Use a negative `DISPLAY_SEQUENCE` (e.g. `-10`). Do NOT omit `DISPLAY_SEQUENCE` — that makes it a sub-row, not a hidden parameter.
+- **SQL_TEXT required for lexical and WHERE anchors**: Parameters using `1=1`/`2=2` or `&amp;amp;lexical` anchors must have `SQL_TEXT` — these are substituted into the main query at runtime. For parameters not used as query restrictions (e.g. hidden helper params), use a self-referencing identity: `:p_param_name=:p_param_name`. Parameters using bind anchors (`:p_param_name`) do NOT need `SQL_TEXT` — the value is bound directly.
+- **Parameter name must reflect its operator behavior** — the user-facing name signals what the parameter does in SQL:
+  - **`X`** (plain) — exact match (`col=:x`). Validate-from-list enforced (no wildcards).
+  - **`X like`** — LIKE operator (`col like :x`). User types wildcards manually (`ABC%`). Validate-from-list must be off.
+  - **`X starts with`** — LIKE with auto-appended `%` (`col like :x||&#x27;%&#x27;`). No explicit wildcards needed by user.
+  - Applies when renaming Item From/To → Item, Supplier From/To → Supplier, etc. If you switch the operator (e.g. `=` → `like`), rename the parameter accordingly.
+- **Shared-LOV flags are authoritative in the DATABASE — but the export XML deliberately carries them, so NEVER strip them from exported content.** When a column or parameter resolves a shared LOV (or an Oracle value set), `xxen_report_parameters.validate_from_list` / `filter_before_display` / `lov_query` are stored **null** and the shared LOV governs. That is enforced by the import itself, not by convention: `import_xml_clob` derives `lov_id` as `coalesce(match by LOV_GUID, match by LOV_NAME)` (value set by name for `LOV Oracle`) and then stores `nvl2(lov_id,null,&lt;..._dsp&gt;)` — same expression for upload columns and parameters. Verified: `validate_from_list` is null for **all 998** shared-LOV upload columns.
+  - **`&lt;VALIDATE_FROM_LIST_DSP&gt;` / `&lt;FILTER_BEFORE_DISPLAY_DSP&gt;` / `&lt;LOV_QUERY_DSP&gt;` next to `&lt;LOV_NAME&gt;`+`&lt;LOV_GUID&gt;` in an export are NOT an override — they are the fallback payload.** When the shared LOV does **not** exist on the target instance `lov_id` resolves to null, the `nvl2` stores the exported query and flags, and the column/parameter imports as a self-contained **custom LOV that still validates**. Deleting them would silently remove that fallback, so a target system missing the LOV would import the column with no query and no validation. The export is intentionally a **superset** of the database row.
+  - So the only genuinely invalid value is **`N`**: on the fallback path it *is* persisted, breaking the `Y`-or-null storage convention (see rule #41 in `coding-standards` skill). Shipped content currently holds these two elements 9,982 times, always `Y`.
+  - If you need different behavior than the shared LOV provides (wildcards, filter-before-display (FBD) off, etc.), either find a different shared LOV (query `xxen_report_parameter_lovs`), fix the shared LOV in `content/lovs.xml`, or switch to `LOV custom` (no shared-LOV reference at all — column/parameter owns its own LOV completely).
+  - Linter rule **L4** therefore flags **only the literal value `N`**, on both PARAMETERS_ROW and UPLOAD_COLUMNS_ROW. It previously flagged the mere *presence* of these elements on any row carrying a `LOV_NAME`, i.e. it read the export as if it were database state — 527 false positives across 69 of the 95 shipped uploads, with zero true positives available to it, and &quot;fixing&quot; them would have stripped the fallback.
+
+## Conditionally Greying Out (Disabling) a Run-Screen Parameter
+
+A run-screen parameter is greyed out / disabled (the Forms field becomes non-editable, `FLEX_NOT_EDITABLE`) **only** when its computed `required` value is `&#x27;N&#x27;`. The engine sets `required:=&#x27;N&#x27;` in exactly one place — `set_single_lov_value` — and the conditions are strict:
+
+1. the parameter is **`VALIDATE_FROM_LIST=&#x27;Y&#x27;`** (this is the gating condition — `set_single_lov_value` is only *called* when `validate_from_list=&#x27;Y&#x27; and filter_before_display is null`), AND
+2. it is **flex-dependent** (its `LOV_QUERY_DSP` references `:$flex$.Parent`) — so the LOV result changes with the parent&#x27;s value, AND
+3. its LOV currently returns **zero rows** (`no_data_found`), AND
+4. it is **not a required parameter** (`required` is null).
+
+The form reads `xxen_report_run_param_vals_tmp.required`: `&#x27;N&#x27;` → greyed + `alterable` off; `&#x27;Y&#x27;` → required colour; null/other → normal editable.
+
+**To gate a parameter (grey it out until a parent is set):** make it a `LOV custom` with `VALIDATE_FROM_LIST_DSP=Y`, and write the LOV so it returns rows only when the parent qualifies, e.g.:
+```sql
+-- greys out until &quot;Include accounts with open invoices&quot; = Yes, then offers 1..999
+select to_char(d.n) id, to_char(d.n) value, null description
+from (select level n from dual connect by level&lt;=999) d
+where :$flex$.Include_accounts_with_open_invoices=&#x27;Y&#x27;
+order by d.n
+```
+The LOV **must expose both `id` and `value` columns** — the engine runs `select x.value, x.id from (&lt;lov&gt;) x`, so a `value`-only LOV raises ORA-00904 and the grey-out never fires.
+
+**Grey-out and free-text typing are mutually exclusive.** Because the grey-out path requires `VALIDATE_FROM_LIST=&#x27;Y&#x27;`, a validate-from-list-OFF (free-text / plain `Number`) parameter is **never** greyed. You cannot have both &quot;disabled until parent set&quot; and &quot;type any arbitrary value&quot;:
+- Want the **grey-out**? Use `VALIDATE_FROM_LIST=Y` + a flex-dependent LOV. The user picks from the list — but if the LOV enumerates the full sensible range (e.g. `1..999`), the user can still *type* any in-range value directly (it validates against the list), which covers most &quot;any number&quot; needs.
+- Want **free typing of any value**? Use a plain `Number` (or validate-OFF) parameter. It will not grey out, but a value that only matters under another parameter is harmless if the main SQL ignores it (e.g. `nvl(:include,&#x27;N&#x27;)&lt;&gt;&#x27;Y&#x27; or :days is not null and ...`) — document that in the report description.
+
+## Multiple Values Parameters
+
+For parameters that support selecting multiple values, use simple `column=:bind` SQL_TEXT. The framework auto-detects these patterns and shows a &quot;multiple values&quot; checkbox. At runtime it replaces `column=:bind` with `column IN (...)`.
+
+**Supported SQL_TEXT patterns:**
+```sql
+column_name=:bind_variable
+column_name&lt;&gt;:bind_variable
+column_name like :bind_variable
+column_name not like :bind_variable
+```
+
+The bind may also be wrapped in a single-argument function and multi-value still works (the framework expands to `column in (function(v1), function(v2), ...)`):
+```sql
+column_name=function(:bind_variable)
+```
+e.g. `mil.inventory_location_type=to_number(xxen_util.lookup_code(:locator_type,&#x27;MTL_LOCATOR_TYPES&#x27;,700))` — see &quot;Lookup-Code Parameters&quot; rule below for why this form is preferred over `xxen_util.meaning(column)=:bind`.
+
+**Rules:**
+- Column must be on the LEFT side: `column=:bind` works; `:bind=column` does NOT
+- Only works with `1=1` or `&amp;lexical` anchors, not `:bind` anchors
+- Do NOT use `xxen_util.contains` in SQL_TEXT — that pattern has the column wrapped in a function on the right side, which defeats auto-detection
+- `xxen_util.contains` is for LOV_QUERY_DSP dependent filtering only (`:$flex$.param` syntax)
+
+**Reference:** [Blitz Report Developer Guide - Multiple Values](https://www.enginatics.com/blitz-report-developer-guide/#multiple_values)
+
+## SQL patterns
+
+- Decision: a currency conversion to another currency never defaults a missing rate to 1. The rate is 1 when the source and target currency are the same (`gl_daily_rates` holds no same-currency rows); otherwise a missing rate leaves the rate and the converted columns blank and the row is still reported. A changes-only filter that compares converted values falls back to the source currency values when a rate is missing, so the row is not dropped.
+- Add columns on nested inline views in the OUTERMOST query; `xxen_util.dff_columns` aliases cannot pass through an inline view. Regression proof: additive diff + unchanged row count.
+- A once-per-transaction column is gated on the report&#x27;s grouping discriminator, not just its row number. Where the SQL unions invoice and adjustment branches that discriminator includes the adjustment id, so the column carries the adjustment&#x27;s own figures: a new amount column must branch on it and read the adjustment&#x27;s own source column, never a subquery keyed on the transaction id, which on an adjustment row is the invoice&#x27;s and double-counts on sum. Grep the SQL for the measure name first — a matching `c_adj_*` column is the tell the report already models it, and an `_abs` allocation-basis column is the near-miss. A null adjustment source renders blank, which is faithful.
+- `DYNAMIC_COLUMNS=Y` is for raw templates only, never a workbook-backed template (check `xxen_report_template_files`); a template&#x27;s grain comes from its workbook, not its column list.
+- A template controls grain: `Distinct` and per-column `Aggregation` wrap the SQL (`group by` every un-aggregated displayed column); columns absent from `TEMPLATE_COLUMNS` are hidden. `MAX` on a varchar2-typed number is a string compare.
+- Freeze panes: `&lt;FREEZE_PANES&gt;Y&lt;/FREEZE_PANES&gt;` on the one template column that becomes the first scrollable column; the columns to its left and the header row are frozen. To freeze a few key columns of a wide report, list them first in the template. With `DYNAMIC_COLUMNS=Y` an unlisted column (category or `&amp;lexical` columns) is placed directly after the nearest listed column that precedes it in the SQL, and unlisted columns ahead of the first listed one go to the very front, inside the frozen area. Seed a freeze on a report template only when it is wider than a screen (about 15 columns) and starts with identifying columns (item, assembly, document number, bank account, customer); a prefix of ledger, operating unit, period or account segments is context, not a key.
+- `xla_transaction_entities` joins: `nvl(xte.source_id_int_1,-99)=id` plus `ledger_id` and `entity_code` (matches the function-based index). Reference it as `xla.xla_transaction_entities` — the unqualified APPS name is a secured view that silently returns zero rows outside a set XLA security context. AP validation date/user come only from XLA `%VALIDATED%` events; the user is `max(created_by) keep (dense_rank first order by creation_date)`.
+- Derived totals reconcile to their components with the same predicate (AR Aging `Past Due Amount` uses the aging-basis decode).
+- A `row_number()=1` gate that undoes the row multiplication of an outer join (e.g. SLA lines) must partition by the identity of the row before that join, never by a parent key: a parent key zeroes the amounts of every other legitimate row of the same parent (AR Aging receipts on two accounts, or a receipt that is both unapplied and at risk). Amounts that exist once per parent (original amount) keep a parent-level rank; order that rank by the row-level partition columns so Oracle computes both with one `WINDOW SORT`.
+- R12 AR &quot;accounted&quot; test for receipt applications and cash receipt history: `posting_control_id&lt;&gt;-3` (set by final Create Accounting, not only by GL transfer). Do not test for an SLA line linked to the application&#x27;s `ar_distributions` row: receipt UNAPP lines are often linked to the cash receipt history distributions instead, so that test drops accounted receipts. Transactions use the `RECEIVABLE` line linked to the REC `ra_cust_trx_line_gl_dist` row (`AR Aging` `Exclude Unaccounted` mirrors Oracle&#x27;s By Account report this way).
+- A chargeback payment schedule must not be joined to `ar_adjustments` on `chargeback_customer_trx_id`: the creating adjustment and its `REVERSE_ADJUSTMENT` both carry it, so the join returns two rows per chargeback. Read the originating transaction through a scalar subquery with `distinct` (AR Aging&#x27;s salesperson of a chargeback).
+- `xla_flex_pkg.get_flex_value_meaning` raises for an unknown constant — use `nvl((select max(flex_value_meaning) from fnd_flex_values_vl ...),constant)`.
+- `no_merge` on inline views to protect a cheap PL/SQL function can cost more than it saves — measure.
+- A pipelined table function driven by an inline view (`from (select ...) s, table(xxen_util.kff_segment_lov(... s.id_flex_num ...)) l`) is called for every row of the merged view when the view&#x27;s filter contains a subquery: the optimizer places that subquery as a `FILTER` above the `COLLECTION ITERATOR`. Put `/*+ no_merge*/` on the inline view&#x27;s select; `no_unnest` there has no effect, since it only acts inside the subquery it is written in.
+- For an empty `VALIDATE_FROM_LIST=Y` parameter without filter-before-display that is required or `$flex$`-dependent, the engine runs the LOV query with `where rownum&lt;3` on every run-screen open and again when a parent changes; value validation runs it with `rownum=1`. Both use the text without its trailing `order by`, which `xxen_util.remove_order_by` finds as the FIRST `order by` in the query: an earlier one (an analytic or `keep (dense_rank first order by ...)`) leaves the sort in place. A pipelined LOV function stops after the rows these checks need, but a sort, `select distinct` or `group by` above it fetches the whole value set first, including any per-value security calls. Keep such LOVs free of blocking operators: in a `kff_segment_lov` LOV over several charts of accounts, deduplicate the driving structures instead, one per value set (`group by fifs.flex_value_set_id` in the `no_merge` view, preferring a segment without Security Enabled with `nvl(min(decode(fifs.security_enabled_flag,&#x27;N&#x27;,fifs.id_flex_num)),min(fifs.id_flex_num))`), as the `GL Segment` LOVs do.
+- A parameter fragment&#x27;s `not exists` subquery with `(:bind is null or ...)` guards is never unnested — it runs as a per-row FILTER — so its correlation must be an index probe (PK/unique, or the row&#x27;s own columns), never an unindexed column of a large table (`gl_je_headers.accrual_rev_je_header_id` has no index: correlating on it scans every header of the period per outer row). If a per-row shape cannot express the test, drop the OR guards (nvl/coalesce sentinels) so the subquery stays unnestable, and verify the plan shape with explain plan, not just the result.
+- Measure a join rewrite at the report&#x27;s widest realistic scope with a full fetch, never a count or a narrow sample: pre-aggregating a large view with `select distinct` before an outer join blocks join-predicate pushdown, so it can win on a few rows and lose by an order of magnitude at full scope. Then run it as a report and read the run cursor&#x27;s plan (`dbms_xplan.display_cursor` on the `XXEN_REPORT - &lt;report&gt;` module): EBS runs with bind peeking off, so the bind plan can differ from the literal test&#x27;s — typically the optimizer starts from a small lookup table (organizations) and scans the driving table&#x27;s date range once per lookup row; pin it with `leading(&lt;driving alias&gt;)` in that query block, and add `no_merge(&lt;lookup view&gt;)` for an inline view whose merged tables the optimizer would otherwise cartesian-join to a driving set it estimates at one row (a price list view joined as all its lines times every transaction); check the hinted statement under literal dates as well as binds, since each exposes a different join order.
+- The optimizer pushes a report&#x27;s join predicate into an outer-joined view only one level deep: if that view outer-joins another non-mergeable view (e.g. `xxen_upload_parameters_v` over `xxen_upload_columns_v`), the inner view is built for all rows and filtered afterwards (plan: `VIEW PUSHED PREDICATE` above a full `VIEW` with a filter on the join key). Put `push_pred(&lt;inner alias&gt;)` inside the outer view; a standalone test of the view filtered by its key does not show the problem.
+- A join predicate is pushed into an inline view with window functions only on a column that is in every `partition by` of the view (`ONT Orders and Lines`: the order line view partitions by `header_id`). A parameter that reaches such a view only through another key (invoice lines joined on `line_id`) leaves the optimizer two plans, both over every line: build the whole view, or cartesian-join all headers of the operating unit to push `header_id`. Add a lossless `&lt;header alias&gt;.header_id in (select ...)` semi-join to that parameter&#x27;s `SQL_TEXT`, driven by an indexed column of the restriction, so the plan starts from the matching headers. A semi-join on an unindexed column (schedule ship date) leaves the plan unchanged, and one placed inside the view is re-executed per pushed header.
+- A `count(*)` test evaluates neither the select list nor its cost; materialise the columns (`set autotrace traceonly statistics`) and compare `buffer_gets` for both shapes.
+- Do not join a lookup table at the outer level of a report built on a multi-branch `union all` view (`mrp_orders_sc_v`, the MSC order views): the optimizer can OR-expand the view (`VW_ORE_*` in the plan) and probe its branches once per lookup row instead of pushing the plan/organization predicate in once. Fetch per-row values keyed on a unique index as correlated scalar subqueries, which keeps the view&#x27;s plan, and compare `v$sql` buffer gets of the concurrent run before and after.
+- A `connect by` whose source is a join, or an inline view joined to another table, builds that join over the whole source before the hierarchy, and under `CONNECT BY WITH FILTERING` once per level: restrict the source inside the inline view (plan and instance for `msc_full_pegging`), not only in `start with`. Never walk each row&#x27;s subtree in a correlated `connect by` scalar subquery (rows × subtree size); enumerate all subtrees once with `connect_by_root` and `group by` the root, as `MSC Pegging Hierarchy` does for its QOH fulfillment status.
+- Run every `n=n` parameter of a `connect by` report once with Multiple Values ticked: its expansion (`col in (select xrrpv.value_char from xxen_report_run_param_values xrrpv ...)`) meets two 19c optimizer defects there that a single-value run never shows. In an inline view that is itself a source of the hierarchical join it can end the session with `ORA-07445 [kkocfbMarkBindFlags]` (the request ends &#x27;Program exited with status 1&#x27; with an empty log; the incident is in the alert log): put the predicate one inline-view level deeper. In `start with` on a column computed by a correlated scalar subquery it returns roots that do not match (null values pass the `in`): produce that column through an outer-joined inline view instead.
+- `oe_price_list_lines` is a synonym for `qp_price_list_lines_v`, whose `inventory_item_id` is a PL/SQL function of the list line, so a join on it cannot use an index: the optimizer joins the price list by cartesian product and evaluates the function per candidate row (55 million calls in one run). Join the base tables: `qp_list_lines` (`list_line_type_code=&#x27;PLL&#x27;`, `operand` is the list price) to `qp_pricing_attributes` on `list_line_id` with `product_attribute_context=&#x27;ITEM&#x27;`, `product_attribute=&#x27;PRICING_ATTRIBUTE1&#x27;` and `product_attr_value=to_char(&lt;item id&gt;)`, plus `mtl_system_items_b` for `organization_id=qp_util.get_item_validation_org`, which the view applies too.
+- Every lookup view outer-joined per line runs as `VIEW PUSHED PREDICATE` with its own `SORT GROUP BY` per driving row, so sibling views over the same tables (one per tax type, one per discount type) cost one probe and one sort each per row: merge them into one conditional-aggregation view. A lookup keyed on a header-level column (salesrep, `customer_trx_id`) is cheaper as a scalar subquery with `/*+ no_unnest */` — without the hint 12c unnests it into a `VW_SSQ` pushed view and the per-value cache is lost — and the key column, not the looked-up value, goes into the `group by`.
+- `fnd_flex_xml_publisher_apis.process_kff_combination_1`&#x27;s 7th argument takes a segment qualifier (`GL_BALANCING`, `BASED_CATEGORY`) or a segment NUMBER, so a run-screen &quot;which segment&quot; parameter can drive it directly; a NULL there ends the session with `ORA-03113`, so wrap a parameter-driven one in `case when :p is not null then ... end`. Its `DESCRIPTION` mode returns the description CUT to the segment&#x27;s display width (25 characters on the Vision account segment, 20 on cost center and on both category segments, against category descriptions of up to 53), so read descriptions with `xxen_util.segment_description(value, application_column_name, id_flex_num[, parent_value, application_id, id_flex_code])` instead, which returns the whole value; it resolves a dependent value set only when given the parent segment&#x27;s value, so `coalesce` the parent form, the parentless form and the flexfield api. Resolve the segments once per combination in a `/*+ no_merge */` inline view restricted to the combinations the report uses (`in (select ... from &lt;driving table&gt;)`), never per row: ten per-row calls over 729 rows ran for minutes, the same report 0.7 s through the inline view. A `count(*)` test hides the cost because the optimizer drops the unreferenced calls.
+- Item cost &quot;last update&quot; = `max(cicd.last_update_date)` from `cst_item_cost_details`, not the header.
+- `org_access_view` is every inventory organization times every `fnd_responsibility` row (end-dated included), each pair tested with an `org_access` probe, so an unrestricted query costs organizations × responsibilities (68 million buffer gets on 38,000 responsibilities). Every responsibility sees the organizations that have no `org_access` rows, so evaluate the view once for those (any responsibility, minus organizations present in `org_access`) and per responsibility only for responsibilities present in `org_access`, as `FND Responsibilities` does. Restricting the view to the selected responsibilities with a semi-join does not help: the optimizer then joins them to every HR organization before the inventory-class filter.
+- Joins between data dictionary and `v$` views get pathological plans because their fixed tables have no useful statistics: `dba_data_files` joined to `dba_tablespaces` and `dba_free_space`, `dba_users` with `dba_users_with_defpwd` and `dba_ts_quotas`, and `gv$undostat` with `gv$tablespace` and `gv$parameter` each took 10-60 s, although each view alone answered in about a second. Wrap the driving view in `(select /*+ no_merge*/ ... )`, join per-key aggregates as grouped `no_merge` inline views instead of correlated scalar subqueries, and time the whole statement, never the views one by one. A `no_merge` on the wrong view makes it worse (on `dba_tablespaces`: 0.6 s to 12 s).
+- `v$resource_limit` returns no rows inside a pluggable database, and EBS on 19c always runs in one. A report on it needs a fallback for that case: count `gv$process`/`gv$session` against the `processes`/`sessions` values in `gv$parameter`.
+- Decision: a DBA or system administration report gets a parameter that restricts the output to the problem state (`Not Running only`, `Errors only`, or a threshold such as `Max Used Percent From`), so it can be scheduled as an alert. A scheduled run that returns no rows sends no email.
+
+## Templates and pivots (engine)
+
+- **A template hides a column with a `TEMPLATE_COLUMNS_ROW` that carries the `COLUMN_NAME` and NO `DISPLAY_SEQUENCE`.** The `hidden` column on `xxen_report_template_columns` does not exclude anything — it only pushes a column to the end of the sheet. A column with no row at all is pulled IN when the template has `dynamic_columns=&#x27;Y&#x27;` (`XXEN_REPORT.pkb`: &quot;excluding only manually hidden ones having xrtc.display_sequence=null&quot;). So a template whose export lists a subset of the columns hides nothing — it only orders the ones it names, and every other column still appears. Judge a template by its sequence-less rows, never by which columns the export lists.
+- **`xxen_report_template_columns_v` filters out the sequence-less rows**, so counting hidden columns through the view returns zero for every template on the instance and reads as &quot;nothing is ever hidden&quot;. Count against the base table `xxen_report_template_columns`.
+- Dynamic columns (`xxen_util.dff_columns`, `item_category_columns`) resolve to instance-specific names (`Family`, `Inv.Items Description`), are stored as template column rows but are NOT exported, and arrive through `dynamic_columns=&#x27;Y&#x27;`. Never write hidden rows for them: the names change with the parameter that generates them.
+- Pivots are definition-only (`refreshOnLoad`); Excel renders on open. Tabular layout must set `compact=&quot;0&quot; outline=&quot;0&quot; defaultSubtotal=&quot;0&quot;` on EVERY field incl. page/unused/value fields (minutes-long refresh otherwise). Compact page/row/column fields carry `&lt;items count=&quot;1&quot;&gt;&lt;item t=&quot;default&quot;/&gt;&lt;/items&gt;`; tabular fields none. PDF output and multi-sheet overflow skip the pivot (`skip_pivot`, warning suggests a Data-Model pivot in an uploaded template). Test pivot changes on &gt;100k rows.
+- The built-in `TEMPLATE_PIVOT` cannot put subtotals on SOME levels: `PIVOT_LAYOUT=&#x27;T&#x27;` writes `defaultSubtotal=&quot;0&quot;` on every field, and the default layout subtotals every row level, above the group, with all row fields nested in one compact column. A group-left layout with subtotals on chosen levels only (an RXi attribute set, a Discoverer group sort) needs an uploaded workbook. `FIELD_TYPE` is `FILTER`, `ROW`, `COLUMN` or `VALUE` - `PAGE` counts towards `pageFields` but produces neither an `axis` nor a `pageField` child, so the pivot loads empty.
+- **`import_xml` DELETES a template&#x27;s workbook when the imported `TEMPLATES_ROW` carries no `&lt;FILE_DATA&gt;`** (`xxen_report_template_files` goes to zero rows and the template silently reverts to a raw column list). A hand-edited content file therefore cannot ship a workbook-backed template: hand over `xxen_api.export_report(report_id,null,null,&#x27;Y&#x27;,&#x27;Y&#x27;)` instead, which embeds each workbook as base64, and replace the `&lt;APPS_INITIALIZE_DATA&gt;` block it writes from the exporting session with the seeded `ENGINATICS`/`SYSTEM_ADMINISTRATOR`/`SYSADMIN` marker. Round-trip the result before handing it over - a re-import must leave the part count unchanged.
+- Building a template workbook from scratch is reliable through Excel automation (`New-Object -ComObject Excel.Application`; wrap every call in a retry, Excel rejects calls with `RPC_E_CALL_REJECTED` while it is busy). Copy the shipped shape: data sheet FIRST and named after the report, headers exactly as the engine writes them plus one sample row, `AutoFit` so the sheet gets its `&lt;cols&gt;` block, a defined name `SourceData` = `OFFSET(&#x27;&lt;data sheet&gt;&#x27;!$A$1,0,0,COUNTA(&#x27;&lt;data sheet&gt;&#x27;!$A:$A),COUNTA(&#x27;&lt;data sheet&gt;&#x27;!$1:$1))`, the pivot built on that name with `RefreshOnFileOpen` set, and a `Parameters` sheet last. Register with `xxen_report.upload_excel_template(template_id, &lt;fnd_lobs file_id from FNDGFU&gt;)`. To read back what Excel actually renders, open the output, save a copy and parse that - the generated file holds only the pivot definition.
+- The engine keeps an uploaded template&#x27;s data-sheet `&lt;sheetView&gt;`, so freeze panes set in the template survive generation: freeze below the header row on the data sheet and below the pivot&#x27;s filter and header rows on the pivot sheet, or both scroll out of sight.
+- Excel object model traps when scripting a pivot: `xlDoNotRepeatLabels` is 1 (2 REPEATS them), a field promoted to the page axis is placed ABOVE the ones already there so the filters are added bottom up, `PivotField.Position` does not reorder page fields, and `HasAutoFormat=False` also switches off the column auto-fit on refresh, which leaves every column at the sample row&#x27;s width.
+- A page field on a parameter the report can only run one value of renders as `(All)`, not that value, so it tells the reader nothing: make such a column the leading ROW field instead, where it shows the value once. For a report-style pivot also set `ShowDrillIndicators=False` (the in-cell +/- buttons) and `Workbook.ShowPivotTableFieldList=False`. `DisplayFieldCaptions` cannot be used to drop the filter drop-downs: in a tabular layout the captions ARE the column headings and go with them.
+- Uploaded template data sheet must contain a `&lt;cols&gt;` block (auto-fit while sample rows exist) and no `xl/calcChain.xml` (strip it and its declarations), or the generated file is malformed. Diagnose with `ET.fromstring` per sheet part.
+- The data sheet is the worksheet named after the template (`xxen_report.sheet_name`), else the FIRST worksheet; the resolved answer is stored as `xxen_report_template_files.sheet_type=&#x27;data&#x27;` and in the XML as `&lt;DATA_SHEET_FILE_NAME&gt;` — read that rather than inferring, because the template-named sheet is often the pivot sheet. `sheetN.xml` numbering follows neither tab order nor creation order; resolve a sheet by name through `workbook.xml` and its rels.
+- Adding a column to a workbook-backed template shifts five positional places: the data sheet `&lt;cols&gt;`, `cacheField` order (each carrying its own `numFmtId`) and `fieldGroup/@base`, the pivot tables&#x27; `@x`/`@fld`/`@baseField`, `_xlnm._FilterDatabase`, and the report XML&#x27;s `&lt;TEMPLATE_STYLES&gt;`. Remap the workbook accordingly; `&lt;TEMPLATE_STYLES&gt;` must be remapped by hand because `import_xml` loads it verbatim and only `upload_excel_template` re-derives it from the workbook. Verify by name resolution — every `@x`/`@fld`/`@baseField` must resolve to the same column name before and after and every `numFmtId` must be unchanged. A date rendering as a raw serial after an insert is its `numFmtId` left on the wrong `cacheField`.
+- `&lt;TEMPLATE_STYLES&gt;` `&lt;CELL_IDENTIFIER&gt;` is a column letter (whole column) or a header cell (`H1`), and the workbook `&lt;cols&gt;` carries widths only, so it is the single source of column formatting: give every new column a header-cell row, an amount style if it is money, and a `&lt;cols&gt;` width or its header clips. Audit the whole amount set from the parsed `xxen_report_sql_columns` data types, excluding numerics that are identifiers or rates. A dynamic `SourceData` name (`OFFSET(..,COUNTA(..),COUNTA(..))`) sizes itself to new columns and beats a literal `ref`, but does not fix the positional formatting above.
+- Power Query templates: load to the **Data Model only** (Table and Data Model reintroduces the 1M ceiling and a second model table); `update_connection_refresh` sets `refreshOnLoad` on `type=&quot;100&quot;` connections when `xl/model/item.data` exists (never on `type=&quot;5&quot;`); a `WorksheetConnection_…` PQSOURCE model table cannot refresh — rebuild the pivot on the query-fed table; a `worksheetSource name=&quot;Table1&quot;` pivot sees only the first data sheet — use From Data Model. Test with a scratch template (`xxen_xdo.copy_template` + FNDGFU + `upload_excel_template`).
+- Dashboard templates: KPI cards read pivots via `GETPIVOTDATA` (`ColumnGrand` = bottom total row); set `HasAutoFormat=False` on a pivot sharing a sheet with hand-placed layout.
+- A template that the LOV lists but that opens as a BLANK Templates window with no error, while its row, columns, sharing and `usable` all check out, has a leading/trailing blank in `template_name`. Forms trims the value when it is returned into the item; `populate_template` and `template_id` then match `template_name` with a plain `=`, find nothing, and `query_template` skips the query. The importer trims (`xxen_xdo` `trim(substrb(doc_name…))`) but `import_xml` stores `TEMPLATE_NAME` verbatim, so the padding arrives through a hand-built or tool-built XML, or a name typed with a trailing space in the form. Diagnose with `template_name&lt;&gt;trim(template_name)`; fix by trimming (the unique index `xxen_report_templates_u3 (report_id, template_name)` rejects a collision).
+
+## A template controls ROW GRAIN, not just columns — `Distinct` and per-column `Aggregation`
+
+A report template is not only a column chooser. `xxen_report.add_template_clause` wraps the whole report SQL:
+
+```sql
+select [distinct] &lt;template columns, aggregated where AGGREGATION is set&gt;
+from ( &lt;report sql&gt; ) x
+[group by &lt;every displayed column that has NO aggregation&gt;]
+[having &lt;&amp;template_having_clause&gt;] [order by ...]
+```
+
+So hiding detail columns alone does NOT collapse rows — but the **Distinct** checkbox (`xxen_report_templates.distinct_flag`) and the per-column **Aggr.** dropdown (`xxen_report_template_columns.aggregation`, values SUM/COUNT/MIN/MAX/AVG/COUNT_DISTINCT) both do.
+
+- **Every displayed column without an aggregation goes into the GROUP BY**, so one un-aggregated detail column re-splits the rows. The `group by` is only emitted when at least one column carries an aggregation.
+- **A column with no `TEMPLATE_COLUMNS_ROW` at all is hidden**, unless the template sets `DYNAMIC_COLUMNS=Y`, which includes every unlisted column. Leave it off on a summary template or a later SQL change silently re-splits the output. A row that IS listed but has no `DISPLAY_SEQUENCE` is hidden either way.
+- Aggregated columns are auto-labelled in the output header, e.g. `Start Quantity (Sum)`.
+- **`MAX` on a VARCHAR2-typed numeric column is a STRING comparison** (`&#x27;9&#x27; &gt; &#x27;10&#x27;`). Check the parsed `data_type` before choosing MAX — see coding-standards #65 for the `decode(x,0,null,x)` idiom that causes numeric columns to be typed varchar2.
+
+**Distinct alone is usually the wrong tool for a parent/child report.** Where a parent-level value is deliberately emitted on only the FIRST child row — the `decode(row_number() over (partition by &lt;parent&gt; order by &lt;child&gt;),1,&lt;value&gt;)` idiom — Distinct yields exactly **two** rows per parent: one carrying the values, one all-null. Verified on a 10,283-row WIP Entities extract: Distinct gave 2 rows for all 1,172 jobs, whereas aggregating the quantity columns gave 1 row per job with the totals unchanged.
+
+**WIP operation quantities are additive per job — except on eAM maintenance work orders.** Summing the operation-level position quantities (in queue, running, waiting to move, rejected) reconciles exactly to the job&#x27;s remaining quantity, and operation scrapped reconciles to job scrapped. On discrete and lot-based jobs this holds without exception, but many maintenance jobs exceed their start quantity, because eAM operations are parallel tasks against one asset rather than a serial material flow. `wip_operations.quantity_completed` is the one genuinely non-additive column on any entity type — it counts a unit again at every operation it clears; its job-level equivalent is `wip_discrete_jobs.quantity_completed`, which is already a separate report column.
+
+## RXi (Report eXchange Designer) reports
+
+- An RXi report is a pair: `RX-only: &lt;name&gt;` runs a PL/SQL extraction that fills an interface table, and `RXi: &lt;name&gt;` only formats that table according to the attribute set picked on its run screen. Convert the extraction, never the formatter. `fa_rx_reports` gives the interface table and the concurrent program; the extraction is the concurrent program&#x27;s executable (`FARX_C_&lt;x&gt;.&lt;proc&gt;` delegating to `FARX_&lt;x&gt;`).
+- Inside the extraction, `fa_rx_util_pkg.assign_column(seq, select_expression, interface_column, plsql_target, type)` IS the select list and the ITF column each value lands in - a null select expression means the value is derived in the `after_fetch` trigger instead, and a null interface column means it is fetched but never stored. `fa_rx_util_pkg.From_Clause` / `Where_Clause` hold the rest of the statement; `build_select` adds no `distinct` and no `order by`.
+- Attribute sets are the templates: `fa_rx_attrsets_b`/`_tl` (one per set) and `fa_rx_rep_columns_b`/`_tl` (`display_status`, `attribute_counter` for the displayed order, `ordering`, `break`/`break_group_level`). Map displayed columns in `attribute_counter` order to `TEMPLATE_COLUMNS.DISPLAY_SEQUENCE`, and `ASCENDING` to `SORT_ORDER`.
+- Baseline an RXi report without the run screen: submit `RX-only: &lt;name&gt;` to fill the interface table, then submit the RXi program with `PUBLISH &lt;the RX-only request id&gt; &lt;report id&gt; &lt;attribute set&gt; HTML` as its first five arguments (`FARXPBSH` also takes `DIRECT &lt;report id&gt; &lt;attribute set&gt; (TEXT|HTML|CSV) [args]`). Wrong arguments complete with `Invalid Arguments` and print the usage into the request log. The HTML output is one clean table with the group values blanked and the subtotal rows labelled, which is the layout to reproduce; the TEXT output wraps every row over several lines and is worth reading only for the page header.
+- The OFA RXi population is `fa_rx_reports` joined to `fnd_concurrent_programs`/`fnd_executables` for `application_id=140` - 30 rows, each naming its extraction procedure and interface table, with the attribute set count from `fa_rx_attrsets_b`. Three further RX-only/RXi pairs have no `fa_rx_reports` row of their own (`RXFAACA`/`RXFAADA`/`RXFACCA`, the Asset Cost / Accum Deprn / CIP Cost Balance &quot;(Alternate)&quot; programs): they are not extra reports, `FA_RX_ALT_BAL` calls the same `farx_bl.*_balances_rpt` routines as `FARX_C_BL` and differs only in the argument layout that sets the group-depreciation drill-down style, which a converted report exposes as a parameter. When judging which are worth converting, classify with the evidence-based taxonomy in `custom-reports-migration` skill (complete map / partial map / new report) rather than inventing one, and heed its gate: a column-name comparison is not a classification, the data sources and the row grain decide it.
+- Do not reproduce the framework&#x27;s defects: `fa_rx_flex_pkg.get_description` walks a value set only until the first value asked for and returns the bare code for every value it did not reach, so its description columns are mostly codes; a segment number tested with `&lt;&gt; &#x27;&#x27;` is never true, so the specified-category-segment columns are always null; and choosing a category segment without both value bounds binds variables the statement does not contain and ends the run with `ORA-01006`.
+- The FA balance reports (FASCOSTS, FASRSVES and their Blitz conversions on `XXEN_FA_FAS_XMLP`) take `fa_adjustments.source_type_code` through `fa_balrep_pkg` unchanged, so a RESERVE or REVAL RESERVE row can carry source `ADJUSTMENT` (an impairment on a revalued asset, group depreciation). FASRSVES has no bucket for it and flags the row out of balance with the impairment as the amount; `FARX_BL` (bug 9293000) adds it to its Adjustments figure together with tax and revaluation.
+- FASCOSTS prints one column after Retirements, and `caprevalformula` fills it with Revaluation for COST but Capitalization for CIP COST, so Oracle&#x27;s CIP layout never shows revaluation although its out-of-balance test counts it.
+- `XXEN_FA_FAS_XMLP` stages the balance rows into `msc_form_query`, a session-scoped global temporary table. To test a movement the instance has no data for, insert synthetic rows for a real asset and distribution in your own session and run the report SQL directly; other sessions cannot see them.
+- RXi&#x27;s balance reports (`FARX_BL`) fill `FA_BALANCES_REPORT_GT` with their own copy of the extraction, not `fa_balrep_pkg`, so they can differ from FASCOSTS/FASRSVES and the Blitz conversions on edge rows: on the development instance OPS CORP the CIP asset 100335 (one zero-cost `B` deprn detail row) is listed with zeros by FASCOSTS and Blitz and omitted by RXi, with identical totals. OPS CORP CIP assets 100343, 100401, 100641 and 100642 have no `fa_adjustments` rows, so all three reports show their ending balance with no addition and flag them out of balance; that is Vision data, not a report defect.
+
+## Discoverer-migrated content
+
+- Hardcoded worksheet conditions become per-template excluded parameters that still apply their template default (engine change in `initialize_parameter_values`); identification is by origin (`parameter_value` null), never by name/operator. Their SQL text can carry literal values, which then AND with whatever the user picks on the run screen — a template that silently forces another company or ledger returns no rows for any other selection.
+- Output file name token `&lt;template_name&gt;` underscores blanks; `&lt;template name&gt;` keeps them; `report_host` only recognises the underscore spelling when no template is selected — change both or neither.
+- The Output File Name option names the browser download and the email attachment in both delivery modes; it takes plain text as well as tokens. Without it both carry the default name (report and template by profile Blitz Report File Name Convention, plus the run&#x27;s date and time); the Server File Name never names them. A date token in the option resolves to the time it is evaluated, not the run start, so two evaluations can differ by a second.
+- The server folder copy is named by the Server File Name option for every format, and by the output file&#x27;s name (report, template, request id) when the option is empty; the Output File Name never names it.
+- The email subject and body come from the FND message named in profile Blitz Report Email Subject Message / Body Message (name starts with `XXEN_REPORT_EMAIL_SUBJECT` / `_BODY`, 30 characters at most), in both delivery modes. Tokens (`xxen_bes.replace_subject_tokens`): `&amp;REPORT_NAME`, `&amp;TEMPLATE_NAME`, `&amp;OUTPUT_FILE_NAME` (the attachment name of the advanced delivery without its extension), `&amp;ROW_COUNT`, `&amp;SITE_NAME`, `&amp;DB_NAME`, `&amp;USER_NAME`, `&amp;REQUEST_ID`. The advanced delivery reads the message at each run; the standard delivery stores the text on the request&#x27;s delivery option, which `report_host` writes at the first run and EBS copies to every next occurrence of a repeating request. A schedule therefore keeps the subject of its first run: a changed message or profile reaches it only when it is cancelled and submitted again, so set the subject up before submitting schedules.
+- A failed email ends the request in Warning in both delivery modes: the advanced delivery&#x27;s mailer exits with status 1 when it cannot send, and `XXEN_REPORT.prog` and `XXEN_UPLOAD.prog` report that, and a missing SMTP host or port, as Warning with the mailer&#x27;s error in the request log. Both modes accept recipients separated by `,`, `;` or line breaks.
+- A converted report over a multi-branch `union all` view that burns CPU for hours with almost no I/O and produces no rows has been OR-expanded once per branch. Read the outline data (`dbms_xplan` with `ADVANCED`): `USE_CONCAT` repeated per branch with `OR_PREDICATES(n)` in the tens, alongside `OPT_PARAM(&#x27;_optim_peek_user_binds&#x27; &#x27;false&#x27;)` which EBS sets site-wide so the optimizer never sees that the run-screen values are selective. Both are correctable on the statement alone — `select /*+ opt_param(&#x27;_optim_peek_user_binds&#x27;,&#x27;true&#x27;) no_expand */` — with no change to the view. Check the outline first: AWR stores no predicate information, so it is the only evidence available once the cursor has aged out.
+- A run-screen range filled with a match-everything pair (`0000` to `zzzz`) costs more than leaving it blank, because an unset parameter is dropped from the anchor entirely while a filled one adds a predicate that selects every row. Clear ranges that are not needed rather than widening them.
+- `col between decode(:from,&#x27;%&#x27;,col,:from) and decode(:to,&#x27;%&#x27;,col,:to)` is a Discoverer carry-over naming the column on both sides of its own predicate, which defeats cardinality estimation and index access. The engine already omits unset parameters, so rewrite it as a plain `col between :from and :to`.
+- Correlated scalar subqueries carrying `and rownum=1` are the usual per-row cost in a converted view and are evaluated once per output row. Only cutting rows cuts them, so make the filters selective instead of rewriting the subqueries.
+
+## Supplier Scheduling (CHV)
+
+`chv_schedule_headers`/`_items`/`chv_item_orders` (normalised buckets; `RELEASE` rows carry `document_shipment_id`)/`chv_horizontal_schedules` (7 `row_type` rows × `column1..60`, dates as `&#x27;YYYY/MM/DD&#x27;` strings). Un-pivot with `table(xxen_util.rowgen(60))` + 60-way decode + `max(case row_type ...)`. On-time-delivery (OTD) spine = release shipments, requested = `min(due_date)`, receipt = earliest `RECEIVE` in `rcv_transactions`.
+
+## ASCP / MSC planning server data model
+
+- `MSC_CATEGORY_SETS` holds ONE row per category set NAME, shared by every source instance -- not one row per instance. `MSC_CL_ITEM_ODS_LOAD` (run by Planning ODS Load Worker) inserts a row only when no row with that name exists anywhere, with `SR_INSTANCE_ID` of -1 and `SR_CATEGORY_SET_ID` set to the same sequence value as `CATEGORY_SET_ID` (Oracle&#x27;s own comment: &quot;dummy value to satisfy the unique constraint&quot;). Every later collection then UPDATEs that shared row, overwriting `SR_INSTANCE_ID`, `DEFAULT_FLAG`, `DESCRIPTION` and `CONTROL_LEVEL` with the instance being collected.
+- So `msc_category_sets.sr_instance_id` records the LAST instance to collect that name and is NOT ownership. Never restrict a category set by it -- `mai.instance_id = mcs.sr_instance_id`, `mcs.sr_instance_id = mov.sr_instance_id`, `sr_instance_id = :$flex$.Instance_id`. On a multi-source planning server such a predicate silently hides most category sets, and returns nothing at all for any instance that was not collected last. `default_flag` is global and last-writer-wins for the same reason.
+- The real source id lives ONLY in `MSC_CATEGORY_SET_ID_LID` (`sr_instance_id` + `sr_category_set_id` -&gt; the shared `category_set_id`). `msc_category_sets.sr_category_set_id` is the dummy and always equals `category_set_id`; never join it to `mtl_category_sets`.
+- `msc_item_categories.category_set_id` is the shared surrogate and its `sr_instance_id` is the collecting instance, so a row for instance A legitimately points at a category set row stamped instance B. That is by design, not a collection fault. Scope categories by `mic.sr_instance_id`, which is a real instance column, and join `mic.category_set_id = mcs.category_set_id` with no instance predicate on `mcs`.
+- `category_set_id` is globally unique (`MSC_CATEGORY_SETS_U1`), so a lookup keyed on `category_set_name` alone returns exactly one row (no `rownum`), and a scalar subquery keyed on `category_set_id` cannot raise `ORA-01427`.
+- A single-source dev instance cannot reproduce any of this: there the surrogate, the dummy and the real source id all coincide and every row carries the one instance, so a wrong instance predicate is a silent no-op that tests clean. Check multi-source assumptions against the collection source (`MSC_CL_ITEM_ODS_LOAD` in `all_source`), never against the development instance, a 12.2 instance or an ASCP Vision instance.
+- A `:$flex$` reference reaches the SQL as `sys_context(&#x27;XXEN_FLEX&#x27;,...)`, which Oracle evaluates locally and never ships across a database link. A `@A2M_DBLINK` LOV or default that filters a remote table by it inside an unnested `exists` or join pulls the WHOLE remote table across the link (`msc_item_categories` for the Category Set LOV: minutes per run-screen default and validation on a large planning server). Join the flex-filtered table (`msc_apps_instances`) in the outer query and probe with `exists (select /*+ no_unnest */ ...)` correlated on its columns, or, where the remote rows are the result (Category LOV), join with `leading(&lt;flex-filtered aliases&gt;) use_nl(&lt;remote table&gt;)`: nested-loop and correlation values are shipped as binds, so each probe runs as an indexed query on the planning server. Check the remote SQL with `dbms_xplan.display(null,null,&#x27;BASIC REMOTE&#x27;)` over a loopback link; a `REMOTE` line without a `WHERE` is the defect.
+- MSC content reaches the planning server through `&amp;a2m_dblink` when Blitz Report runs on the EBS source. Oracle then executes the query on the source and makes every per-row lookup and `msc_get_name&amp;a2m_dblink` call a network round trip (2,652 rows in 70 s). Write the main query block so that it executes on the planning server as a whole, as `MSC Pegging Hierarchy` does. Every function goes through the link (`xxen_util.meaning&amp;a2m_dblink` too; Blitz Report is installed there). No subquery in `START WITH` (ORA-02016): mark the start rows with an outer join to a start-row view instead. No correlated subquery in the source view of a `connect by` (ORA-02070 on 19.21, accepted on 19.29). No WITH block referenced twice, because it is materialized locally. No select-list expression that computes a DATE (`trunc`, date arithmetic, `to_date`, `sysdate`): return the raw date and truncate it in an enclosing `/*+ no_merge(x) */` select. Verify with `explain plan` through a loopback link on the development instance (`create database link ... using` its own service, dropped afterwards): the block must show as one `REMOTE` operation, and every parameter&#x27;s `SQL_TEXT` must keep it that way.
+
+## AR customer payment terms — four independent fields, never nvl across them
+
+- A customer carries four unrelated payment term fields. Each report or upload column reports exactly one of them; an `nvl` across two makes a single column report a different field from row to row, depending only on whether the first source happens to be populated.
+  - `hz_customer_profiles.standard_terms` with `site_use_id is null` — the AR profile term at account level (Customer form Profile tab), what AR invoices on.
+  - `hz_customer_profiles.standard_terms` with `site_use_id is not null` — the same at site-use level. The form allows a profile only on `BILL_TO`, `DUN` and `STMTS` site uses, but seeded and API-created data carries one on other purposes (Vision has 410 active `SHIP_TO` ones in OU 204 alone), so outer-join on `site_use_id` and let it return nothing rather than restricting by site use code.
+  - `hz_cust_site_uses_all.payment_term_id` — the site use Order Management term, the rung OM defaults an order from.
+  - `hz_cust_accounts.payment_term_id` — obsolete in R12 (decision): never report it and never feed it to the pricing engine.
+- Name the column after its source (`account_profile_payment_term`, `site_profile_payment_term`, `site_use_payment_term`), unless the report already disambiguates by a level prefix — `QP Customer Pricing Engine Request` uses `customer_`/`ship_to_`/`bill_to_`/`price_list_`/`pricing_`, so there the bare name is correct and renaming would only churn its templates.
+- Error signature: a `Site Payment Term` populated on a Ship To row while every other `Site `-prefixed profile column on that row is blank. Counting how many rows of each `Site ` column populate per site use code finds it in one query.
+- `XXEN_QP_PREQ`’s customer cursor builds the pricing request payment term from the same choice, and that value is passed to the engine as `oe_order_pub.g_hdr.payment_term_id`, so it can move prices when a modifier qualifies on payment terms. A report-only fix leaves the engine input wrong and `Pricing Payment Term` disagreeing with `Customer Payment Term` — change the package cursor with the report.
+
+## AP XLA journal-line reports
+
+`xxen_xla.xla_je_lines_rpt_pkg_init` sets `p_include_user_trx_id_flag` to `&#x27;Y&#x27;` only when a `fnd_concurrent_requests` row exists for `fnd_global.conc_request_id` (Oracle&#x27;s identifier branch crashes outside a request). Never guard by journal source (parse paths run the lexical too; a blank source silently answers a different question). The Posted Payment/Invoice Register XMLs `nvl(&lt;Oracle identifier&gt;, &lt;own source&gt;)` for supplier name (`ap_sla_*_transaction_v.party_name`, never `ap_suppliers.vendor_name`), amount and document; test the identifier for null rather than wrapping the whole expression.
+
+## DFF columns in reports
+
+**Reports use dynamic DFF columns** via lexical parameters — never hardcode `table.attribute1`, `table.attribute2`, etc.
+
+Pattern:
+1. In SELECT: `&amp;amp;dff_columns` lexical placeholder
+2. In GROUP BY (if aggregating): `&amp;amp;dff_columns_grp` lexical placeholder (must NOT be last — put a real column after it)
+3. `DFF Display` parameter: shared LOV `Blitz Report DFF Display` (V/C/S options), default `fnd_profile.value(&#x27;XXEN_REPORT_DFF_DISPLAY&#x27;)`, anchor `&amp;amp;dff_columns`. Leaving the parameter blank hides DFF columns entirely (performance escape hatch).
+4. SQL_TEXT: `select xxen_util.dff_columns(p_table_name=&gt;&#x27;table_name&#x27;,p_table_alias=&gt;&#x27;alias&#x27;,p_column_name_prefix=&gt;&#x27;Prefix: &#x27;,p_display_mode=&gt;:dff_display) from dual`
+5. Sub-row (no DISPLAY_SEQUENCE) for GROUP BY anchor: same parameter name, anchor `&amp;amp;dff_columns_grp`, SQL_TEXT also passes `p_display_mode=&gt;:dff_display` and uses `p_hide_column_name=&gt;&#x27;Y&#x27;`
+
+**A dynamic-column generator hardcodes the table ALIAS, so renaming an alias in the main query breaks it.** `xxen_util.dff_columns` and `xxen_util.item_category_columns` take `p_table_alias` as a string in the generator’s own `SQL_TEXT`, and the columns they emit are prefixed with it. Change an alias in the main select (for example `mtl_system_items_b_kfv msik2` → `mtl_system_items_vl msiv2` to get a translated description) and the generated text still says `msik2.`, so the report fails at run time with `ORA-00904` on a column nobody wrote. The generator rows sit far from the main SQL in the XML and no grep of the main query finds them — after any alias rename, search the whole file for the old alias and check every `p_table_alias`.
+
+**Uploads use static/hardcoded DFF columns** (`xu.attribute1`, `xu.attribute2`, etc.) because dynamic columns cannot be mapped to upload API package parameters.
+
+## Report conversion testing
+
+1. **Match all original parameters** — check the original concurrent program&#x27;s parameter form to identify ALL parameters, especially required ones (yellow background in Oracle Forms). The Blitz version must have the same required parameters.
+2. **Never run transaction reports wide open** — always specify a date range or other restrictive parameters. Wide-open runs create massively large and slow output files. Find suitable test parameters first — in R12 Vision, dates around 2006-2008 usually have good test data.
+3. **Always set restrictive parameters before test runs** — at least one filter (date range, organization, delivery ID, etc.) to limit the result set to a reasonable size.
+4. **Import the concurrent program first** — use `xxen_api.import_concurrent_program` to auto-create the Blitz report with correct parameters, LOVs, defaults, and required flags. Then update the SQL to flatten/inline formula functions and convert bind-style parameters to `1=1` anchor style where multiple values support is desired.
+5. **API testing with ID parameters** — `set_parameter_value_` bypasses LOV resolution and passes raw display values. For LOVs with `id` columns (e.g. `organization_id id, organization_code value`), pass the numeric `id` value (e.g. `207`) not the display value (e.g. `M1`). The frontend resolves correctly; only the API needs this workaround.
+
+## Existing Report Change Testing Rules
+
+Any change to an existing report XML must follow the standard before/after workflow : run the baseline report on the development instance with restrictive parameters, deploy the edited XML, rerun with identical parameters, compare every shared output column, and verify each new or changed column against the source table/API. Do not treat XML parsing or SQL inspection as sufficient testing.
+
+## Templates and snippets
+
+**Report XML skeleton**
+
+```xml
+&lt;ROOT&gt;
+ &lt;APPS_INITIALIZE_DATA&gt;...&lt;/APPS_INITIALIZE_DATA&gt;
+ &lt;REPORTS&gt;
+  &lt;REPORTS_ROW&gt;
+   &lt;GUID&gt;hex-guid&lt;/GUID&gt;
+   &lt;SQL_TEXT&gt;...with &amp;apos; escaping...&lt;/SQL_TEXT&gt;
+   &lt;ENABLED&gt;Y&lt;/ENABLED&gt;
+   &lt;REPORT_TRANSLATIONS&gt;&lt;REPORT_TRANSLATIONS_ROW&gt;&lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;&lt;REPORT_NAME&gt;Name&lt;/REPORT_NAME&gt;&lt;/REPORT_TRANSLATIONS_ROW&gt;&lt;/REPORT_TRANSLATIONS&gt;
+   &lt;CATEGORY_ASSIGNMENTS&gt;&lt;CATEGORY_ASSIGNMENTS_ROW&gt;&lt;CATEGORY&gt;Enginatics&lt;/CATEGORY&gt;&lt;/CATEGORY_ASSIGNMENTS_ROW&gt;&lt;/CATEGORY_ASSIGNMENTS&gt;
+   &lt;ANCHORS&gt;...&lt;/ANCHORS&gt;
+   &lt;PARAMETERS&gt;...&lt;PARAMETER_TRANSLATIONS&gt;...&lt;/PARAMETER_TRANSLATIONS&gt;...&lt;/PARAMETERS&gt;
+  &lt;/REPORTS_ROW&gt;
+ &lt;/REPORTS&gt;
+&lt;/ROOT&gt;
+```
+
+**Max SORT_ORDER before adding a parameter**
+
+```sql
+select max(xrpv.sort_order) max_sort_order
+from xxen_report_parameters_v xrpv
+where xrpv.report_id=(select xr.report_id from xxen_reports_v xr where xr.report_name=&#x27;&lt;Report Name&gt;&#x27;);
+```
+
+**Blank SQL_TEXT on an anchor parameter (broken merge)**
+
+```sql
+select xrpv.parameter_name, xrpv.anchor
+from xxen_report_parameters_v xrpv
+where xrpv.report_id=xxen_report.report_id(&#x27;&lt;Report Name&gt;&#x27;)
+and (xrpv.anchor like &#x27;%=%&#x27; or xrpv.anchor like &#x27;&amp;%&#x27;)      -- WHERE / lexical anchors
+and nvl(dbms_lob.getlength(xrpv.sql_text),0)=0;             -- but SQL_TEXT is blank -&gt; broken
+-- returns rows =&gt; a parameter is broken (re-import partial merge); delete + fresh import to fix
+```
+
+**Description imported with line breaks**
+
+```sql
+select dbms_lob.getlength(xrt.description) desc_len, regexp_count(xrt.description,chr(10)) newlines
+from xxen_reports_tl xrt, xxen_reports_v xrv
+where xrt.report_id=xrv.report_id and xrt.language=&#x27;US&#x27; and xrv.report_name=&#x27;&lt;Report Name&gt;&#x27;;
+```
+
+**Dependencies formed after import**
+
+```sql
+-- parameter-to-parameter deps (dependent &quot;needs&quot; parent)
+select xrpv_dep.parameter_name dependent, xrpv_par.parameter_name needs_parent, xrpd.flex_bind
+from xxen_report_param_dependencies xrpd, xxen_report_parameters_v xrpv_dep, xxen_report_parameters_v xrpv_par
+where xrpd.report_id=xxen_report.report_id(&#x27;&lt;Report Name&gt;&#x27;)
+and xrpd.dependent_parameter_id=xrpv_dep.parameter_id and xrpd.parameter_id=xrpv_par.parameter_id;
+
+-- upload column-to-parameter deps (xxen_upload_dependencies: report_parameter_id, column_name, dependent_column_name, flex_bind, dependency_type)
+select xud.dependent_column_name, xud.dependency_type, xud.flex_bind, xrpv.parameter_name
+from xxen_upload_dependencies xud, xxen_report_parameters_v xrpv
+where xud.report_id=xxen_report.report_id(&#x27;&lt;Upload Name&gt;&#x27;) and xud.report_parameter_id=xrpv.parameter_id(+);
+```
+
+**Uploaded file corrupted in transit (NUL byte)**
+
+```sql
+select fl.file_id, fl.file_name, dbms_lob.getlength(fl.file_data) bytes,
+dbms_lob.instr(fl.file_data,hextoraw(&#x27;00&#x27;)) first_nul_offset
+from fnd_lobs fl where fl.file_name like &#x27;&lt;name&gt;%&#x27; order by fl.upload_date desc;
+```
+
+**Workbook-backed template check**
+
+```sql
+select xrt.template_name, xrt.dynamic_columns,
+(select count(*) from xxen_report_template_files f where f.template_id=xrt.template_id) xl_parts,
+(select count(*) from xxen_report_template_files f where f.template_id=xrt.template_id and f.file_name like &#x27;%pivot%&#x27;) pivot_parts
+from xxen_report_templates xrt where xrt.report_id=&lt;id&gt; order by xrt.template_name;
+```
+
+**Matching-value parameter rows**
+
+```xml
+&lt;!-- Primary row: Active --&gt;
+&lt;PARAMETERS_ROW&gt;
+ &lt;SORT_ORDER&gt;5&lt;/SORT_ORDER&gt;
+ &lt;DISPLAY_SEQUENCE&gt;50&lt;/DISPLAY_SEQUENCE&gt;
+ &lt;ANCHOR&gt;1=1&lt;/ANCHOR&gt;
+ &lt;SQL_TEXT&gt;nvl(hla.inactive_date,trunc(sysdate))&amp;gt;=trunc(sysdate)&lt;/SQL_TEXT&gt;
+ &lt;PARAMETER_TYPE_DSP&gt;LOV&lt;/PARAMETER_TYPE_DSP&gt;
+ &lt;LOV_NAME&gt;AR Registry Status&lt;/LOV_NAME&gt;
+ &lt;LOV_GUID&gt;22FFB94618DB3DA4E0630100007FD7CF&lt;/LOV_GUID&gt;
+ &lt;VALIDATE_FROM_LIST_DSP&gt;Y&lt;/VALIDATE_FROM_LIST_DSP&gt;
+ &lt;MATCHING_VALUE&gt;A&lt;/MATCHING_VALUE&gt;
+ &lt;PARAMETER_TRANSLATIONS&gt;
+  &lt;PARAMETER_TRANSLATIONS_ROW&gt;
+   &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
+   &lt;PARAMETER_NAME&gt;Location Status&lt;/PARAMETER_NAME&gt;
+  &lt;/PARAMETER_TRANSLATIONS_ROW&gt;
+ &lt;/PARAMETER_TRANSLATIONS&gt;
+&lt;/PARAMETERS_ROW&gt;
+&lt;!-- Sub-row: Inactive (no DISPLAY_SEQUENCE) --&gt;
+&lt;PARAMETERS_ROW&gt;
+ &lt;SORT_ORDER&gt;14&lt;/SORT_ORDER&gt;
+ &lt;ANCHOR&gt;1=1&lt;/ANCHOR&gt;
+ &lt;SQL_TEXT&gt;hla.inactive_date&amp;lt;trunc(sysdate)&lt;/SQL_TEXT&gt;
+ &lt;MATCHING_VALUE&gt;I&lt;/MATCHING_VALUE&gt;
+ &lt;PARAMETER_TRANSLATIONS&gt;
+  &lt;PARAMETER_TRANSLATIONS_ROW&gt;
+   &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
+   &lt;PARAMETER_NAME&gt;Location Status&lt;/PARAMETER_NAME&gt;
+  &lt;/PARAMETER_TRANSLATIONS_ROW&gt;
+ &lt;/PARAMETER_TRANSLATIONS&gt;
+&lt;/PARAMETERS_ROW&gt;
+```
+
+**Assignments block**
+
+```xml
+&lt;ROOT&gt;
+ &lt;CATEGORIES&gt;...&lt;/CATEGORIES&gt;
+ &lt;REPORTS&gt;
+  &lt;REPORTS_ROW&gt;...&lt;/REPORTS_ROW&gt;
+ &lt;/REPORTS&gt;
+ &lt;ASSIGNMENTS&gt;
+  &lt;ASSIGNMENTS_ROW&gt;
+   &lt;REPORT_NAME&gt;My Report&lt;/REPORT_NAME&gt;        &lt;!-- REQUIRED: links the row to the report --&gt;
+   &lt;INCLUDE_EXCLUDE&gt;I&lt;/INCLUDE_EXCLUDE&gt;
+   &lt;ASSIGNMENT_LEVEL&gt;Request Group&lt;/ASSIGNMENT_LEVEL&gt;  &lt;!-- full words: Application / Request Group / Responsibility / User / Form / Function --&gt;
+   &lt;LEVEL_VALUE&gt;All Reports&lt;/LEVEL_VALUE&gt;             &lt;!-- the request group / application / responsibility / form / function name --&gt;
+   &lt;APPLICATION_SHORT_NAME&gt;SQLAP&lt;/APPLICATION_SHORT_NAME&gt; &lt;!-- REQUIRED for Request Group / Form: disambiguates names that repeat across apps (e.g. &#x27;All Reports&#x27; exists under SQLAP, PO, CE...). NOT used for Application or Function. --&gt;
+   &lt;FORM_PARAMETERS&gt;&lt;/FORM_PARAMETERS&gt;             &lt;!-- omit &lt;DISABLED&gt; entirely for an active row --&gt;
+  &lt;/ASSIGNMENTS_ROW&gt;
+  &lt;ASSIGNMENTS_ROW&gt;                                 &lt;!-- a Function-level row (uploads): no APPLICATION_SHORT_NAME, function_name in LEVEL_VALUE --&gt;
+   &lt;REPORT_NAME&gt;AP Invoice Upload&lt;/REPORT_NAME&gt;
+   &lt;INCLUDE_EXCLUDE&gt;I&lt;/INCLUDE_EXCLUDE&gt;
+   &lt;ASSIGNMENT_LEVEL&gt;Function&lt;/ASSIGNMENT_LEVEL&gt;
+   &lt;LEVEL_VALUE&gt;AP_APXINWKB&lt;/LEVEL_VALUE&gt;            &lt;!-- the internal function_name (NOT user_function_name) --&gt;
+   &lt;FORM_PARAMETERS&gt;&lt;/FORM_PARAMETERS&gt;
+  &lt;/ASSIGNMENTS_ROW&gt;
+ &lt;/ASSIGNMENTS&gt;
+&lt;/ROOT&gt;
+```
+
+**Grey-out until a parent is set**
+
+```sql
+-- greys out until &quot;Include accounts with open invoices&quot; = Yes, then offers 1..999
+select to_char(d.n) id, to_char(d.n) value, null description
+from (select level n from dual connect by level&lt;=999) d
+where :$flex$.Include_accounts_with_open_invoices=&#x27;Y&#x27;
+order by d.n
+```
+
+**KFF segment LOV**
+
+```sql
+select
+substrb(l.column_value,1,instrb(l.column_value,&#x27;~&#x27;,1,1)-1) id,
+substrb(l.column_value,instrb(l.column_value,&#x27;~&#x27;,1,1)+1,instrb(l.column_value,&#x27;~&#x27;,1,2)-instrb(l.column_value,&#x27;~&#x27;,1,1)-1) value,
+substrb(l.column_value,instrb(l.column_value,&#x27;~&#x27;,1,2)+1) description
+from
+(select gl.chart_of_accounts_id id_flex_num from gl_ledgers gl where gl.name=:$column$.ledger_name) s,
+table(xxen_util.kff_segment_lov(
+p_application_id=&gt;101,
+p_id_flex_code=&gt;&#x27;GL#&#x27;,
+p_id_flex_num=&gt;s.id_flex_num,
+p_application_column_name=&gt;&#x27;SEGMENT6&#x27;,
+p_segment1=&gt;:$column$.gl_segment1, ... p_segment15=&gt;:$column$.gl_segment15)) l
+order by
+2
+```
+
+`kff_segment_lov` returns its rows unsorted and removes repeated values itself (dependent and table validated value sets), so the LOV sorts and needs no `distinct`.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

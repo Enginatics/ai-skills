@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Month-End Close Readiness Orchestrator - Blitz Report Excel Add-in Skills</title><meta name="description" content="Orchestrate a full Oracle EBS month-end close readiness assessment in Excel: run the per-module readiness checks (AP, AR, Inventory/Costing, FA, GL), the close-process monitor, and the subledger-to-GL reconciliation, then assemble one master scorecard with a per-module red/amber/green status, the ra">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-month-end-readiness/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Month-End Close Readiness Orchestrator - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Orchestrate a full Oracle EBS month-end close readiness assessment in Excel: run the per-module readiness checks (AP, AR, Inventory/Costing, FA, GL), the close-process monitor, and the subledger-to-GL reconciliation, then assemble one master scorecard with a per-module red/amber/green status, the ra"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-month-end-readiness/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-month-end-readiness/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Period Close</p><h1>Month-End Close Readiness Orchestrator</h1><p class='name'>br-month-end-readiness</p><p class='lead'>Orchestrate a full Oracle EBS month-end close readiness assessment in Excel: run the per-module readiness checks (AP, AR, Inventory/Costing, FA, GL), the close-process monitor, and the subledger-to-GL reconciliation, then assemble one master scorecard with a per-module red/amber/green status, the ranked blockers, and the recommended close sequence.</p><h2>When to use</h2><p>Use when the user asks &quot;are we ready to close {period}&quot;, &quot;month-end readiness&quot;, or a full close status.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-month-end-readiness.zip'>Download br-month-end-readiness.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-month-end-readiness'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ap-period-close-exceptions/'>AP Period Close Exceptions</a></li><li><a href='https://www.enginatics.com/reports/cac-accounting-period-status/'>CAC Accounting Period Status</a></li><li><a href='https://www.enginatics.com/reports/gl-period-status/'>GL Period Status</a></li><li><a href='https://www.enginatics.com/reports/inv-period-close-pending-transactions/'>INV Period Close Pending Transactions</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-month-end-readiness'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Month-End Close Readiness Orchestrator (br-month-end-readiness)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Assemble a single month-end readiness scorecard across every module. You drive the sequence and
+the master roll-up; each module&#x27;s own readiness skill (or its primary report) does the detail. Run
+steps in order, keeping every module sheet.
+
+**Requires:** br-run-reports, br-data-dashboard, and the module skills
+br-ap-close-readiness, br-ar-close-readiness, br-inv-cost-close-readiness, br-fa-close-readiness,
+br-gl-close-readiness, br-close-process-monitor. *(Optional:* br-po-close-readiness, br-ce-recon-readiness,
+br-subledger-gl-reconciliation.)*
+
+## Division of responsibility — READ FIRST
+- **You do NOT run Blitz reports yourself** — extraction is always via **br-run-reports**
+  (directly, or inside the module skills). Do not call the `br_` UDFs *directly from the orchestrator* - delegate extraction to br-run-reports / the module skills, which write the `=br_...()` worksheet UDFs into cells (the `br_` functions ARE the data source: worksheet UDFs, not MCP tools/connectors, so never `refresh_mcp_connectors` looking for Blitz); never touch a result sheet
+  until its run is confirmed complete.
+- **Delegate one module at a time and wait for it to finish before starting the next.** Do not start
+  several module skills at once — the close runs are asynchronous and overlapping them stalls them.
+- **Robust hand-off:** invoke each module readiness skill to produce that module&#x27;s sheet. **If a
+  module skill does not fire** (composition can be unreliable), fall back to running that module&#x27;s
+  **primary** report directly via br-run-reports and scoring it inline with the same
+  RAG rule. Never skip a module silently — show it as &quot;not assessed&quot; if neither path worked.
+- **Read-and-recommend only:** nothing here executes a fix.
+
+## When to use
+&quot;Are we ready to close May&quot;, &quot;month-end readiness&quot;, &quot;full close status&quot;, a close-readiness pack for
+the controller.
+
+## Inputs (collect up front)
+- **Ledger**; **Operating Unit(s)** (AP/AR); **Organization Code(s)** (INV); **FA Book**; **Period**.
+- *Optional:* materiality threshold for reconciliations; whether to include CE and the subledger-GL recon.
+
+## CONFIG
+### Close sequence (the order the scorecard recommends)
+1. Subledgers in parallel: **AP, AR, Inventory/Costing, FA** (each must reach Green).
+2. **Subledger-to-GL reconciliation** (optional) — confirm control accounts tie.
+3. **GL** — only after subledgers are closed/reconciled.
+Throughout: **Close Process Monitor** must show the close programs healthy.
+
+### Module → primary report (fallback if the module skill doesn&#x27;t fire)
+The module skills run their own reports **directly by name** (no broad discovery search). If a
+module skill doesn&#x27;t fire and you run its fallback report yourself, pass the **documented name
+below directly** to br-run-reports — do NOT `br_report_list_external`-search first;
+only fall back to a search on `#BLITZ_REPORT_NOT_FOUND`.
+
+| Module | Skill | Fallback primary report |
+|---|---|---|
+| AP | br-ap-close-readiness | `AP Period Close Exceptions` |
+| AR | br-ar-close-readiness | `AR Unaccounted Transaction Sweep` (Sweep Now = No) |
+| INV/Cost | br-inv-cost-close-readiness | `INV Period Close Pending Transactions` |
+| FA | br-fa-close-readiness | `FA Depreciation by period` (+ `FA Unposted Mass Additions`) |
+| GL | br-gl-close-readiness | `GL Period Status` |
+| Process | br-close-process-monitor | `FND Concurrent Requests` |
+
+### Overall RAG
+- **Green** — every module Green and the close-process monitor Green.
+- **Amber** — all subledgers Green/Amber but GL or recon still pending.
+- **Red** — any module Red.
+
+### Output sheets &amp; tab order (left to right)
+`Month_End_Readiness` (master, first), then `AP_Close_Readiness`, `AR_Close_Readiness`,
+`INV_Close_Readiness`, `FA_Close_Readiness`, `GL_Close_Readiness`, `Close_Process_Monitor`,
+[`CE_Recon_Readiness`], [`Subledger_GL_Recon`] (detail sheets after the master).
+
+## Pipeline
+1. **Process health first.** Run br-close-process-monitor (or `FND Concurrent Requests`) — if close programs are erroring, surface that at the top; module results may be stale until they clear.
+2. **Per module, in sequence (AP → AR → INV → FA → GL):** invoke the module skill; on no-fire, run its fallback report and score inline. Capture each module&#x27;s RAG + top blockers into a roll-up table from the **values the sub-skill returned in its own final JS call** — wait for each module to complete before the next, but do **NOT** insert extra `get_cell_ranges` reads between sub-skill invocations to inspect a module&#x27;s output sheet (Rule 8). Each delegated sub-skill follows the standards within its own pipeline; trust its return values and reconcile only at the final validation read.
+   - **Period status is already covered by `GL Period Status`** (it reports every subledger&#x27;s period status), so in the orchestrated flow you do NOT need to also run `CAC Accounting Period Status` per module.
+3. **Optional:** br-po-close-readiness (the purchasing-accrual leg — include when the user runs a full close or names PO/accruals), br-ce-recon-readiness and/or br-subledger-gl-reconciliation.
+4. **Master scorecard (delegate to br-data-dashboard if it fires; else build inline)  *(single `execute_office_js` call)*.** In one call, build the entire `Month_End_Readiness` sheet — all sections in the same JS block: the overall RAG banner (ledger+period); the per-module status rows (module, RAG, # blockers, top blocker, recommended action) ordered by the close sequence; the close-process-monitor status; and the &quot;recommended next actions&quot; list ordered subledgers → recon → GL. If any charts are added, they go in a **second** `execute_office_js` call (the one permitted exception). Read the per-module RAG + blockers from the values each sub-skill returned in its own final JS call — do **not** insert `get_cell_ranges` reads against the module sheets to inspect their output here (Rule 8); trust the sub-skill return values / `formula_results`, no re-read needed at this step.
+   - **Build mechanics (learned on a real run):** build the master on a NEW sheet at **position 0** (first tab); leave every module&#x27;s own sheet untouched and **do NOT rename** it (the master links to it by name). **Do NOT use a multi-row `copyToRange`** to fill the per-module rows (it can latch onto the wrong source box and duplicate headers into the data) — write each row&#x27;s formula explicitly. After building, scan **beyond** the dashboard&#x27;s column range, clear any stray cells, and widen amount columns so values don&#x27;t render as `######`.
+5. **Verdict narrative  *(single `set_cell_range` call)*.** Write all ≤6 bullets to `Month_End_Readiness` in one call: can we close (overall call), which modules block it, the single most urgent action, and the recommended order to clear the rest. Do not call `set_cell_range` once per bullet.
+6. **Arrange tabs + final validation  *(single `execute_office_js` call + one read)*.** In one call, reorder worksheet tabs per CONFIG and make `Month_End_Readiness` active — only after the master scorecard exists. Then do the **one permitted verification read** at the end of the pipeline (the Validation checks below); do not insert any intermediate verification reads between modules.
+
+## Validation
+- Every required module appears in the roll-up with a RAG (or an explicit &quot;not assessed&quot;).
+- Overall RAG is consistent with the module rows (Red if any module Red).
+- Per-module figures on the master tie to that module&#x27;s own sheet.
+
+## Closed-loop (roadmap, not executed here)
+Each module&#x27;s fix (hold release, receipt application, GL journal upload, FA mass additions) is a
+Blitz Upload; accounting/posting/depreciation are concurrent submits. This orchestrator recommends
+the sequence; a human executes each step.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

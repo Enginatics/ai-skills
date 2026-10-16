@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AP Payment Actions - Blitz Report Excel Add-in Skills</title><meta name="description" content="Act on a br-ap-payment-optimizer run from Excel: produce the prioritized pay-run list for the invoices to pay now (discount capture), and — on explicit confirmation — place payment-blocking holds via the &quot;AP Invoice Hold Upload&quot; on the invoices the user chooses to defer.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ap-payment-actions/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="AP Payment Actions - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Act on a br-ap-payment-optimizer run from Excel: produce the prioritized pay-run list for the invoices to pay now (discount capture), and — on explicit confirmation — place payment-blocking holds via the &quot;AP Invoice Hold Upload&quot; on the invoices the user chooses to defer."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ap-payment-actions/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-payment-actions/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Payables</p><h1>AP Payment Actions</h1><p class='name'>br-ap-payment-actions</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Act on a br-ap-payment-optimizer run from Excel: produce the prioritized pay-run list for the invoices to pay now (discount capture), and — on explicit confirmation — place payment-blocking holds via the &quot;AP Invoice Hold Upload&quot; on the invoices the user chooses to defer.</p><h2>When to use</h2><p>Use when the user asks to action the payment optimization, defer the deferrable invoices, block payments we want to delay, or prepare the pay run. WRITES to Oracle EBS (defer-holds only).</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-payment-actions.zip'>Download br-ap-payment-actions.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-payment-actions'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ap-invoice-hold-upload/'>AP Invoice Hold Upload</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-payment-actions'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># AP Payment Actions (br-ap-payment-actions)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected).
+
+&gt; **Read `br-run-uploads` FIRST** (`read_skill(&quot;br-run-uploads&quot;)`) for the upload mechanics. This
+&gt; skill adds only what is specific to payment actions.
+
+## Honest scope — what each recommendation becomes
+A payment-optimizer run produces two action classes, and only one is writable from here:
+
+| Optimizer says | This skill does | Why |
+|---|---|---|
+| **Pay now** (discount expiring, critical supplier) | **Read-only deliverable**: a prioritized pay-run sheet the AP user takes into Payments (PPR). | There is no shipped upload that executes a payment run — and there should not be; paying money is EBS&#x27;s own gated flow. |
+| **Defer** (no discount, far from due, cash pressure) | **Write**: place a payment-blocking hold per invoice via `AP Invoice Hold Upload`, released later through **br-ap-hold-release** when the user is ready to pay. | A held invoice cannot be selected by a payment run — the standard, reversible way to defer. |
+
+Never present the pay-run sheet as &quot;payments made&quot;, and never imply a hold changes terms or due
+dates — it only blocks selection until released.
+
+## 🚨 Deferring payments has consequences — the safety contract
+1. **Never defer**: an invoice already past due, a supplier flagged critical/under dispute, or
+   anything carrying an unexpired discount worth more than the deferral saves. Filter these out
+   BEFORE proposing, and say what was filtered.
+2. **Show the money and the dates** in the confirmation: count, total $, how far each moves past
+   its scheduled date, supplier concentration.
+3. **Two confirmations** — one before filling the grid, one after validation before submit.
+4. **Every defer-hold must carry its plan in the Hold Reason** — e.g.
+   `Deferred to &lt;date&gt; per payment optimization &lt;run date&gt; — release before next pay run` — so an AP
+   reviewer in the Holds workbench sees why, and br-ap-hold-release later shows the intent.
+
+## When to use
+&quot;Action the payment optimization&quot;, &quot;defer what we can&quot;, &quot;hold the deferrable invoices&quot;, &quot;prep the
+pay run&quot;. For the analysis itself, use **br-ap-payment-optimizer**; for releasing the defer-holds
+when it is time to pay, **br-ap-hold-release**.
+
+## Inputs
+- **An `AP_Pay_Run` / deferral recommendation sheet** from a br-ap-payment-optimizer run in this
+  workbook — the normal entry. If absent, run the optimizer first; never invent a defer list.
+- **Which recommendations to act on** — pay-now list, defer list, or both.
+- **Defer horizon** — until when (a date or &quot;next pay run&quot;) for the Hold Reason text.
+- **Hold Name** — from the LOV, user-picked once (same rule as any hold placement).
+
+## Part A — the pay-run deliverable  *(read-only, always produced)*
+One sheet, `Pay_Run_Proposal`: the pay-now invoices ranked by the optimizer&#x27;s own priority
+(discount $ expiring first), with supplier, invoice, gross $, discount $ and date, due date, and a
+total row. This is the sheet the user hands to whoever runs Payments. No EBS write.
+
+## Part B — defer-holds  *(the write path)*
+**`AP Invoice Hold Upload`** (Type `U`, no templates). Placement = NEW rows on an empty grid:
+`=br_run_upload_external(&quot;AP Invoice Hold Upload&quot;,&quot;Operating Unit=&lt;OU&gt;; Upload Mode=Create&quot;)`
+
+Per row (by Sheet Column letter from `=br_upload_columns_external(FALSE, ...)`):
+`Operating Unit`, `Supplier` or `Supplier Number`, `Invoice Number`, **`Hold Name`** (LOV,
+`=br_column_values_external(&quot;Hold Name&quot;, &lt;row&gt;, &quot;&quot;, ...)` — manual user-releasable types only; ask
+the user which their site uses for payment deferral), **`Hold Reason`** (the plan text above).
+Never write `Release Name`/`Release Reason` or any other column.
+
+### Pipeline for Part B
+1. **Proposal set** — from the optimizer&#x27;s defer list minus the safety filters above; de-duplicate
+   per invoice.
+2. **Confirm the SET** — list + the money question:
+   &gt; &quot;Place defer-holds on &lt;n&gt; invoices worth $&lt;X&gt; across &lt;m&gt; suppliers, blocking them from payment
+   &gt; until released (target &lt;date&gt;)?&quot; → `Yes — fill the grid` / `Narrow it` / `Cancel`
+3. **Fill** — one write call, confirmed rows only.
+4. **Validate** — `=br_prepare_upload_external()` (row 1, right of the used range), poll, read
+   `=br_validation_results_external(FALSE, ...)`. Ambiguous invoice → fill Supplier Number; already
+   on hold → drop and report as already blocked; invoice under validation → transient, retry.
+   Stop after ~3 unproductive rounds.
+5. **Confirm again, submit** — `=br_process_upload_external()`, poll for
+   `DONE: &lt;n&gt; succeeded, &lt;n&gt; errored (request &lt;id&gt;)`.
+6. **Report** — per invoice held/failed + request id; a `DONE` with errors is a **partial success —
+   the succeeded holds are live**; fix only failures. Annotate the optimizer sheet
+   (`Deferred &lt;date&gt;`), and remind the user: **release before the target pay run via
+   br-ap-hold-release**, or the deferral silently becomes a late payment.
+
+## Validation (before declaring done)
+- Nothing past due, discounted, or critical was deferred; every held row was user-confirmed.
+- Pay-run sheet totals tie to the optimizer&#x27;s own figures.
+- Reported held count = Success rows. Upload sheet clean; `blitz_` deleted.
+
+## Re-run / refresh
+A later optimizer run must see the defer-holds as already-actioned (they will appear in its
+holds-count columns) — point it at the annotation if it re-proposes them. When the user says &quot;we&#x27;re
+paying now&quot;, hand over to **br-ap-hold-release** scoped to the defer-hold&#x27;s Hold Name + Reason
+marker; do not release from here.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

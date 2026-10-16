@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EBS 11i Compatibility - Blitz Report Development</title><meta name="description" content="Making Blitz Report content work on Oracle EBS 11i and older databases: 11i twins, translations, version traps.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/ebs-11i-compatibility/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="EBS 11i Compatibility - Blitz Report Development"><meta property="og:description" content="Making Blitz Report content work on Oracle EBS 11i and older databases: 11i twins, translations, version traps."><meta property="og:url" content="https://www.enginatics.com/ai-skills/ebs-11i-compatibility/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/ebs-11i-compatibility/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Standards</p><h1>EBS 11i Compatibility</h1><p class='name'>ebs-11i-compatibility</p><p class='lead'>Making Blitz Report content work on Oracle EBS 11i and older databases: 11i twins, translations, version traps.</p><h2>When to use</h2><p>Use when content must run on 11i or on an 11.2 database.</p><h2>Use</h2><p>Part of <code>blitz-report-ai-skills</code>. Claude loads these rules automatically when a task needs them.</p><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/ebs-11i-compatibility'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># EBS 11i Compatibility
+
+Blitz Report ships to EBS 11i (11.5.10.2 / DB 11.2.0.4) from the SAME master content as R12 — every content change must consider 11i.
+
+## MANDATORY workflow for every report/upload change or creation
+
+1. **Does the report/upload have a ` 11i` twin?** (`select report_name from xxen_reports_v where report_name=&#x27;&lt;name&gt;&#x27;||&#x27; 11i&#x27;`, or `ls content/11i/reports content/11i/uploads`.) If yes, apply the equivalent change to the twin IN THE SAME TASK — never defer it, never treat it as optional (or explicitly record why it does not apply). If the 11i instance is down and the change cannot be verified there, say so in the task report.
+   - Parse-verify caveat: an 11i twin&#x27;s SQL may legitimately not parse on the development instance, so &quot;framework parse fails on the development instance&quot; is only meaningful COMPARATIVELY — import the unedited original and the edited version both to the development instance and confirm they parse/fail identically, then delete both test imports (`xxen_api.delete_report(id,&#x27;Y&#x27;)`). Final execution verification happens on the 11i instance.
+2. **Dual-use content (Enginatics category, no twin, not `R12 only`)** → the change must work on 11i. Verify the changed SQL/LOV/default EXECUTES on the 11i instance (see below). If the change needs an R12-only construct, add a `translate_11i_sql` rule that produces a valid 11i form, or split off a ` 11i` twin.
+3. **New content** → decide up front: dual-use (verify on 11i), `R12 only` (with evidence why), or a twin.
+4. **The upload&#x27;s PL/SQL package**: shared packages must compile on 11i; if the module has a `_11I` variant, mirror the change there.
+5. **Every DEFAULT VALUE must resolve to a value that EXISTS on 11i** — report parameters, upload columns, template column defaults, template/user parameter defaults. A literal default frozen against the development instance&#x27;s data executes fine and is silently discarded on 11i, leaving the field blank (see below). Executing the default is not enough; validate its VALUE against the target&#x27;s LOV on the 11i instance.
+
+## E2E testing a backported 11i upload — the coverage contract
+
+The generic scenario matrix (create / update / no-change / invalid LOV / missing required / delete, and the J1–J8 verification steps) in `upload-development` skill section J applies unchanged. Everything below is the 11i delta; none of it is reachable by the generic matrix alone.
+
+Run every scenario through `xxen_upload.submit_upload_process` on an 11i instance (connect as described in your environment file (`blitz-environment.md`)). Calling the upload procedure directly proves nothing: it bypasses the generated block, which is where the alias, sentinel and column-mapping defects live.
+
+### Coverage axes — all five, or the test is incomplete
+
+| Axis | What it catches |
+|---|---|
+| Both download modes — Create, and Create+Update | the Update path resolves existing ids and merges old values; a Create-only test exercises neither |
+| Every entity level the upload writes — not just the header | child entities have their own API calls, sentinel handling and result rows |
+| Repeated children — 2+ children of the SAME parent in one file | duplicate-detection predicates that compare a NULL column (a blank phone extension makes every re-upload add a row) |
+| Dual-level entities at BOTH levels — account/party AND site | a level-specific `org_id` or context bug (account-level bank assignment fails while the site-level one passes, then poisons the account cache) |
+| Idempotency — re-upload the DOWNLOADED file unchanged | the highest-severity class: the download itself carrying poison forward. A no-change re-upload must change nothing and must not corrupt data |
+
+Run the idempotency axis first and trust it least: on 11i a `fnd_api.g_miss_*` sentinel reaching a plain table handler is STORED, the next download renders it (`01-Jan-4712`, `chr(0)`) and re-uploading re-poisons the row. Prove the cycle: create → download → re-upload unchanged → compare byte for byte.
+
+### Probes — run each deliberately, they are silent otherwise
+
+| Probe | Where |
+|---|---|
+| Widest template (every column) — truncated generated aliases collide pre-12.2 | stale column list + `max_column_length` below |
+| Literal DEFAULT VALUES resolve to values that exist on 11i | default-value section below |
+| Every LOV / default / value-to-id query EXECUTES (parse is not enough) | validation section below |
+| Sentinels reaching a non-TCA API — TCA V2 understands `g_miss_*`, `arp_*`/`fnd_webattch` do not | this section |
+| Outer joins — `ORA-01417` is invisible on 19c | ORA-01417 section |
+| R12-only columns neutralised in a JOIN PREDICATE return ZERO rows | neutralising section |
+| `:$flex$` / `:$column$` tokens resolve to a real parameter/column name | `report-development` skill, Parameter Dependencies |
+
+### Harness facts
+
+- No MOAC on 11i — `fnd_client_info.set_org_context(&lt;org_id&gt;)`, never `mo_global.init`.
+- An API-driven download does NOT evaluate parameter defaults, so every required parameter must be passed explicitly — and that is exactly how a bad default hides. Supplying a value the product should have defaulted is not testing the default; test that path separately.
+- Parameters and LOV cells take the DISPLAY value, not the code (`Organization`, `United States` — not `ORGANIZATION`, `US`).
+- Dates are Excel serials. Build the XLSM per `upload-development` skill (shared strings only, cells sorted by column letter, `MODIFIED_COLUMNS_` as Excel column positions, display values in Action/Status/Message).
+- The result XLSM is authoritative for per-row Status/Message — not `xxen_upload_data.column2`.
+- Read the request log with `xxen_util.concurrent_request_file_url(&#x27;L&#x27;,&lt;request_id&gt;)` (self-authenticating URL, fetch with curl); `XXEN_REPORT_DEBUG=&#x27;Y&#x27;` at SITE prints the full generated `upload_host` block, which is how alias/column-mapping defects are proven.
+- A row reported Success is not proof the entity changed — verify the target table.
+
+## Validation on 11i — parse is NOT enough
+
+The framework parse gate and template-download tests do NOT execute parameter LOVs, column LOVs, default values, or value-to-id queries; those only run from the run screen / Excel add-in. A report can parse and download perfectly while every LOV errors for the user. &quot;Error reading LOV value&quot; messages in test output are real, never harness artifacts.
+
+Execution check for every changed query (LOV, default, value-to-id) on the 11i instance:
+
+```sql
+declare
+l_q clob; l_cnt number;
+begin
+  select xuc.lov_query into l_q from xxen_upload_columns xuc where ...;
+  l_q:=regexp_replace(l_q,&#x27;:\$(column|flex)\$\.[A-Za-z0-9_#]+(:null)?&#x27;,&#x27;null&#x27;,1,0,&#x27;i&#x27;); -- flex tokens FIRST (incl. the framework-supported :null suffix)
+  l_q:=regexp_replace(l_q,&#x27;:[A-Za-z0-9_$#]+&#x27;,&#x27;null&#x27;);
+  execute immediate &#x27;select count(*) from (&#x27;||l_q||&#x27;) where rownum=0&#x27; into l_cnt;
+end;
+```
+
+Known false-positive classes of crude bind-nulling (re-test with faithful typed substitution before &quot;fixing&quot;):
+
+- FND value-set tokens `:$flex$.x:null` — replacing the flex token and `:null` separately yields the literal `nullnull`.
+- Flattening newlines corrupts `--` comments; keep line structure.
+- `trunc(null)` parses as numeric TRUNC → false `ORA-00932` against date columns; substitute a typed value (`sysdate`).
+- Sequence `NEXTVAL` is illegal inside the count-wrapper subquery (`ORA-02287`) but legal in the framework&#x27;s `execute immediate ... into` default evaluation.
+- `&amp;lexical` tokens need a plausible fragment, not null.
+
+Old-client gotchas: `set serveroutput on size 1000000` (not `unlimited`); `dbms_output` lines under 250 chars; `order by &lt;n&gt;` beyond the select-list count raises `ORA-01785` on 11i.
+
+**The pre-12.2 splice path.** `xxen_report.max_column_length` is 30 on databases before 12.2 and 128 from 12.2 on. On the 30-path the framework cannot embed dependent-LOV/value-to-id SQL with correlated references, so `xxen_upload.replace_flex_binds` splices sibling `:$column$` cell values into the LOV text as literals at row level: varchar/Char/LOV values quote-safely (`&#x27;&#x27;||replace(xu.col,&#x27;&#x27;&#x27;&#x27;,&#x27;&#x27;&#x27;&#x27;&#x27;&#x27;)||&#x27;&#x27;`), dates via `fnd_date.date_to_canonical`, numbers via `nvl(fnd_number.number_to_canonical(xu.col),&#x27;null&#x27;)` (never `to_char` — comma-decimal sessions render `3,5`). It is DATABASE-version-driven: every pre-12.2 database is exposed, R12 customers included, and a 19c dev instance never reveals it. Diagnosis when a run aborts in `value_to_id` (`ORA-00907`/`ORA-00936` from `dbms_sql.execute`): scan the run&#x27;s `xxen_upload_data` column values for quotes/empties and map the hit columns against `xxen_upload_dependencies.column_name` — only columns referenced as SIBLINGS matter (a column&#x27;s own value is passed as a bind). Substituting `null` for a bind cannot detect the empty-cell class (`where null is not null` parses); only the empty string reproduces it.
+
+`all_objects` under a read-only account hides packages without EXECUTE grants (tables/views appear via broad SELECT grants, which makes the gap non-obvious). Verify a package&#x27;s absence via `dba_objects` before concluding an API does not exist on 11i.
+
+## A DEFAULT VALUE can execute perfectly and still be INVALID on 11i
+
+A default can parse, execute and return a value that does not exist in 11i&#x27;s data; the framework silently discards it and the field renders blank. Nothing errors at download; the failure surfaces at the backend API naming something else entirely. Example: a `Created By Module` parameter defaulting to the literal `TCA_V2_API` (`validate_from_list=&#x27;Y&#x27;`, LOV over `HZ_CREATED_BY_MODULES`, which on 11i holds `TCA_V1_API` but not `TCA_V2_API`) → default discarded → the `:$flex$.created_by_module` column arrives blank → the HZ API rejects every row with &quot;Column created_by_module must have a value&quot;. The error names a COLUMN, so it reads like a data-entry problem; hardcoding the value into the test rows masks the defect because an explicitly-set value never exercises the default.
+
+The dangerous class is a hardcoded LITERAL (a query-based default derives from the instance&#x27;s own data). Four stores: `xxen_report_parameters.default_value`, `xxen_upload_columns.default_value`, `xxen_report_template_columns.default_value`, `xxen_report_param_default_vals.default_value` (the last two validate against the column&#x27;s / parameter&#x27;s own LOV).
+
+Mechanical check — for every literal default whose target has a validated LOV, assert the value is IN that LOV, on the 11i instance:
+
+```sql
+--per candidate: p_val = the literal default, p_lov = the target&#x27;s lov_query
+l_n:=0;
+begin execute immediate &#x27;select 1 from (&#x27;||p_lov||&#x27;) x where x.id=:v and rownum=1&#x27; into l_n using p_val;
+exception when no_data_found then l_n:=0; when others then l_n:=-1; end;   --value-only LOV has no x.id
+if l_n&lt;=0 then
+  begin execute immediate &#x27;select 1 from (&#x27;||p_lov||&#x27;) x where x.value=:v and rownum=1&#x27; into l_n using p_val;
+  exception when no_data_found then l_n:=0; end;
+end if;
+--l_n&lt;=0 =&gt; the default can never be applied on this instance
+```
+
+Calibrate before believing a FAIL — a naive gate is mostly false positives:
+
+| Trap | Symptom | Guard |
+|---|---|---|
+| id vs value | an id/value LOV stores the id; a value-only LOV stores the display value | match on `x.id` OR `x.value` |
+| multi-value default | a `;`-separated list compared as one string | split on `;`, check every token |
+| responsibility/context-scoped LOV | returns nothing in a bare session, so every value &quot;fails&quot; | skip any LOV matching `fnd_global.\|org_access_view\|mo_glob\|gl_access_set\|fnd_profile.value`, or run under the report&#x27;s own responsibility |
+| LOV empty on this instance | source table has no rows | if `select 1 from (lov) where rownum=1` finds nothing, the LOV can judge nothing — not checkable |
+
+Prove the gate both ways before trusting a clean result: feed it a known-bad value (`TCA_V2_API` → FAIL) and a known-good one (`TCA_V1_API` → ok).
+
+## R12 → 11i substitution catalogue (verified equivalents)
+
+Verify every suspect object/column against the 11i dictionary (`all_tab_columns`, `all_objects`, `all_arguments`) — never assume.
+
+| R12 construct | 11i replacement |
+|---|---|
+| `gl_ledgers` / `&lt;alias&gt;.ledger_id` on GL tables | `xxen_gl_ledgers_v` compat view (`sql/extensions/XXEN_GL_LEDGERS_V_11i.sql`) / `set_of_books_id` |
+| GL data access sets (`gl_access_set_norm_assign_v`, `GL_ACCESS_SET_ID` profile) | one SOB per responsibility: `GL_SET_OF_BKS_ID` profile |
+| `ap_suppliers` / `ap_supplier_sites_all` | `po_vendors` / `po_vendor_sites_all` (`vendor_id`/`vendor_site_id` match) |
+| R12 CE bank model (`ce_bank_accounts`, `ce_bank_acct_uses_all`, `ce_bank_branches_v`) | `ap_bank_accounts_all` / `ap_bank_branches` (`ar_receipt_method_accounts_all` carries `bank_account_id` directly; `inactive_date` not `end_date`) |
+| EBTax `zx_*` (rates, exemptions, regimes) | `ar_vat_tax` for tax codes; `ra_tax_exemptions_all` for exemptions; lookups `ZX_EXEMPTION_CONTROL`→`TAX_CONTROL_FLAG` (app 222), `ZX_EXEMPTION_REASON_CODE`→`TAX_REASON` (222) |
+| `hz_party_usg_assignments` (usage existence check) | `exists (select null from hz_cust_accounts ...)` — translate rule |
+| `created_by_module=&#x27;TCA_V2_API&#x27;` (a default, not a call) | `TCA_V1_API` — `HZ_CREATED_BY_MODULES` has no `TCA_V2_API` on 11i; an invalid default is discarded, the column arrives null and the HZ API rejects the row |
+| `pa_operating_units_v` | `hr_operating_units` scoped by `pa_implementations` |
+| `pa_projects_v.operating_unit` | column absent — derive via `org_id` join to `hr_operating_units` |
+| `arpt_sql_func_util.check_boe_paymeth` | inline: `decode(arc.creation_method_code,&#x27;AUTOMATIC&#x27;,nvl(arc.bill_of_exchange_flag,&#x27;N&#x27;),&#x27;N&#x27;)` |
+| `eam_wo_statuses_v` | `mfg_lookups WIP_JOB_STATUS` (codes 1,3,4,6,17) |
+| `mtl_cross_references_b`/`_vl` | `mtl_cross_references` (no `start/end_date_active` — drop the effectivity predicates) |
+| MOAC (`mo_global.*`, `mo_glob_org_access_tmp`, `fnd_request.set_org_id`) | absent — `fnd_profile.value(&#x27;ORG_ID&#x27;)`; remove `set_org_id` |
+| `fnd_log_messages.callstack` | `to_char(null) callstack` (keep alias) |
+| `fnd_irep_classes` (ISG Integration Repository) | absent before EBS 12.1. Shared code running on both releases reaches it through `execute immediate` (swallow `-942`), never statically |
+| 12c+ dictionary columns (`oracle_maintained`, `editionable`, `con_id`, `sharing`) | literal/null |
+| OPM converged model (`gmd_recipe_validity_rules.inventory_item_id/organization_id`) | pre-convergence (`item_id`/`orgn_code`) — usually neutralise the OPM branch |
+| `xla_*`, `iby_*`, `csi_*`, ECC | R12-only subsystems — clean neutralisation or `R12 only` |
+| GL journal line → subledger via `xla_ae_lines` | `gl_import_references` by `gl_sl_link_table`: `APECL` → `ap_ae_lines_all.gl_sl_link_id`; `RSL` → `rcv_receiving_sub_ledger` (`reference_5`=`rcv_transaction_id`, plus `gl_sl_link_id`); `MTA`/`WTA` → `gl_batch_id`=`reference_1`, org code `reference_2`, the journal line&#x27;s account and the journal period&#x27;s dates (one batch spans several periods and journals; `mta.gl_sl_link_id` when the reference carries one). AR by `reference_10`: `RA_CUST_TRX_LINE_GL_DIST` → `reference_3`=`cust_trx_line_gl_dist_id` (debit = `amount` on `REC`, credit otherwise), receipt and application rows → `reference_3`=`ar_distributions_all.line_id`. FA: `fa_adjustments.je_header_id/je_line_num`. Reporting (MRC) books carry primary-currency amounts in these tables, so show the detail only where it sums to the GL line. Reference: `GL Account Analysis (Drilldown) 11i` |
+| AR transaction → accounting and GL posting (`xla_ae_headers.creation_date`; `xla_ae_lines` → `gl_import_references.gl_sl_link_id`) | accounting: the GL transfer run, `ar_posting_control.creation_date` by `ra_cust_trx_line_gl_dist_all.posting_control_id` — never the distribution&#x27;s `gl_posted_date`, which is the date entered when the General Ledger Interface ran (often the period end, after the journal was already posted). Journal: `gl_import_references` by `reference_6=&#x27;CUSTOMER&#x27;`, `reference_2`=`to_char(customer_trx_id)` and `reference_10=&#x27;RA_CUST_TRX_LINE_GL_DIST&#x27;`, an index range scan on the standard `GL_IMPORT_REFERENCES_N3` (`gl_je_batches` has no `group_id` on 11i) |
+| SQL: `fetch first`, `cross apply`, `lateral`, `listagg(distinct` | rewrite with rownum/analytics (plain `listagg` is fine on 11.2) |
+| Quality (QA) | the only R12-only columns across the QA reporting surface are `qa_plans.deref_view_name` / `.multirow_flag` / `.jrad_upgrade_ver`, `qa_chars.dependent_element`, `qa_plan_chars.device_flag` / `.device_id` / `.override_flag`, `qa_plan_transactions.eqr_layout_mode` — never reference them in dual-use QA content. `deref_view_name` (the per-plan dynamic results view) is the natural enhancement and the trap. The action, parent/child, collection-trigger and `alr_*` tables carry no R12-only columns; the QA lookups and value sets exist on 11i, only shorter. `QA_PC_LAYOUT_MODE` exists on 11i — the COLUMN is R12-only, not the lookup |
+| PL/SQL record constructor `g_rec_type(a,b,c)` | 18c+ only — declare and assign field by field |
+
+**`ar_invoice_api_pub.create_invoice` accepts only `INV` and `DM` transaction types on 11i, so an ON-ACCOUNT credit memo cannot be created there at all.** `ar_invoice_utils.validate_transaction_type` stages `AR_INVALID_TRX_TYPE` (&quot;Transaction type is invalid with current transaction date&quot;) for any header whose type is not `in (&#x27;INV&#x27;,&#x27;DM&#x27;)`; the message names the date but the date is irrelevant, and the row is rejected with the rest of the batch created normally. R12 allows `CM` there, so the AR Transaction Upload creates on-account credit memos on r12 only -- an applied credit memo works on both, going through `ar_credit_memo_api_pub`. Do not mirror an on-account credit memo feature into the 11i twin: the code is unreachable.
+
+**Nothing on 11i writes the created ids back into the AR invoice GTTs** -- `ar_trx_header_gt.customer_trx_id` and `ar_trx_lines_gt.customer_trx_line_id` stay null after `create_invoice` (R12 populates both). Any post-creation step that finds the created transaction through those columns is therefore dead code in an 11i twin, silently: the loop body never runs, or a `select into` on the null id raises `ORA-01403`. The twin&#x27;s existing completion / shipment-detail / sales-credit blocks are in this category.
+
+**Read the results workbook, not the request log, when an upload row produces nothing.** A row rejected by the invoice api is reported in `ar_trx_errors_gt` and surfaces as the row&#x27;s Status and Message in the generated results XLSM; the request log shows only `l_return_status: S` and no created id, which reads like a code fault.
+
+**On 11i the online material transaction processor resets the concurrent request context.** `inv_lpn_trx_pub.process_lpn_trx` runs the Java stored procedure `inv_trx_mgr.process_trx_batch`, which leaves `fnd_global.conc_request_id`, `conc_program_id`, `prog_appl_id` and `login_id` at -1, while user and responsibility stay. No PL/SQL source shows the call. In an upload that posts material inside a row, such as a WIP move with backflush or completion, every later row&#x27;s transactions lose their request, program and login ids, and the request log stops at the first such row: `write_log` writes only while the request id is set. Read the request id once per run, use it wherever the request id is written or matched, and restore the context after each such call with the 12-argument `fnd_global.initialize` that `fnd_concurrent.init_sql_request` uses, fed from the request&#x27;s `fnd_concurrent_requests` row. Reference: `restore_request_context` in `XXEN_WIP_UPLOAD_11I`. r12 keeps the context.
+
+Fix style in `_11I` packages: minimal, each fix commented `-- 11i:`. Whole absent feature → `raise_application_error(-20001,&#x27;&lt;Feature&gt; is not supported on EBS 11i.&#x27;)` — never half-working code. Missing SELECT column → `to_char(null) &lt;alias&gt;` keeping the alias.
+
+**Concurrent-program parameter lists can differ between 11i and r12, and `fnd_request.submit_request` binds POSITIONALLY** — an r12-shaped argument list silently feeds every value into the wrong parameter from the divergence point on (the args map to the `$SRS$.&lt;PROGRAM&gt;` DFF segments ordered by `column_seq_num`). The eventual error (`REP-0091: Invalid value for parameter ...`) names the parameter that RECEIVED the junk, one slot past the divergence — diff the whole list on BOTH instances:
+
+```sql
+select fdfcu.column_seq_num, fdfcu.end_user_column_name, fdfcu.srw_param, fdfcu.required_flag, fdfcu.application_column_name
+from fnd_descr_flex_column_usages fdfcu
+where fdfcu.descriptive_flexfield_name=&#x27;$SRS$.&lt;PROGRAM&gt;&#x27; and fdfcu.enabled_flag=&#x27;Y&#x27; order by fdfcu.column_seq_num;
+```
+
+The Nth row is `argumentN`. The argument list is a real 11i-vs-r12 difference, so it belongs in the twin (`_11I` package), not a runtime `fnd_release` branch — a positional argument cannot be conditionally inserted mid-call. `CSTRSCCRP` (Supply Chain Cost Rollup) has an extra required `P_GROUP_ID` on 11i (`cst_lists_s.nextval`). `all_sequences`/`all_objects` hide no-privilege objects from a read-only account — confirm with `dba_*`.
+
+## Database-version traps (also hit R12 on an 11g database)
+
+### An `/*+ inline */` hint on a hierarchical WITH block referenced twice kills the session on 11.2.0.4
+
+The parse ends the connection (the client sees `DPY-4011` / `ORA-03113`, no ORA error), while 19c parses and runs it. Restructure so that the `connect by` block is referenced once instead of hinting it. Parse every rewritten report on an R12.1.3 instance on an 11.2 database and an 11i instance before shipping; a 19c run proves nothing here.
+
+### `standard_hash` needs 12.1 — derive deterministic GUIDs from seeded `ora_hash`
+
+`standard_hash` does not exist before database 12.1, so shipped code using it fails to compile on 11.2. A deterministic 16-byte GUID available on every release is four `to_char(ora_hash(p_text,4294967295,&lt;seed 0..3&gt;),&#x27;fm0XXXXXXX&#x27;)` concatenated. Hash a VARCHAR2: `unistr()` returns NVARCHAR2, which hashes in the national character set and gives a different value per instance; VARCHAR2 text hashes identically on AL32UTF8 and UTF8 databases.
+
+### `%TYPE` of a constant does not compile on 11.2
+
+`l_value c_constant%type` fails on an 11.2 database with `PLS-00206: %TYPE must be applied to a variable, column, field or attribute, not to &quot;C_CONSTANT&quot;` and takes the whole body down, while the development instance&#x27;s 19c compiles it. Declare a subtype and give it to both: `subtype t_marker is varchar2(17); c_marker constant t_marker:=&#x27;&lt;multiple_values&gt;&#x27;; l_marker t_marker;`.
+
+### A VARCHAR2 bind into SQL is capped at 4000 bytes before 12c
+
+Binding is the usual way past the 4000-byte literal cap (`ORA-01704`), and on 19c a 9,000-byte bind goes through. On 11.2.0.4 it does not: 4000 passes, 4001 raises `ORA-01460: unimplemented or unreasonable conversion requested`, in every context (`where :b is not null`, PL/SQL function argument, `where col=:b`). If the &gt;4000 case must work on every release, split the value into ≤4000-byte chunks and OR one predicate per chunk — `xxen_util.contains` treats a plain `a;b;c` list like a `&lt;multiple_values&gt;`-prefixed one, so chunks need no prefix. Cut each chunk back to the last complete value (`instrb(chunk,&#x27;;&#x27;,-1)`) and verify by rebuilding the chunks byte-for-byte. For a multi-value LOV, 4000 bytes is roughly 360 item codes.
+
+### A varying bind set needs `dbms_sql`, and the predicate must be registered WITH its bind
+
+Native dynamic SQL&#x27;s `USING` list is positional and fixed at compile time, so a where clause built from &quot;only the parameters that were entered&quot; cannot bind through `open ... for ... using`. Use `dbms_sql.parse` → conditional `bind_variable` → `execute` → `dbms_sql.to_refcursor` (11.1+), which hands back an ordinary `sys_refcursor`; the cursor must have been executed, must not have had `define_column` called, and its dbms_sql id is invalid afterwards — never close it. Add the predicate and record its bind in ONE helper: mirroring the same `if` conditions in a second bind block ships `ORA-01008` for the one parameter combination whose branch diverged. Exercise every branch in single and multiple value form. Binding also removes a hard parse per run.
+
+### Neutralising an R12-only column in a JOIN PREDICATE returns ZERO rows
+
+Replace the select-list expression with `to_char(null)` / `to_date(null)` / `to_number(null)` keeping the alias. If the column also appears on the left of an outer join, delete the join and its table — never rewrite it as `to_number(null)=alias.col(+)`: with no column on the left there is nothing to null-extend, it degenerates to `NULL = col`, and the whole result set collapses (identically on 11.2 and 19c). It survives every gate — valid SQL, unchanged column count, and zero rows look like &quot;no data for these parameters&quot;. Detection is a text scan over the stored SQL, main SQL AND Success/Error SQL (neutralised independently, so normally both carry it):
+
+```sql
+regexp_like(line,&#x27;(to_number|to_char|to_date)?\(?null\)?[[:space:]]*=[[:space:]]*[a-z0-9_]+\.[a-z0-9_]+[[:space:]]*\(\+\)&#x27;,&#x27;i&#x27;)
+```
+
+Bisect predicates cumulatively when a download returns zero rows — the first predicate that drops the count to 0 is the defect.
+
+### `listagg(distinct ...)` needs 19c, and a two-level correlation fails before it — both parse errors layer behind each other
+
+| Construct | Error | Fails on |
+|---|---|---|
+| `listagg(distinct x,&#x27;, &#x27;) within group (...)` | `ORA-30482: DISTINCT option not allowed for this function` | everything before 19c — 11.2, 12.1, 12.2, 18c |
+| a scalar subquery whose inline view references an alias from the outer query (correlation two levels deep) | `ORA-00904: &lt;alias&gt;.&lt;col&gt;: invalid identifier` | 11.2.0.4 (12.x boundary not pinned) |
+
+The ` 11g` suffix cannot cover `listagg(distinct)` (also fails on 12.x/18c); the MAIN definition must be version-agnostic. Both have the same fix — dedupe and correlate at ONE level:
+
+```sql
+--fails before 19c (ORA-30482)
+(select listagg(distinct ail.tax_classification_code,&#x27;, &#x27;) within group (order by ail.tax_classification_code)
+from ap_invoice_lines_all ail where ail.invoice_id=aia.invoice_id and ail.tax_classification_code is not null)
+--works everywhere: dedupe INSIDE the view, carry the key out, correlate OUTSIDE it
+(select listagg(x.tax_classification_code,&#x27;, &#x27;) within group (order by x.tax_classification_code)
+from (select distinct ail.invoice_id, ail.tax_classification_code from ap_invoice_lines_all ail
+where ail.tax_classification_code is not null) x
+where x.invoice_id=aia.invoice_id)
+```
+
+It is not a performance trade — Oracle pushes the outer predicate into the DISTINCT view, keeps index access, and the rewrite is usually much cheaper. The ` 11i` twin often already carries the correct shape — diff twin vs parent first and copy it.
+
+- The parser reports only the FIRST error — fix and re-parse until clean, using the framework&#x27;s own parse on an R12.1.3 instance on an 11.2 database as the verdict (it expands `&amp;lexical` parameters the way a run does, works read-only since the packages are definer-rights, and returns the column count for an arity check):
+  ```sql
+  xxen_report.initialize_run_param_vals_tmp(l_report_id);
+  l_msg:=xxen_report.initialize_parameter_values(l_report_id,&#x27;Y&#x27;,null,&#x27;Y&#x27;);
+  if l_msg is null then l_msg:=xxen_report.parse_report_sql_columns(l_report_id); end if;  --&#x27;Error parsing SQL.&#x27; = broken there
+  ```
+- Proving a rewrite equivalent on real data: compare the values as VARCHAR2 (`dbms_lob.substr(x,4000,1)`), not with `dbms_lob.compare` (phantom differences on per-row temporary CLOBs). A real difference may be ORDER, not content — `xmlagg` without `order by` follows the plan; compare sorted token sets and add the missing `order by`.
+
+### `ORA-01417: a table may be outer joined to at most one other table` — pre-12c only, invisible on the development instance
+
+Before 12c the table carrying `(+)` may reference at most ONE other table across all its join conditions. A normal r12 outer join like
+
+```sql
+cct_s.cost_type_id=crc.cost_type_id(+) and
+mp.organization_id=crc.organization_id(+) and
+br.resource_id=crc.resource_id(+)
+```
+
+parses on 19c and raises `ORA-01417` on 11.2.0.4 at parse time — main SQL, Success SQL and Error SQL each independently. It is a DATABASE-version behaviour, so it also hits R12 customers on an 11.2 database (an R12.1.3 instance on an 11.2 database); the fix is one dual-use definition, never an ` 11g`/` 11i` variant.
+
+Fix: wrap the DRIVING tables in an inline view so the outer-joined entity references exactly one alias. Do not reorder joins, add `nvl`s, or convert to a scalar subquery (measured 15× more buffer gets):
+
+```sql
+from
+(
+select &lt;the driving tables&#x27; columns, plus every join key the outer join needs&gt;
+from &lt;all the inner-joined driving tables&gt;
+where &lt;all their restrictions, including the 1=1 anchor&gt;
+) x, --11i: before 12c an outer joined table may reference at most one other table, so the driving tables are wrapped
+&lt;the outer-joined entity&gt; e
+where
+x.key1=e.key1(+) and x.key2=e.key2(+) and x.key3=e.key3(+)
+```
+
+- Keep the `1=1`/`n=n` parameter anchor INSIDE the inline view, with the aliases its `SQL_TEXT` predicates reference.
+- Expose the join keys under distinct names (`bd_department_id`, `br_resource_id`) and the descriptor columns too, then reference them as `x.&lt;name&gt;` outside; anything still referencing an inner alias from the outer query is `ORA-00904`.
+- In a Success SQL alias the inline view `xu` so every existing `xu.&lt;upload column&gt;` reference keeps resolving.
+- `e.rowid` still works on the outer-joined entity, so an `is not null` presence test survives the wrap. A second entity outer-joined to only the first is fine outside.
+- A KEYS-ONLY inline view is often enough — wrap only enough driving tables that the outer-joined alias sees one (`(select pll2.line_location_id, pol2.item_id ... ) k` joined on the key), which measures at parity with the original.
+- Diagnostic signature on an UPLOAD: the upload succeeds and the RESULT report fails — the request log shows normal processing, then `--- ERROR parsing SQL ---` with `ORA-01417` and the rendered `Error SQL UNION ALL Success SQL`. The reported line is the SECOND outer-join predicate of the offending alias — count the alias&#x27;s predicates rather than trusting the quoted line.
+- Counting select-list columns to verify a wrap: the content XMLs are CRLF, so a `&#x27;\nfrom\n&#x27;` scan never matches — normalise line endings first.
+
+Verify a fix three ways, in this order:
+
+1. Parse both shapes on a real 11.2 instance (an 11i instance, or an R12.1.3 instance on an 11.2 database) — old must raise `ORA-01417`, new must parse. Substitute a `(select … from dual)` stand-in for a missing `xu` view (the error counts join-graph aliases, not table types).
+2. Prove row-for-row equivalence on the development instance, where the old shape still parses — both against the same stand-in data covering join hits, outer-join misses AND driving-join misses, `MINUS` in both directions (0/0).
+3. Run the real upload E2E and confirm the result sub-request completes `C`/`C` with non-empty output, including at least one Error row so both UNION branches run.
+
+A regex scan is not a substitute for parsing — it is wrong in both directions (aliases in different UNION branches look like violations; function-wrapped or line-split predicates hide real ones). The authoritative sweep: parse every stored SQL (`xxen_reports.sql_text` for `type=&#x27;U&#x27;` plus `xxen_upload_sqls.sql_text` `sql_type=&#x27;Success SQL&#x27;`) on an R12.1.3 instance on an 11.2 database (connect as described in your environment file (`blitz-environment.md`), `alter session set current_schema=apps`), binds/lexicals neutralised (`regexp_replace(sql,&#x27;:\$?[A-Za-z0-9_$#.]+&#x27;,&#x27;null&#x27;)`, same for `&amp;\w+`), `dbms_sql.parse` each; run the identical script on the development instance (19c) and classify only `OK on 19c` + `ORA-01417 on 11.2` as a defect (the neutralisation produces incidental ORA-00933/923/920/907 noise on both, and can never create an outer join). Do not judge an ` 11i` twin by its r12 namesake — separate reports, separate SQL. For the 11i bundle itself an 11i instance as `apps` is the reference target; under a read-only account without a grant on `fnd_global` substitute number literals for `fnd_global.resp_appl_id`/`resp_id` (they sit in almost every `org_access_view` predicate) — then an instance with real data is a full parse and execution target. A dual-use upload with no twin fixed on the development instance is fixed on 11i at the same time — check for a twin before assuming 11i-specific work. `WITH` clause names look like missing tables (`ORA-00942`) when scanning for absent objects.
+
+Equivalence-testing an ` 11i` twin needs a substitution, because neither instance runs both shapes (the old shape raises `ORA-01417` on 11i, the twin&#x27;s 11i-only objects do not exist on the development instance): replace `xxen_gl_ledgers_v` with `(select gl.name, gl.ledger_id set_of_books_id from gl_ledgers gl)` in BOTH shapes and run the MINUS on the development instance.
+
+### 16 or more analytic `listagg` over the same window raise `ORA-01467: sort key too long` before 12.2
+
+Oracle evaluates every analytic function that shares one `over (partition by ...)` and `within group (order by ...)` in a single WINDOW SORT, and on 11.2 and 12.1 that sort rejects the 16th `listagg` whatever the data volume (15 pass; a listagg with a different `order by` lands in its own sort and does not count). 12.2+ has no such limit, so a 19c instance never shows it.
+
+Write such a merge as aggregate `listagg(...) within group (order by ...)` with `group by` on the constant columns instead of `select distinct` over analytic listaggs; 30 aggregate listaggs run on 11.2. A pre-12.2 database (a 12.2.4 instance, 11.2.0.4) is the only proof; the equivalence proof is the byte-identical output of the two shapes on the development instance.
+
+## The 11i apps tier runs SQL*Plus 8.0.6 and an old FNDLOAD
+
+- `NLS_LANG=AMERICAN_AMERICA.AL32UTF8` kills the 8.0.6 client outright (`ORA-12705: invalid or unknown NLS parameter value specified`): the connect fails and nothing runs. `UTF8`, `WE8ISO8859P1`, `US7ASCII` work; the installer&#x27;s default is `American_America.UTF8`.
+- A concurrent request carries the submitting session&#x27;s NLS territory into the `.prog`&#x27;s `NLS_LANG`, and an 11i instance&#x27;s 8.0.6 client rejects territory `INDIA`: a request submitted from SQLcl on an Indian-locale Windows client fails with `ORA-12705` before the report starts (completion text `Program exited with status 1`). Start a script that submits 11i requests with `alter session set nls_territory=&#x27;AMERICA&#x27;;`.
+- `set serveroutput on size 1000000` (not `unlimited`); `put_line` under 250 chars.
+
+## Environment / mechanics (credentials in your environment file (`blitz-environment.md`))
+
+- Compile with `alter session set plsql_ccflags=&#x27;is_11i:1&#x27;;` + `set define off` — also for every later `alter package ... compile` of an XXEN object: `XXEN_UTIL`&#x27;s body branches on `$$is_11i`, so a recompile without the flag (after a spec change, or a dependency-driven recompile loop) fails with `ORA-00942` on an R12-only table and leaves the whole install invalid until it is recompiled with the flag; import via `$XXEN_TOP/bin/import_xml apps &lt;file&gt;` (derives `update_upload_dependencies` + `update_parameter_dependencies` automatically).
+- CLOB export from old instances: char-wise base64 chunking truncates silently at multibyte characters. Byte-safe: `dbms_lob.converttoblob` first, then chunk the BLOB (or `utl_file` `put_raw` &#x27;wb&#x27;).
+- 11i Vision data differs from the development instance: org M1=207 does not exist; AR periods, WIP calendar etc. differ — always query for valid test values.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

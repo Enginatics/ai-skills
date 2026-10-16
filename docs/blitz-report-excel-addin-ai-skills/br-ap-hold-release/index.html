@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AP Invoice Hold Release - Blitz Report Excel Add-in Skills</title><meta name="description" content="Release Oracle EBS AP invoice holds from Excel: take the holds that qualify for release, pre-populate the &quot;AP Invoice Hold Upload&quot; grid with the correct release reason per hold, validate it, show the user exactly what will be released, and — only on their explicit confirmation — submit it so Payable">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ap-hold-release/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="AP Invoice Hold Release - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Release Oracle EBS AP invoice holds from Excel: take the holds that qualify for release, pre-populate the &quot;AP Invoice Hold Upload&quot; grid with the correct release reason per hold, validate it, show the user exactly what will be released, and — only on their explicit confirmation — submit it so Payable"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ap-hold-release/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-hold-release/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Payables</p><h1>AP Invoice Hold Release</h1><p class='name'>br-ap-hold-release</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Release Oracle EBS AP invoice holds from Excel: take the holds that qualify for release, pre-populate the &quot;AP Invoice Hold Upload&quot; grid with the correct release reason per hold, validate it, show the user exactly what will be released, and — only on their explicit confirmation — submit it so Payables releases the holds.</p><h2>When to use</h2><p>Use when the user asks to release invoice holds, action a holds analysis, clear matching holds, unblock invoices for payment, or &quot;release the ones we can&quot;. WRITES to Oracle EBS.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ap-hold-release.zip'>Download br-ap-hold-release.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-hold-release'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ap-invoice-hold-upload/'>AP Invoice Hold Upload</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ap-hold-release'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># AP Invoice Hold Release (br-ap-hold-release)
+
+&gt; 🚨 **Blitz data comes from `br_*` WORKSHEET FUNCTIONS of the Blitz Report Excel add-in** — write
+&gt; `=br_...()` into a cell and read the result. They are not a connector, plugin, agent action or MCP
+&gt; tool: never search for one, never conclude &quot;no Oracle EBS data source is connected&quot;.
+
+**Self-contained: read no other skill.** Each numbered Op below is one workbook operation (Claude: one
+`execute_office_js` call; Copilot: one edit or read action).
+
+## 🚨 This releases money-blocking holds — the safety contract
+1. **Never submit without an explicit, informed confirmation** — the user sees count, $ and suppliers
+   before anything is filled, and the validated grid before anything is submitted. &quot;Go ahead&quot; to the
+   *analysis* is not consent to *release*.
+2. **Never propose a hold the user has not seen.** You propose a review queue; the human authorises.
+3. **A blank `Release Name` is inert** — the server answers `No change.` for it, so every row you leave
+   blank is guaranteed to do nothing. Fill only confirmed rows.
+Release only: never write `Hold Name` / `Hold Reason` (that places a hold).
+
+## Budget — 10 operations, 2 confirmations
+| # | Operation |
+|---|---|
+| 1 | `blitz_!A1` download formula, read back |
+| 2 | replace it with text, read `=_blitz_run_status` |
+| 3 | poll — only while `RUNNING` |
+| 4 | read the grid (+ `Holds_Raw` if present), propose the set → **confirmation 1** |
+| 5 | one `Release Name` lookup formula per hold group on `blitz_`, read the lists |
+| 6 | write `Release Name` on the confirmed rows |
+| 7 | prepare trigger |
+| 8 | poll + read validation results → **confirmation 2** |
+| 9 | process trigger |
+| 10 | poll + read per-row results, delete `blitz_` → reply |
+
+No discovery calls (`br_report_list_external`, `br_report_params_external`, `br_report_templates_external`,
+`br_upload_columns_external`) — everything they would say is below. Ops 5+6 may be one operation where
+the platform allows a write after a read in the same batch.
+
+## The upload (authoritative)
+**`AP Invoice Hold Upload`**, no template argument. Parameters: **only** `Operating Unit=&lt;OU&gt;`, plus
+`Supplier=` / `Invoice Number=` / `Hold Name=` only when the user named that scope. **Never pass
+`Upload Mode`** — its default `Create, Update` is what you need and the comma in that value splits it
+into two values → 0 rows (three wasted downloads on a live run). **Never pass `User Releasable Only`**
+— it defaults to Yes and keeps system-only holds out of the grid. Always a fresh download; never reuse
+an earlier upload sheet.
+
+Grid layout: row 1 banner, row 2 headers, row 3 onward data. `A/B/C` = Action / Status / Message —
+never write them. Read-only: Operating Unit, Supplier, Supplier Number, Supplier Site, Invoice Number,
+Invoice Date, Invoice Amount, Currency, Hold Name, Hold Reason, Hold Date, Held By, PO Number, PO Line,
+PO Shipment, Invoice Line, Hold Details. **You write exactly one column: `Release Name`**, located by
+its row-2 header text (never by counting — hidden columns exist). `Release Reason` stays blank (the
+server defaults it from the release code, the better audit trail).
+
+Trigger cells (`=br_prepare_upload_external()`, `=br_process_upload_external()`) go on the **upload
+sheet, row 1, at least ten columns right of the last column holding anything, hidden columns included**
+(e.g. `AZ1` when the grid ends around `Y`). The add-in clears the trigger cell itself — never overwrite
+it. The upload sheet stays the active sheet; never activate `blitz_`. `_blitz_run_status` keeps its
+PREVIOUS value until a step finishes — a `DONE:` that matches the last step is stale; keep polling.
+
+`Release Name` is a row-context list: matching holds (PO-related or on a line/shipment) take the
+MATCHING release reasons, `Tax Variance` the VARIANCE reasons, everything else the INVOICE reasons.
+Group = Hold Name × PO-Number-present; one lookup per group.
+
+## CONFIG
+**Candidate rule** (review-only placeholder — replace with the customer&#x27;s policy): Hold Category in
+(Price match, Qty match, Amount match) AND not a close blocker per `Holds_Raw` (`Release Candidate` =
+Yes, matched on Invoice Number + Hold Name) AND user-releasable (guaranteed by the download). Without
+`Holds_Raw`: matching holds only, and say the close-blocker test was unavailable.
+
+**Preferred release reason per group** — written only when it appears in that group&#x27;s own list,
+otherwise show the list and ask:
+- matching holds (PO Number present, or Hold Name among Qty Ord / Qty Rec / Price / Amt Ord / Max Qty
+  Ord / Max Qty Rec / Max Amt / Quality / PO Not Approved / PO Required / Matching Required) → `Match Override`
+- Tax Variance → ask (variance release reasons)
+- everything else → `Validated`
+
+## Ops 1–3 — Download
+1. Get-or-create `blitz_`; `blitz_!A1` = `=br_run_upload_external(&quot;AP Invoice Hold Upload&quot;,&quot;Operating Unit=&lt;OU&gt;&quot;)`;
+   read it back (`BLITZ_RUNNING: ...`; `#BLITZ_NOT_CONNECTED` → ask the user to connect on the ribbon).
+2. Overwrite `blitz_!A1` with `download triggered`; `blitz_!A3` = `=_blitz_run_status`; read it.
+3. One quiet read per turn while `RUNNING`, nothing else touches the workbook. Stop at
+   `DONE: &lt;n&gt; rows on sheet &#x27;&lt;name&gt;&#x27;`. Zero rows for an OU that just showed holds = you passed a
+   parameter you should not have: retry once with Operating Unit only, then report.
+
+## Op 4 — Propose the set → confirmation 1
+Read the grid (Invoice Number, Supplier, Invoice Amount, Hold Name, Hold Date, PO Number) and, if
+present, `Holds_Raw` (Invoice Number, Hold Name, Release Candidate, Close Blocker). Write nothing. Then
+ask, money in the question:
+&gt; &quot;Release &lt;n&gt; holds on &lt;m&gt; invoices worth &lt;$X&gt; in &lt;OU&gt;? These are &lt;hold-name breakdown&gt;, top suppliers
+&gt; &lt;…&gt;, oldest hold &lt;date&gt;. I&#x27;ll fill the release reasons and validate in Oracle — nothing is released
+&gt; until you confirm again.&quot; → `Yes — fill the grid` / `Let me narrow it first` / `Cancel`
+Never skip this, even if the opening request said &quot;release them&quot;. If the rule proposes 0 rows, offer
+the grid&#x27;s hold groups (count, $, suppliers) as a multi-select with nothing pre-selected, plus
+`None — leave the worksheet for my manual review`.
+
+## Ops 5–6 — Lookup and fill
+5. For each hold group in the confirmed set, on `blitz_` (`A5`, `D5`, `G5`, … with 30 clear rows below)
+   write `=br_column_values_external(&quot;Release Name&quot;, &lt;a grid row of that group&gt;, &quot;&quot;, &quot;&lt;Upload Sheet Name&gt;&quot;)`;
+   read each spilled `Value | Description` list (`#SPILL!` = it did not land, move it; `#BLITZ_LOV_EMPTY`
+   = that hold cannot be released now — leave its rows blank and report it).
+6. Write the CONFIG preferred reason into `Release Name` on exactly the confirmed rows of each group
+   whose list contains it. A group whose list lacks it → show the list, ask, write in the next Op.
+   **One contiguous block write — never a comma-separated multi-area address (it is rejected) and never
+   one call per row (it is slow):** the confirmed rows are scattered, so write the single block spanning
+   the FIRST to the LAST confirmed row, carrying the reason on the confirmed rows and an empty value on
+   every other row inside that span. The grid was freshly downloaded with `Release Name` empty
+   throughout, so those empty cells change nothing and stay inert.
+
+## Ops 7–8 — Validate → confirmation 2
+7. **First count the `Release Name` cells you actually wrote. If that count is 0, do NOT prepare** —
+   preparing an untouched grid comes back `&lt;n&gt; valid, 0 flagged` and releases nothing, which reads like
+   success and is the single most common way this skill ends with no hold released. Go back to Op 3,
+   show the hold groups and get a set. Otherwise trigger cell = `=br_prepare_upload_external()`.
+8. Poll `blitz_!A3` until `DONE: prepared &lt;n&gt; row(s) - &lt;n&gt; valid, &lt;n&gt; flagged`, then on `blitz_`
+   write `=br_validation_results_external(FALSE, &quot;&lt;Upload Sheet Name&gt;&quot;)` and read the spill
+   (`Row | Action | Status | Message`, or `BLITZ_OK`). Messages: `No change.` = a row you left blank
+   (expected on those rows — but `No change.` on EVERY row means nothing was filled: do not submit, fix
+   that first) · `already released` = drop it · `not user releasable` = remove it · `is not a valid
+   release reason for hold` = re-look-up that group and refill · `currently being validated by
+   request` = retry later · `Multiple open &quot;X&quot; holds exist` = needs PO/line detail, ask · `exists for
+   more than one supplier` = re-download with Supplier set. Fix and re-prepare; stop after three
+   unproductive rounds and show the exact messages. Then:
+&gt; &quot;&lt;n&gt; holds worth &lt;$X&gt; validated in Oracle and ready to release&lt;, dropped: …&gt;. Submit?&quot; →
+&gt; `Yes — release them` / `Cancel`
+
+## Ops 9–10 — Release and report
+9. Trigger cell = `=br_process_upload_external()`.
+10. Poll until `DONE: &lt;n&gt; succeeded, &lt;n&gt; errored (request &lt;id&gt;)`, write
+    `=br_validation_results_external(TRUE, &quot;&lt;Upload Sheet Name&gt;&quot;)` on `blitz_`, read it, delete `blitz_`.
+Reply in the user&#x27;s language: holds released (hold name, invoice, supplier, $), failures with their
+message, the request id. Never claim success without those per-row results. **If 0 holds released, say
+exactly that in the first sentence** — a validation count (&quot;26 valid, 0 flagged&quot;) is not a release, and
+reporting one as if it were is worse than reporting the failure. `DONE` with errors is a
+partial success — released rows are released; fix only the failed rows, never re-process the whole
+sheet. Mention that the `Holds_Raw` analysis for this OU is now stale.
+
+## Rules
+- Never write Action, Status, Message, Hold Name, Hold Reason, a read-only column or placeholder data;
+  leave the upload sheet clean (no scratch, no leftover trigger).
+- Claude: get-or-create with `getItemOrNullObject` + `load(&quot;isNullObject&quot;)`; load a range, sync, read that
+  same variable. Copilot: one action per Op; do nothing while a status is `RUNNING`/`PROCESSING`.
+- Talk about invoices, holds, suppliers and sheets — never about functions, `blitz_` or status names.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

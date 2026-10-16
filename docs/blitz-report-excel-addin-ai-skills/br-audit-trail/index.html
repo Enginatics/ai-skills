@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EBS Audit Trail &amp; Access Review - Blitz Report Excel Add-in Skills</title><meta name="description" content="Answer &quot;who changed what, when&quot; across Oracle EBS setups and access: mine the FND Audit Trail reports for setup and profile changes by record and column, correlate with user login history and responsibility assignments, and produce a reviewable change narrative for an audit window or an incident. Re">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-audit-trail/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="EBS Audit Trail &amp; Access Review - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Answer &quot;who changed what, when&quot; across Oracle EBS setups and access: mine the FND Audit Trail reports for setup and profile changes by record and column, correlate with user login history and responsibility assignments, and produce a reviewable change narrative for an audit window or an incident. Re"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-audit-trail/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-audit-trail/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Audit and Security</p><h1>EBS Audit Trail &amp; Access Review</h1><p class='name'>br-audit-trail</p><p class='lead'>Answer &quot;who changed what, when&quot; across Oracle EBS setups and access: mine the FND Audit Trail reports for setup and profile changes by record and column, correlate with user login history and responsibility assignments, and produce a reviewable change narrative for an audit window or an incident. Read-only.</p><h2>When to use</h2><p>Use when the user asks who changed a setup, wants a segregation-of-duties or access review, needs audit evidence for a period, or is investigating an unexpected configuration change.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-audit-trail.zip'>Download br-audit-trail.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-audit-trail'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/fnd-audit-setup/'>FND Audit Setup</a></li><li><a href='https://www.enginatics.com/reports/fnd-audit-table-changes-by-column/'>FND Audit Table Changes by Column</a></li><li><a href='https://www.enginatics.com/reports/fnd-audit-table-changes-by-record/'>FND Audit Table Changes by Record</a></li><li><a href='https://www.enginatics.com/reports/fnd-user-login-history/'>FND User Login History</a></li><li><a href='https://www.enginatics.com/reports/fnd-user-responsibilities/'>FND User Responsibilities</a></li><li><a href='https://www.enginatics.com/reports/fnd-users/'>FND Users</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-audit-trail'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># EBS Audit Trail &amp; Access Review (br-audit-trail)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run.
+
+## When to use
+&quot;Who changed this supplier&#x27;s bank account&quot;, &quot;what setup changed last month&quot;, &quot;audit evidence for
+the Q2 window&quot;, &quot;who had this responsibility and when did they last use it&quot;, &quot;unexpected config
+change — investigate&quot;. Read-only by nature — this skill produces evidence and narrative, never
+changes anything.
+
+## Inputs
+- **The question** — an entity/table, a user, or a time window; at least one is required.
+- **Date range** — required for window reviews; ask rather than defaulting wide.
+
+## Reports used (authoritative names — do NOT broad-search for them)
+| Report (exact name) | Role |
+|---|---|
+| `FND Audit Setup` | which tables/columns are under AuditTrail — ALWAYS run first (see the hard rule) |
+| `FND Audit Table Changes by Record` | the change log per record — who, when, what row |
+| `FND Audit Table Changes by Column` | old value → new value per audited column |
+| `FND User Login History` | session context around a change — who was on, from where |
+| `FND User Responsibilities` | who holds which responsibility, with dates — the access half |
+| `FND Users` | account status, last logon — dormant/shared-account signals |
+
+Pass the exact names; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+## 🚨 The hard rule — audit coverage first, never silence
+AuditTrail only records tables the customer has ENABLED it for. Run `FND Audit Setup` first, and:
+- If the asked-about table/column is NOT audited, the answer is **&quot;not auditable — AuditTrail is
+  not enabled for X&quot;**, stated up front — NEVER &quot;no changes found&quot;, which reads as a clean bill.
+- Every window review names its coverage: &quot;this narrative covers the N audited tables; changes
+  outside them are invisible to AuditTrail.&quot;
+This distinction is the whole integrity of the deliverable.
+
+## Workflow
+1. **Coverage**: `FND Audit Setup` → what is auditable. Answer the coverage question explicitly.
+2. **Extract** the change log for the scope (by record + by column for the audited entities in the
+   window), and the access context (login history, responsibilities) — one call per report.
+3. **Build the change narrative**: per change — who, when, old → new, and the session context
+   (login proximity). Group by entity and by user; flag the review-worthy patterns:
+   - changes outside business hours or from atypical users,
+   - rapid change-and-revert pairs (old→new→old),
+   - changes by dormant or generic accounts,
+   - high-sensitivity columns (bank accounts, profile values, flexfield security) — call these out
+     by name.
+4. **Access review mode** (when asked): responsibilities per user vs last-login recency — unused
+   grants, active grants on dormant accounts, and users holding review-flagged combinations (the
+   combination list is CONFIG — the customer&#x27;s SoD matrix, not ours; label placeholders).
+5. **Deliverable**: the narrative sheet (filterable change log), the flagged-patterns summary, and
+   the coverage statement. Dashboard optional (br-data-dashboard) for window reviews.
+
+## Hard rules
+- Never characterize a change as wrong or unauthorized — report who/what/when and the pattern;
+  judgment belongs to the reviewer.
+- Old/new values may be sensitive (bank accounts). Present them where the question requires,
+  and never copy them beyond the deliverable sheet.
+
+## Degradation rules
+- AuditTrail enabled but shadow tables empty for the window → &quot;audited, no changes recorded&quot; —
+  that IS a clean answer, distinct from not-audited.
+- Login history purged for part of the window → narrative proceeds, context gap stated.
+
+## Talk in the user&#x27;s language
+Users, screens, setups, dates — never `br_*` functions, shadow tables, or helper sheets.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FA Period Close Readiness - Blitz Report Excel Add-in Skills</title><meta name="description" content="Assess Oracle EBS Fixed Assets period-close readiness in Excel: have the br-run-reports skill extract the mass-additions backlog, depreciation/reserve status, and FA-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an FA close-readiness scorecard.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-fa-close-readiness/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="FA Period Close Readiness - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Assess Oracle EBS Fixed Assets period-close readiness in Excel: have the br-run-reports skill extract the mass-additions backlog, depreciation/reserve status, and FA-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an FA close-readiness scorecard."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-fa-close-readiness/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fa-close-readiness/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Fixed Assets</p><h1>FA Period Close Readiness</h1><p class='name'>br-fa-close-readiness</p><p class='lead'>Assess Oracle EBS Fixed Assets period-close readiness in Excel: have the br-run-reports skill extract the mass-additions backlog, depreciation/reserve status, and FA-to-GL reconciliation, then give a red/amber/green verdict with remediation and build an FA close-readiness scorecard.</p><h2>When to use</h2><p>Use when the user asks &quot;can we close FA for {period}&quot;, &quot;fixed assets period close readiness&quot;, mass additions backlog, or depreciation not run.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-fa-close-readiness.zip'>Download br-fa-close-readiness.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fa-close-readiness'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/cac-accounting-period-status/'>CAC Accounting Period Status</a></li><li><a href='https://www.enginatics.com/reports/fa-depreciation-reserve/'>FA Depreciation Reserve</a></li><li><a href='https://www.enginatics.com/reports/fa-journal-entry-reserve-ledger/'>FA Journal Entry Reserve Ledger</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fa-close-readiness'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># FA Period Close Readiness (br-fa-close-readiness)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Produce an FA close-readiness scorecard in one workbook. You own orchestration, scoring, and the
+verdict; br-run-reports does extraction and br-data-dashboard the build. Run steps in
+order, on separate turns, keeping intermediate sheets.
+
+**Requires:** br-run-reports, br-data-dashboard.
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports**
+(connection, auth, async run, completion, cell population). Never call `br_*` functions, and never
+rename/read/sum the result sheet or start analysis until extraction is confirmed complete. This
+skill is **read-and-recommend only**: it never runs depreciation, posts mass additions, or uploads;
+it reports blockers and the recommended action.
+
+## When to use
+&quot;Can we close FA for May&quot;, &quot;fixed assets period close readiness&quot;, mass additions backlog,
+depreciation not run/closed, FA↔GL reconciliation.
+
+## Inputs
+- **Book** (corporate/tax book) — required; **Period**.
+
+## Reports used (authoritative names — do NOT broad-search for them)
+These exact report names are known. When you ask br-run-reports to run one, pass the
+**documented name directly** — do NOT run a `br_report_list_external` discovery search first. Inspect
+parameters only if you need an exact LOV spelling. **Fallback:** only if a run returns
+`#BLITZ_REPORT_NOT_FOUND` (the instance renamed it, or the module isn&#x27;t installed) do a name search.
+
+| Report (exact name) | Run with | Notes |
+|---|---|---|
+| `FA Depreciation by period` | Book | **The verdict driver** — depreciation-run status per period; the latest period with depreciation rows is the last period depreciation ran. If that&#x27;s before your target period, depreciation is **not run** → Blocker. |
+| `FA Unposted Mass Additions` | Book | **The backlog queue** — unposted mass additions by status (New / On Hold / Merged). &quot;New&quot; lines are ready to post → Blocker until posted. (Confirm exact name on the instance; the run-screen name may carry a suffix.) |
+| `FA Journal Entry Reserve Ledger` *(optional, FA↔GL tie-out)* | Book + Period (+ **Set of Books Currency**) | Reserve vs GL. ⚠️ Needs a **Currency / Set of Books Currency** param and **errors on dual-currency ledgers** (ambiguous USD) — use only for the GL tie-out, not as the dep-status driver. |
+| `FA Depreciation Reserve` *(optional)* | Book + Period | Reserve-status proxy — may return 0 rows on some instances; don&#x27;t rely on it for the verdict. |
+
+FA periods are **per-book** (not GL/CAC accounting periods), so there is **no `CAC Accounting Period Status` step** here — the depreciation-by-period report itself reflects whether the FA period&#x27;s depreciation has run.
+
+## CONFIG
+### Checks → class + remediation
+| Check (source report) | Class | Remediation |
+|---|---|---|
+| Mass-additions backlog (unposted additions awaiting review) | **Blocker** | Review and post via **FA Mass Additions upload** → Post Mass Additions |
+| Depreciation not run for the period (`FA Journal Entry Reserve Ledger`, `FA Depreciation Reserve` as reserve-status proxies) | **Blocker** | Run Depreciation (close period) |
+| FA↔GL reconciliation variance (reserve ledger vs GL) | **Blocker** | Investigate the difference |
+| Pending transactions (additions/adjustments/retirements not processed) | **Review** | Process before close |
+
+&gt; **Data-source note (resolved on a real run):** the mass-additions backlog queue is
+&gt; **`FA Unposted Mass Additions`** (status New / On Hold / Merged). Use it directly — no new SQL
+&gt; needed. Only if it isn&#x27;t found on the instance, flag it rather than forcing a wrong report.
+
+### Readiness (RAG)
+- **Red** — mass-additions backlog, depreciation not run, or FA↔GL variance over materiality.
+- **Amber** — only Review-class pending items.
+- **Green** — additions posted, depreciation run, FA ties to GL.
+
+### Output sheets &amp; tab order (left to right)
+`FA_Close_Readiness` (first), [`FA_GL_Recon`], `FA_Mass_Additions`, `FA_Depreciation` (last).
+
+## Pipeline
+1. **Extract — DELEGATE.** br-run-reports runs **`FA Depreciation by period`** (Book) → `FA_Depreciation` (the latest period with rows = last period depreciation ran); and **`FA Unposted Mass Additions`** (Book) → `FA_Mass_Additions` (backlog by status). Optionally `FA Journal Entry Reserve Ledger` for the FA↔GL tie-out → `FA_GL_Recon` (needs a Set of Books Currency param; skip if it errors on a dual-currency ledger). Wait for each; do nothing mid-run.
+2. **Anchor.** Record mass-additions backlog count, whether depreciation has run, FA↔GL variance. Clean → Green scorecard.
+3. **Score.** Apply CONFIG; rank blockers; attach remediation.
+4. **Scorecard *(single `execute_office_js` call)*** (delegate to br-data-dashboard if it fires; else build inline). Write all scorecard sections to `FA_Close_Readiness` in one call: RAG banner (book+period); mass-additions backlog, depreciation status, FA↔GL variance, blocking-items list. Any charts follow in a second call.
+   - **Build mechanics (learned on a real run):** build on a NEW sheet at **position 0** (first tab); leave each report on the sheet br-run-reports created (its report name) — do NOT rename it, the dashboard links to it. **Do NOT use a multi-row `copyToRange`** to fill formula rows (it can latch onto the wrong source box and duplicate headers into the data) — write each row&#x27;s formula explicitly. After building, scan **beyond** the dashboard&#x27;s column range, clear any stray cells, and widen amount columns so values don&#x27;t render as `######`.
+5. **Narrative.** ≤5 bullets: overall call, biggest blocker, recommended next action.
+6. **Arrange tabs + final validation.** Arrange tabs per CONFIG; make `FA_Close_Readiness` active. Only after the scorecard. **Then do the one permitted verification read:** confirm the scorecard&#x27;s mass-additions backlog count and FA↔GL variance tie to the Step-2 anchor. This is the only explicit re-read allowed in the entire pipeline outside of the anchor step.
+
+## Validation
+Scorecard ties to raw sheets; Red only if a Blocker exists. If the mass-additions backlog data
+source is unconfirmed, say so in the narrative rather than reporting a false Green.
+
+## Closed-loop (roadmap, not executed here)
+FA Mass Additions upload posts additions; Depreciation is a concurrent submit. This skill recommends; a human runs it.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

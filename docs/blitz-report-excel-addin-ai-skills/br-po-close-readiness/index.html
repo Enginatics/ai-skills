@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PO Period Close Readiness - Blitz Report Excel Add-in Skills</title><meta name="description" content="Assess Oracle EBS Purchasing period-close readiness in Excel: have the br-run-reports skill extract the AP/PO accrual reconciliation, the aged uninvoiced receipts, and the period status, then give a red/amber/green verdict with remediation and build a PO close-readiness scorecard.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-po-close-readiness/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="PO Period Close Readiness - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Assess Oracle EBS Purchasing period-close readiness in Excel: have the br-run-reports skill extract the AP/PO accrual reconciliation, the aged uninvoiced receipts, and the period status, then give a red/amber/green verdict with remediation and build a PO close-readiness scorecard."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-po-close-readiness/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-close-readiness/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Purchasing</p><h1>PO Period Close Readiness</h1><p class='name'>br-po-close-readiness</p><p class='lead'>Assess Oracle EBS Purchasing period-close readiness in Excel: have the br-run-reports skill extract the AP/PO accrual reconciliation, the aged uninvoiced receipts, and the period status, then give a red/amber/green verdict with remediation and build a PO close-readiness scorecard.</p><h2>When to use</h2><p>Use when the user asks &quot;can we close PO for {period}&quot;, &quot;purchasing close readiness&quot;, &quot;accrual reconciliation status&quot;, or uninvoiced receipts backlog.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-po-close-readiness.zip'>Download br-po-close-readiness.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-close-readiness'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/cac-accounting-period-status/'>CAC Accounting Period Status</a></li><li><a href='https://www.enginatics.com/reports/po-headers/'>PO Headers</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-close-readiness'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># PO Period Close Readiness (br-po-close-readiness)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: under 7 minutes for single-module, under 20 minutes for orchestrations.
+
+Produce a PO close-readiness scorecard in one workbook. You own orchestration, scoring, and the
+verdict; br-run-reports does extraction and br-data-dashboard the build. Run steps in order, on
+separate turns, keeping intermediate sheets. This is the purchasing-accrual leg the subledger-to-GL
+reconciliation does not cover.
+
+**Requires:** br-run-reports, br-data-dashboard.
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports**. Never call
+`br_*` functions, and never touch a result sheet until extraction is confirmed complete. This skill
+is **read-and-recommend only**: it never closes the period, runs the accrual load, or matches
+invoices; it reports blockers and the recommended action.
+
+## When to use
+&quot;Can we close Purchasing for May&quot;, &quot;PO close readiness&quot;, &quot;does the accrual tie out&quot;, &quot;how big is
+the uninvoiced receipts backlog&quot;, &quot;receipt accrual reconciliation status&quot;.
+
+## Inputs
+- **Operating Unit** — required; **Period**. *(Optional:* materiality $ for the accrual variance —
+  default in CONFIG.)*
+
+## Reports used (authoritative names — do NOT broad-search for them)
+Pass the **documented name directly** to br-run-reports — no discovery search first. **Fallback:**
+only on `#BLITZ_REPORT_NOT_FOUND` do a name search (the instance may have renamed it or lack the
+module).
+
+| Report (exact name) | Run with | Notes |
+|---|---|---|
+| `CST AP and PO Accrual Reconciliation` | OU (+ period/date params as offered) | **The verdict driver** — receipt-accrual balance vs AP/PO activity. ⚠️ It reads the accrual RELOAD snapshot: if the run screen shows a load-request/date param and the last load predates the period end, ask the user to run the accrual load first (or flag the verdict as stale-snapshot). |
+| `CST Uninvoiced Receipts` | OU (+ aging/date params as offered) | **The backlog queue** — received-not-invoiced lines; these ARE the accrual. Aged lines mean invoices missing or matching stuck. |
+| `CAC Accounting Period Status` | Ledger/OU + Period | Is the PO (and INV) period still open where it should be, and prior periods closed. |
+| `PO Headers and Lines` *(optional, housekeeping)* | OU + open-order filters | Old open POs past need-by that should be closed/cancelled — close hygiene, not a blocker. |
+
+## CONFIG
+### Checks → class + remediation
+| Check (source) | Class | Remediation |
+|---|---|---|
+| Accrual reconciliation variance beyond materiality (`CST AP and PO Accrual Reconciliation`) | **Blocker** | Investigate write-offs / mis-matched invoices before close |
+| Uninvoiced receipts older than the aging threshold and above the $ floor (`CST Uninvoiced Receipts`) | **Blocker** | Chase the invoices or resolve the receipt; they land in the accrual |
+| Accrual snapshot older than period end | **Blocker (data)** | Run the accrual load, then re-assess — never score a stale snapshot Green |
+| PO period already closed / prior period still open (`CAC Accounting Period Status`) | **Review** | Fix period statuses with the GL/INV owner |
+| Open POs past need-by (`PO Headers and Lines`) | **Review** | Mass-close/cancel candidates — hygiene, next cycle |
+
+**Defaults (edit to the customer):** materiality = $1,000 net variance; uninvoiced aging threshold =
+30 days; $ floor per line = $100.
+
+### Readiness (RAG)
+- **Red** — accrual variance over materiality, aged uninvoiced backlog over threshold, or a stale
+  accrual snapshot.
+- **Amber** — only Review-class items (period-status oddities, old open POs).
+- **Green** — accrual ties within materiality on a current snapshot; backlog young and small.
+
+### Output sheets &amp; tab order (left to right)
+`PO_Close_Readiness` (first), `PO_Accrual_Recon`, `PO_Uninvoiced`, `Period_Status`,
+[`PO_Open_Orders`] (last).
+
+## Pipeline
+1. **Extract — DELEGATE.** br-run-reports runs `CST AP and PO Accrual Reconciliation` →
+   `PO_Accrual_Recon`; `CST Uninvoiced Receipts` → `PO_Uninvoiced`; `CAC Accounting Period Status`
+   → `Period_Status`; optionally `PO Headers and Lines` → `PO_Open_Orders`. Wait for each; do
+   nothing mid-run.
+2. **Anchor.** Record net accrual variance, uninvoiced line count / total $ / aged count+$, period
+   statuses, snapshot currency (load date vs period end). Clean → Green scorecard.
+3. **Score.** Apply CONFIG; rank blockers by $; attach remediation.
+4. **Scorecard *(single `execute_office_js` call)*** (delegate to br-data-dashboard if it fires;
+   else inline). RAG banner (OU+period); accrual variance vs materiality; uninvoiced backlog KPIs
+   (count, $, aged share); period-status line; blocking-items list with $ and remediation. Charts
+   in a second call. Build on a NEW sheet at **position 0**; leave each report on the sheet
+   br-run-reports created (do NOT rename — the dashboard links to it); **do NOT use a multi-row
+   `copyToRange`** for formula rows; after building, clear strays beyond the range and widen amount
+   columns so values don&#x27;t render as `######`.
+5. **Narrative.** ≤5 bullets: overall call, biggest blocker $, snapshot caveat if any, recommended
+   next action.
+6. **Arrange tabs + final validation.** Order per CONFIG; `PO_Close_Readiness` active. **Then the
+   one permitted verification read:** the scorecard&#x27;s variance and backlog figures tie to the
+   Step-2 anchor.
+
+## Validation
+Scorecard ties to raw sheets; Red only if a Blocker exists; a stale accrual snapshot is never
+reported Green — say &quot;not assessable until the accrual load runs&quot; instead.
+
+## Closed-loop (roadmap, not executed here)
+Invoice matching gaps route to AP (the AP Invoice Upload exists); PO mass-close is a Forms action.
+This skill recommends; a human runs them.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

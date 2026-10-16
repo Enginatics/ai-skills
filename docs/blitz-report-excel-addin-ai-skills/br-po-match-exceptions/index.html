@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PO 3-Way Match Exception Triage - Blitz Report Excel Add-in Skills</title><meta name="description" content="Triage Oracle EBS 3-way match exceptions — invoices held because PO, receipt and invoice disagree on quantity or price — explain the root cause per hold (not received, over-billed, price change, receipt discrepancy), and route each to the right resolver: receiving, buyer, or AP. Read-only.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-po-match-exceptions/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="PO 3-Way Match Exception Triage - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Triage Oracle EBS 3-way match exceptions — invoices held because PO, receipt and invoice disagree on quantity or price — explain the root cause per hold (not received, over-billed, price change, receipt discrepancy), and route each to the right resolver: receiving, buyer, or AP. Read-only."><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-po-match-exceptions/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-match-exceptions/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Purchasing</p><h1>PO 3-Way Match Exception Triage</h1><p class='name'>br-po-match-exceptions</p><p class='lead'>Triage Oracle EBS 3-way match exceptions — invoices held because PO, receipt and invoice disagree on quantity or price — explain the root cause per hold (not received, over-billed, price change, receipt discrepancy), and route each to the right resolver: receiving, buyer, or AP. Read-only.</p><h2>When to use</h2><p>Use when the user asks about match holds, quantity/price mismatches, &quot;why is this invoice on match hold&quot;, or wants the match-exception backlog worked down.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-po-match-exceptions.zip'>Download br-po-match-exceptions.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-match-exceptions'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/po-headers/'>PO Headers</a></li><li><a href='https://www.enginatics.com/reports/po-receipts-deliveries-discrepancy/'>PO Receipts/Deliveries Discrepancy</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-po-match-exceptions'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># PO 3-Way Match Exception Triage (br-po-match-exceptions)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run.
+
+## When to use
+&quot;Why are these invoices on match hold&quot;, &quot;work down the match-exception backlog&quot;, &quot;quantity vs price
+mismatch analysis&quot;, &quot;what&#x27;s blocking these invoices — receiving or the buyer?&quot;. For the full holds
+landscape (all hold types) use **br-ap-holds-analysis**; to actually release holds use
+**br-ap-hold-release**. This skill is the match-specific deep dive that tells each team what THEY
+must fix — it is read-and-recommend only.
+
+## Inputs
+- **Operating Unit** (required) — ask if not supplied.
+- *Optional:* Supplier, Hold Date range, PO Number, materiality threshold (see CONFIG).
+
+## Reports used (authoritative names — do NOT broad-search for them)
+| Report (exact name) | Role |
+|---|---|
+| `AP Invoice on Hold` | the spine — match-class holds (quantity received, quantity ordered, price) with invoice + PO context |
+| `AP Invoices and Lines` | invoice line detail for held invoices (billed qty/price) |
+| `PO Headers and Lines` | ordered qty/price and the buyer per PO line |
+| `PO Receipts/Deliveries Discrepancy` | receipt-side discrepancies backing the &quot;not received / short received&quot; classes |
+
+Pass the exact names; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+## Workflow
+1. **Extract** the match-class holds for the OU (filter `AP Invoice on Hold` to the matching hold
+   names), then the supporting detail — one call per report.
+2. **Classify each hold** by comparing the three legs:
+   - **NOT RECEIVED / SHORT RECEIVED** — billed qty &gt; received qty → resolver: **Receiving**
+     (&quot;receive the goods or dispute the billing&quot;).
+   - **OVER-BILLED QTY** — billed qty &gt; ordered qty → resolver: **Buyer** (amend the PO) or **AP**
+     (supplier credit).
+   - **PRICE MISMATCH** — invoice price ≠ PO price → resolver: **Buyer** (price change / new quote)
+     or **AP** (within-tolerance candidate — see CONFIG).
+   - **RECEIPT DISCREPANCY** — receipt exists but disagrees with the delivery per the discrepancy
+     report → resolver: **Receiving**.
+   Never force a class: a hold whose legs cannot be reconciled from the data is UNCLASSIFIED with
+   the reason stated.
+3. **Build the routed worklists** — one sheet per resolver (Receiving / Buyer / AP), ranked by $
+   held, with per-row plain-language cause (&quot;Billed 100, received 60 on receipt R-1234&quot;) and the
+   PO/buyer named. Supplier-level roll-up: repeat offenders by class.
+4. **Summarize**: $ on match hold by class, aging, close exposure (holds on invoices dated in the
+   closing period), and the top 5 systemic patterns (one supplier always over-bills, one PO&#x27;s price
+   is stale, ...). Dashboard via br-data-dashboard.
+
+## CONFIG — placeholder policy, label it as such
+The price-tolerance figure (&quot;within tolerance, candidate to release&quot;) is the customer&#x27;s matching
+tolerance policy — this data does not carry it. Until the user states it, mark such rows
+&quot;review candidate — confirm against your tolerance policy&quot;, never &quot;safe to release&quot;.
+
+## Hand-off
+When the user wants to act: releasable candidates go to **br-ap-hold-release** (it owns the
+release safety contract). This skill never writes.
+
+## Degradation rules
+- `PO Receipts/Deliveries Discrepancy` returning nothing does NOT mean no receipt problems — say
+  &quot;no delivery discrepancies recorded&quot; and classify from the qty legs alone.
+- A hold on an unmatched (no-PO) invoice is out of scope — count it, point at
+  br-ap-holds-analysis, don&#x27;t force it into a match class.
+
+## Talk in the user&#x27;s language
+Name suppliers, POs, buyers and dollar amounts — never `br_*` functions or helper sheets.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

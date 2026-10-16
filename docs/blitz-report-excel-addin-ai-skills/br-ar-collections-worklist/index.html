@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR Collections Worklist - Blitz Report Excel Add-in Skills</title><meta name="description" content="Build a prioritized Oracle EBS Accounts Receivable collections worklist in Excel: have the br-run-reports skill extract open AR aging, past-due detail and disputes, score each customer by collectible-$-at-risk (aging severity), exclude disputed balances, assign a dunning tier, draft the reminder tex">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-collections-worklist/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="AR Collections Worklist - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Build a prioritized Oracle EBS Accounts Receivable collections worklist in Excel: have the br-run-reports skill extract open AR aging, past-due detail and disputes, score each customer by collectible-$-at-risk (aging severity), exclude disputed balances, assign a dunning tier, draft the reminder tex"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-collections-worklist/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-worklist/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>AR Collections Worklist</h1><p class='name'>br-ar-collections-worklist</p><p class='lead'>Build a prioritized Oracle EBS Accounts Receivable collections worklist in Excel: have the br-run-reports skill extract open AR aging, past-due detail and disputes, score each customer by collectible-$-at-risk (aging severity), exclude disputed balances, assign a dunning tier, draft the reminder text per tier, and build a collections dashboard. Payment-behaviour (receipt-history RFM) re-ranking is an add-on that runs only when the user asks for it.</p><h2>When to use</h2><p>Use when the user asks for a collections worklist, who to chase, dunning priorities, reduce DSO, overdue receivables to call, or AR collections prioritization.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-collections-worklist.zip'>Download br-ar-collections-worklist.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-worklist'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ar-applied-receipts/'>AR Applied Receipts</a></li><li><a href='https://www.enginatics.com/reports/ar-disputed-invoice/'>AR Disputed Invoice</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-collections-worklist'>View source on GitHub</a></p><h2>Skill contents</h2><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># AR Collections Worklist (br-ar-collections-worklist)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+
+&gt; **Performance:** Read `br-analytics-standards` at the start of every run
+&gt; (`read_skill(&quot;br-analytics-standards&quot;)`). All pipeline steps must follow those rules.
+&gt; Target runtime: **Standard run under 5 minutes**; the payment-behaviour add-on (Step 4) costs an
+&gt; extra 12-month report extract plus an RFM pass, so a full run is 7+ minutes. Add it only when
+&gt; asked (Step 0).
+
+Produce a ranked AR collections worklist in one Excel workbook. You own the orchestration, the
+priority scoring, the dunning tiering, and the drafted messages; the specialist skills do the
+extraction, the payment-behaviour scoring, and the dashboard build. Run steps **in order**, on
+separate turns, keeping every intermediate sheet so a collector can audit each account.
+
+**Requires:** br-run-reports (extraction); br-data-dashboard (dashboard build — if it doesn&#x27;t fire,
+build inline per Step 6). **Add-on only (Step 4, when selected in Step 0):** br-rfm-analysis
+(payment-behaviour segmentation — if it doesn&#x27;t fire, score reliability inline).
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is performed by the **br-run-reports**
+skill, which owns add-in connection, authentication, asynchronous execution, completion polling, and
+deterministic cell population.
+- Never call `br_*` add-in functions directly.
+- Never rename the result sheet, read its values, sum a column, or start any analysis **until
+  extraction is confirmed complete** — touching the workbook while the add-in&#x27;s run is still in
+  flight can stall it and the run will never finish.
+- Your job is only: (1) ask br-run-reports to fetch the data, then (2) once it has fully landed,
+  score, tier, draft, and present it.
+
+**This skill is read-and-recommend only.** It does NOT send any dunning message, place a credit hold,
+or apply a receipt. It produces a prioritized worklist with drafted text and a recommended action per
+account; contacting the customer and any system change are separate, human-approved steps.
+
+&gt; **Tone caveat:** the drafted dunning text is a **starting point**, not a sent message. Always show
+&gt; it for the collector to review and adjust before sending — wording, legal/late-fee language, and
+&gt; escalation thresholds are customer-policy-specific.
+
+## When to use
+&quot;Build me a collections worklist&quot;, &quot;who should we chase first&quot;, &quot;dunning priorities&quot;, &quot;reduce DSO&quot;,
+&quot;which overdue customers to call&quot;, &quot;AR collections prioritization&quot;, &quot;draft reminders for past-due
+accounts&quot;. For a plain aging report with no scoring, use br-run-reports directly.
+
+## Inputs (collect up front)
+- **Operating Unit** (required) — AR Aging takes **Reporting Level + Reporting Context**. Reporting
+  Level **defaults to Ledger**, so for an OU-scoped run set Reporting Level = `Operating Unit` and
+  Reporting Context = `&lt;OU&gt;` (the same MOAC pattern as the other AR skills); ask if not supplied.
+- **As-of Date** (default: today) — the aging snapshot date.
+- **Payment-behaviour scoring** — the one deep-dive add-on; **default No**, see Step 0.
+- *Optional:* Customer filter (scope to one account); minimum-balance threshold (default **$50** —
+  accounts below this drop off the worklist); a credit-limit check.
+
+## Reports used  (authoritative names — do NOT broad-search for them)
+These exact report names are known. When you ask br-run-reports to run one, pass the **documented
+name directly** — do NOT run a `br_report_list_external` discovery search first. Inspect parameters
+only if you need an exact LOV spelling. **Fallback:** only if a run returns `#BLITZ_REPORT_NOT_FOUND`
+do a name search. If a run returns a bare `ERROR: ERROR`, the param names didn&#x27;t match — have
+br-run-reports inspect params (`br_report_params_external`) and adapt, then retry; don&#x27;t abandon it.
+
+| Report (exact name) | Run with | Role |
+|---|---|---|
+| `AR Aging` | **Reporting Level** (defaults to **Ledger**; set = **`Operating Unit`** for an OU-scoped run) + **Reporting Context** (the ledger/OU) + **As Of Date**. Report Summary defaults to **`I`** (invoice detail — keep it; the skill needs per-invoice rows). | **The worklist base** — open + past-due balances at invoice grain. Receivables (always present) |
+| `AR Disputed Invoice` *(recommended)* | **Operating Unit** (+ optional Customer Name/Number Low/High, Due Date Low/High) | The **exclusion** set — don&#x27;t chase invoices in active dispute. |
+| `AR Applied Receipts` *(add-on only — Step 4; skip unless chosen in Step 0)* | **Reporting Level + Reporting Context** + an **Apply Date From/To** range (e.g. last 12 months) | **Payment-behaviour history** — feeds the reliability (RFM) score. Usually the slowest extract in this skill. |
+| `AR Customer Credit Snapshot` *(rarely needed)* | **Operating Unit** | Usually **unnecessary**: `AR Aging` already returns a **`CREDIT_LIMITS`** column per customer, so read the credit-hold check from there. |
+
+&gt; **Verified `AR Aging` output columns (r12, parsed):** `CUSTOMER`, `CUSTOMER_NUMBER`, `COLLECTOR`,
+&gt; `CREDIT_LIMITS`, `Billing/Invoice Number`, `Invoice Date`, `Due Date`, `Days Past Due Date`,
+&gt; `AMOUNTS_CURRENCY`, `ORIGINAL_AMOUNT`, `OUTSTANDING_AMOUNT`, **`PAST_DUE_AMOUNT`**, plus the dynamic
+&gt; aging-bucket columns (named per the selected bucket set, e.g. `Current`, `Week 5`, `Week 6` …).
+&gt; **Use `PAST_DUE_AMOUNT` directly** for the past-due figure and **`Days Past Due Date`** for severity —
+&gt; do NOT key on the bucket-column names (they change with the bucket set).
+
+## CONFIG  — edit to match the customer; logic below reads from here
+
+### Aging-severity weight (per open invoice — from `Days Past Due Date`, NOT bucket names)
+| `Days Past Due Date` | Weight |
+|---|---|
+| ≤ 0 (not yet due) | 0.00 |
+| 1–30 | 0.25 |
+| 31–60 | 0.50 |
+| 61–90 | 0.75 |
+| 90+ | 1.00 |
+**`past_due_$`** per customer = SUM of **`PAST_DUE_AMOUNT`** (the report&#x27;s own past-due column — don&#x27;t
+re-derive it from buckets). **`weighted_exposure`** = Σ(invoice `PAST_DUE_AMOUNT` × its day-band
+weight) — old money counts more than money one day late. The aging-bucket columns are **dynamically
+named** (e.g. `Current`/`Week 5`/`Week 6`), so weight by the numeric `Days Past Due Date`, never by
+bucket name.
+
+### Payment-reliability segment (from `AR Applied Receipts` history; RFM-style)
+Score each customer on how they pay — **Recency** (days since last receipt), **Frequency** (receipts
+in window), **Monetary** (total paid). Map to a reliability segment:
+- **Reliable Payer** — pays regularly, recently → likely to pay on a reminder (chase, expect quick win)
+- **Slow Payer** — pays but late/sporadically → firmer follow-up
+- **Erratic / At-risk** — long recency, shrinking payments → escalate sooner, watch credit
+- **New** — too little history → standard reminder, build the relationship
+- **Dormant** — no receipts in the window but an open balance → escalate / verify the account is live
+If the history report isn&#x27;t available, default every customer to **Slow Payer** and note that
+reliability scoring was skipped.
+
+### Priority score (ranks the worklist — chase big, old, *collectible* money first)
+`priority = weighted_exposure × reliability_multiplier`, where the multiplier rewards collectibility:
+Reliable 1.0, Slow 0.9, New 0.8, Erratic/At-risk 0.7, Dormant 0.6. (A huge balance from a Dormant
+account still ranks high on raw exposure but is nudged below an equally-large Reliable balance that
+will actually pay on a call.) Sort the worklist by `priority` descending.
+
+### Dunning tier (by worst open bucket × reliability) → drafted message
+| Tier | Trigger | Message tone (draft) |
+|---|---|---|
+| **T1 — Reminder** | max `Days Past Due Date` 1–30, or any Reliable Payer | Friendly &quot;your account shows a past-due balance of $X; please remit or let us know if already paid.&quot; |
+| **T2 — Firm follow-up** | max `Days Past Due Date` 31–60, or Slow Payer past 30 | Firm &quot;balance of $X is now NN days past due; please arrange payment within 7 days.&quot; |
+| **T3 — Final demand / escalation** | max `Days Past Due Date` 61+, or Erratic/Dormant past 60, or **`past_due_$` &gt; `CREDIT_LIMITS`** | Final &quot;balance of $X is seriously overdue; the account will be placed on credit hold and may be escalated to collections unless paid by &lt;date&gt;.&quot; |
+Draft one message per worklisted customer at its tier, with the customer name, past-due $, worst
+bucket, and oldest-invoice date merged in.
+
+### Exclusions / adjustments (apply BEFORE scoring)
+- **Disputed invoices** (from `AR Disputed Invoice`, joined by `CUSTOMER_NUMBER` + `BILLING_NUMBER`)
+  → **flag, do not dun**; subtract their `DISPUTE_AMOUNT` / `BALANCE_DUE` from `past_due_$` so a
+  customer isn&#x27;t chased for money they&#x27;re formally disputing (keep on a side tab).
+- **Unapplied / on-account receipts and credit memos** → **net** against the customer&#x27;s open balance
+  before scoring (don&#x27;t chase a customer who has an unapplied payment covering the balance).
+- **Below minimum-balance threshold** → drop from the worklist (keep on the full tab).
+- **Credit-hold flag** (optional) — when `past_due_$` &gt; the customer&#x27;s **`CREDIT_LIMITS`** (already in
+  `AR Aging` — no snapshot run needed), set the credit-hold recommendation and force **T3**.
+
+### Output sheet names &amp; tab order (left to right)
+`AR_Collections` (dashboard, first), `Worklist` (ranked customers + drafted message), `AR_Aging`
+(the extracted base — its report name), [`AR_Disputes`], [`AR_Receipts`].
+
+---
+
+## Pipeline
+
+### Step 0 — Analysis depth  *(one `ask_user_question`, before any extraction)*
+The **Standard run** — Steps 1–2 + 5–8 over `AR Aging` (+ `AR Disputed Invoice`) — always executes
+and already produces a correct, ranked, tiered worklist with drafted messages. **Step 4
+(payment-behaviour reliability) is the one deep-dive add-on**: it costs an *extra report extraction*
+(`AR Applied Receipts`, 12 months) plus an RFM pass, and it only re-orders an already-valid worklist
+through the reliability multiplier. Never run it unasked.
+
+Ask **once**, up front — nothing pre-selected:
+&gt; &quot;Standard worklist (aging severity, disputes excluded, dunning tiers, drafted messages) runs by
+&gt; default. Also score payment behaviour? It adds a 12-month receipt-history extract — slower — and
+&gt; re-ranks by how reliably each customer actually pays.&quot; → `Yes — add reliability scoring` /
+&gt; `No — standard only`
+
+**Skip the question when the request already implies it**: &quot;who actually pays&quot;, &quot;reliable payers&quot;,
+&quot;payment behaviour&quot;, &quot;full analysis&quot; → add Step 4; &quot;quick worklist&quot;, &quot;who do we chase&quot;, &quot;just the
+aging&quot; → Standard only. Never re-ask mid-pipeline; Step 7 offers it afterwards.
+
+**When Step 4 is skipped** (the default): do **not** extract `AR Applied Receipts`, default every
+customer to **Slow Payer** (multiplier 0.9 — constant, so the ranking is by `weighted_exposure`
+alone, which is still a valid worklist), and label the dashboard &quot;reliability scoring not run&quot;.
+
+### Step 1 — Extract  (DELEGATE to br-run-reports — do not run it yourself)
+Ask **br-run-reports** to run **&quot;AR Aging&quot;** with Reporting Level + Reporting Context = {OU} and
+As Of Date = {input}. Then (recommended) **&quot;AR Disputed Invoice&quot;** for the OU → `AR_Disputes`.
+**Only when Step 0 selected the add-on**, also run **&quot;AR Applied Receipts&quot;** for the OU + a 12-month
+Apply Date window → `AR_Receipts`. Pass
+each exact name directly; wait for each to fully complete before the next; do nothing mid-run.
+- `#BLITZ_NOT_CONNECTED` → relay it, ask the user to connect via the Blitz Report ribbon, retry.
+- **Fallback:** if the hand-off doesn&#x27;t fire or the data never lands, tell the user to run &quot;AR Aging&quot;
+  themselves for the OU + as-of date, then ask you to analyse it; resume at 1b.
+
+### Step 1b — Anchor  *(single `execute_office_js` call)*
+In one call: locate the columns (`CUSTOMER`, `CUSTOMER_NUMBER`, `OUTSTANDING_AMOUNT`,
+`PAST_DUE_AMOUNT`, `Days Past Due Date`, `CREDIT_LIMITS`), record the **customer count**, **total open
+AR** (SUM `OUTSTANDING_AMOUNT`), and **total past-due $** (SUM `PAST_DUE_AMOUNT`) as the
+reconciliation anchors, and return them. **If no past-due balances:** report &quot;no past-due AR for {OU}
+as of {date}&quot; and stop with a clean verdict.
+
+### Step 2 — Apply exclusions + derive exposure  *(single `execute_office_js` call)*
+In one call: per customer, net out unapplied/on-account credits and subtract disputed amounts (joined
+from `AR_Disputes` on `CUSTOMER_NUMBER` + `BILLING_NUMBER`), compute `past_due_$` (SUM
+`PAST_DUE_AMOUNT`), `weighted_exposure` (per the day-band weights), the **max `Days Past Due Date`**
+(severity), and the oldest-invoice date — writing all headers + seed row + `autoFill` in the same
+block (Rule 4). Drop below-threshold customers. **Text-format only literal label cells**, never the
+formula cells (Excel-correctness #1/#2). **Track the ACTUAL adjustments you apply, as running totals,
+for the Step-8 reconciliation — `disputes_subtracted` (the sum of dispute amounts you genuinely
+subtracted from a past-due invoice, NOT the gross total of every dispute row) and `onaccount_netted`
+(the sum of on-account / credit-memo amounts you netted off past-due) — and `blobs.setJSON` them.**
+Return the surviving customer count + total weighted exposure.
+
+### Step 3 — (no-op placeholder)  *(reserved)*
+Reliability scoring is Step 4; keep Steps 2 and 4 as separate single-call blocks rather than merging,
+so a missing receipt history (Step 4 skipped) doesn&#x27;t force a re-run of Step 2.
+
+### Step 4 — Payment-behaviour reliability  *(OPTIONAL — only if selected in Step 0; single `execute_office_js` call)*  (delegate to br-rfm-analysis if it fires; else inline)
+In one call: from `AR_Receipts`, aggregate per customer by `CUSTOMER_NUMBER` (last `RECEIPT_DATE`,
+receipt count, total `RECEIPT_AMOUNT` / `AMOUNT_APPLIED_TO_TRX`), compute RFM quintiles, assign the
+reliability segment per CONFIG, and write the segment + `reliability_multiplier` back onto the
+worklist customers. Return the segment counts. **If `AR_Receipts` wasn&#x27;t extracted** — because Step 0
+chose Standard, or the report isn&#x27;t available — skip this step, default all to Slow Payer, and note
+it on the dashboard.
+
+### Step 5 — Score, tier, draft  *(single `execute_office_js` call)*
+In one call: compute `priority = weighted_exposure × reliability_multiplier`, sort descending, assign
+the **dunning tier** per CONFIG (forcing T3 when `past_due_$` &gt; `CREDIT_LIMITS`), set the credit-hold
+recommendation, draft the per-customer message (merge name / past-due $ / max days past due /
+oldest-invoice date), create `Worklist`, and write every row (customer, past-due $, weighted
+exposure, max days past due, reliability segment, priority, tier, recommended action, drafted
+message). Return the worklist count and total `past_due_$` on it.
+
+### Step 6 — Dashboard  *(two `execute_office_js` calls: data then charts)*  (delegate to br-data-dashboard if it fires; else inline)
+**Call 1 — all data sections** on a NEW `AR_Collections` sheet at **position 0**: KPI band (**Total
+open AR**, **Total past-due $**, **# accounts to chase**, **$ past due 90+**, **Disputed excluded $**).
+The &quot;Disputed excluded $&quot; KPI must be the **`disputes_subtracted` actually removed from the worklist&#x27;s
+past-due** (from Step 2), NOT the gross total of every `AR_Disputes` row — most disputes are on settled
+/ not-past-due invoices (zero Balance Due), so the real figure is often $0 even when there are hundreds
+of dispute rows. Showing the gross total here overstates what was filtered; if you want to surface the
+raw dispute volume, put it in a separate &quot;(# dispute rows on file)&quot; sub-label, not the excluded-$ KPI;
+a day-band Pareto (0 / 1-30 / 31-60 / 61-90 / 90+) computed at **INVOICE grain** — read `Days Past Due
+Date` + `Past Due Amount` from `AR_Aging` and add each invoice&#x27;s past-due into its own band. Do **NOT**
+bucket a whole customer by its single worst (`max`) day — that dumps the customer&#x27;s entire balance into
+one band and leaves the others at $0, a misleading aging chart. **top-N worklist**
+(highest-priority customers with past-due $, max days past due, reliability, tier, recommended
+action); and a tier-distribution table (T1/T2/T3 counts and $). Every KPI is a formula referencing
+`Worklist` / `AR_Aging` (COUNTIFS/SUMIFS) so it refreshes on re-run. **When Step 4 was skipped**,
+label the reliability column &quot;not scored&quot; rather than showing a uniform &quot;Slow Payer&quot; that reads as a
+finding — and never point a KPI at `AR_Receipts`, which does not exist on a Standard run.
+**Call 2 — charts only:** a day-band bar chart and a tier-distribution bar chart.
+- **Build mechanics (house standard):** build only on the new sheet; do **not** rename the report
+  sheet (KPIs link to it). Do **NOT** use a multi-row `copyToRange` to fill worklist rows — write each
+  formula explicitly. After building, scan beyond the dashboard range, clear stray cells, widen amount
+  columns so values don&#x27;t render as `######`.
+
+### Step 7 — Narrative  *(single `set_cell_range` call)*
+Write all ≤6 bullets on `AR_Collections` in one call: total past-due $ and DSO context; the single
+biggest collectible account (customer + $ + tier); how much sits in 90+ and how many T3 accounts need
+escalation/credit-hold; how much was **excluded as disputed** (so the user trusts the filter); the
+recommended call order (top-priority customers first); and a one-line &quot;what changed vs the obvious
+&#x27;sort by balance&#x27; list&quot; — i.e. which mid-size accounts to call first for a quick DSO win (name the
+*reliable* ones only when Step 4 ran; otherwise the contrast is aging severity vs raw balance).
+Draw a reliability bullet only if Step 4 ran.
+
+Then, in your reply (not on the sheet), if the add-on was skipped, offer it in one line — and say it
+needs no re-extract of the aging: e.g. &quot;Want the worklist re-ranked by how reliably each customer
+actually pays? I can add that on this data — it pulls 12 months of receipt history.&quot;
+
+### Step 8 — Arrange tabs + final validation  *(single `execute_office_js` call + one read)*
+Reorder tabs to `AR_Collections`, `Worklist`, `AR_Aging`, [`AR_Disputes`], [`AR_Receipts`]; delete
+the `blitz_` helper sheet; activate `AR_Collections`.
+**Then the one permitted verification read:** reconcile to the Step-1b total past-due anchor using the
+**actual adjustments tracked in Step 2** — `worklisted past-due $ + disputes_subtracted + onaccount_netted
++ below-threshold $ = anchor`. Do **NOT** add the gross total dispute amount (it includes disputes on
+non-past-due / non-worklisted invoices and overshoots the anchor), and do **NOT** omit `onaccount_netted`
+(it reduced the worklist) — those two omissions are what produce a phantom GAP. If it still doesn&#x27;t tie,
+a derived column or join dropped rows: **fix it and report the fix — NEVER end the run on an unreconciled
+GAP.** This is the only explicit re-read outside Step 1b.
+
+---
+
+## Validation (before declaring done)
+- **Reconcile:** worklisted past-due $ + `disputes_subtracted` + `onaccount_netted` + below-threshold $
+  = the Step-1b total past-due anchor (use the ACTUAL adjustments tracked in Step 2, not the gross
+  dispute total). A non-zero gap is a blocker — fix before declaring done; never ship an unreconciled GAP.
+- **Tier sanity:** every T3 has max `Days Past Due Date` ≥ 61, a `CREDIT_LIMITS` breach, or an
+  Erratic/Dormant segment; no not-yet-due-only account is on the worklist.
+- **Exclusion sanity:** spot-check 2–3 disputed invoices are flagged/excluded, and 2–3 top worklist
+  rows by reading their values.
+- **No `######`** and no stray cells outside the dashboard range.
+
+## Re-run / refresh
+Two different requests — do not confuse them, and never re-extract when you don&#x27;t have to:
+
+- **&quot;Now add reliability scoring&quot; / &quot;who actually pays&quot;** (same aging) — `AR_Aging` and `AR_Disputes`
+  are already on the sheet. **Do NOT re-run them.** Confirm `AR_Aging` still exists and its customer
+  count + past-due anchor are unchanged, extract only `AR Applied Receipts`, then run Step 4 and
+  re-run Steps 5–8 so the multiplier re-ranks the worklist and the dashboard/tabs pick up
+  `AR_Receipts`. Skip Step 0 — the request names the add-on.
+- **&quot;As of month-end&quot; / &quot;just OU X&quot; / &quot;rebuild&quot;** (new data) — re-drive from Step 1 with the new
+  scope, rebuilding the same set of sheets the previous run produced (don&#x27;t silently drop or add the
+  add-on).
+
+## Closed-loop (roadmap, not executed here)
+Applying an unidentified/unapplied receipt is deliverable via a Blitz Upload; setting a customer
+credit hold is a customer-profile update (upload); sending the dunning message is an external step.
+This skill prioritizes and drafts; a human acts.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>
