@@ -6,7 +6,9 @@
   encumbrance, ledger, movement, multiplier, , , segment 1, segment 2, ... segment 20)` - segment n
   is argument 12+n.
 - Period name: `br_period_name(year, period number, ledger, , )`.
-- Period offset: `br_period_offset(period cell, n, , , ledger)` = n periods after that cell's period.
+- Period offset: `br_period_offset(period cell, n, range, adjustment, ledger)` = n periods after
+  that cell's period; with range `"Y"` it returns `first - last`, the periods from the cell's to the
+  nth, for a CTD balance.
 - Segment description: `br_segment_description("segment name", value, ledger)`.
 - A stored formula may carry a file prefix before the function (`'...Blitz Report.xlam'!br_balance(`,
   `[1]!br_balance(`): keep it exactly as it is.
@@ -104,3 +106,20 @@ affected (one cell names them all) and ask:
 - it should read a balance type: write that letter into the named cell (one cell serves the whole
   column), then let the converter finish (P10);
 - the column is unused: clear its unconverted formulas, after the user confirms.
+
+## P12 - GL Wand ledger id
+GL Wand names a ledger by its id on this instance. The call stays in GL Wand form.
+- "is not one of the ledgers your responsibilities offer": ask which ledger the id stands for. The
+  user runs the converter again under a responsibility that offers it (P10).
+- "names several ledgers": one Blitz Report balance reads one ledger. Ask whether the ledgers share
+  currency and chart of accounts; if so, offer one GL Wand formula per ledger id added with `+`, then
+  P10. Otherwise mark Needs you.
+
+## P13 - No Blitz Report equivalent
+The call stays as it was: GL Wand combination (`USE_SEGn`) or flexfield (`{n:value}`) criteria, a
+GL Wand function the converter does not know, a Spreadsheet Server GXE, GXC, GEXD or GPX function.
+- A criterion: ask which segment values it selects, write them `;`-separated into the segment cell
+  or argument, then P10.
+- GXE (expand to detail): the converted sheet does this with FSG Discover or Expand; offer to clear
+  the cell after the user confirms.
+- Anything else: mark Needs you.

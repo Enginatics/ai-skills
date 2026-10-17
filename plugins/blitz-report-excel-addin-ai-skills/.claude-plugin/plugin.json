@@ -17,6 +17,7 @@
     "finance",
     "period close"
   ],
-  "version": "1.20261016.788",
-  "repository": "https://github.com/enginatics/ai-skills"
+  "version": "1.20261017.796",
+  "repository": "https://github.com/enginatics/ai-skills",
+  "license": "MIT"
 }

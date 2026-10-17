@@ -72,7 +72,9 @@ question, apply it in a further Op 4 + Op 5 round.</pre></section><section id='f
   encumbrance, ledger, movement, multiplier, , , segment 1, segment 2, ... segment 20)` - segment n
   is argument 12+n.
 - Period name: `br_period_name(year, period number, ledger, , )`.
-- Period offset: `br_period_offset(period cell, n, , , ledger)` = n periods after that cell&#x27;s period.
+- Period offset: `br_period_offset(period cell, n, range, adjustment, ledger)` = n periods after
+  that cell&#x27;s period; with range `&quot;Y&quot;` it returns `first - last`, the periods from the cell&#x27;s to the
+  nth, for a CTD balance.
 - Segment description: `br_segment_description(&quot;segment name&quot;, value, ledger)`.
 - A stored formula may carry a file prefix before the function (`&#x27;...Blitz Report.xlam&#x27;!br_balance(`,
   `[1]!br_balance(`): keep it exactly as it is.
@@ -169,7 +171,24 @@ usually a spare column of the template; Spreadsheet Server returned nothing for 
 affected (one cell names them all) and ask:
 - it should read a balance type: write that letter into the named cell (one cell serves the whole
   column), then let the converter finish (P10);
-- the column is unused: clear its unconverted formulas, after the user confirms.</pre></section><section id='file-references-log-messages-md'><h3 class='fname'>references/log-messages.md</h3><pre class='md'># Conversion Log messages
+- the column is unused: clear its unconverted formulas, after the user confirms.
+
+## P12 - GL Wand ledger id
+GL Wand names a ledger by its id on this instance. The call stays in GL Wand form.
+- &quot;is not one of the ledgers your responsibilities offer&quot;: ask which ledger the id stands for. The
+  user runs the converter again under a responsibility that offers it (P10).
+- &quot;names several ledgers&quot;: one Blitz Report balance reads one ledger. Ask whether the ledgers share
+  currency and chart of accounts; if so, offer one GL Wand formula per ledger id added with `+`, then
+  P10. Otherwise mark Needs you.
+
+## P13 - No Blitz Report equivalent
+The call stays as it was: GL Wand combination (`USE_SEGn`) or flexfield (`{n:value}`) criteria, a
+GL Wand function the converter does not know, a Spreadsheet Server GXE, GXC, GEXD or GPX function.
+- A criterion: ask which segment values it selects, write them `;`-separated into the segment cell
+  or argument, then P10.
+- GXE (expand to detail): the converted sheet does this with FSG Discover or Expand; offer to clear
+  the cell after the user confirms.
+- Anything else: mark Needs you.</pre></section><section id='file-references-log-messages-md'><h3 class='fname'>references/log-messages.md</h3><pre class='md'># Conversion Log messages
 
 `Message` texts as the converters write them (`&lt;...&gt;` = a variable part). Match on the fixed words.
 **Class**: Fix = you can correct it after the confirmation; Ask = needs the user&#x27;s answer first;
@@ -206,9 +225,10 @@ again on this workbook. **Proc** = the procedure in `fixes.md`.
 | `&lt;cell&gt; is used as &lt;a&gt; and &lt;b&gt;, converted as &lt;a&gt;` | Ask (the cell feeds two different parameters; offer a second cell for &lt;b&gt;) | P3 |
 | `&lt;list&gt; of ledger &lt;L&gt; could not be read: &lt;error&gt;` | Info | — |
 | `balance type &lt;cell&gt; is empty` (level Error) | Ask | P11 |
+| `&lt;FUNCTION&gt; has no Blitz Report equivalent; use FSG Expand or Drilldown` (level Error, GXE, GXC, GEXD or a GPX function) | Ask | P13 |
 | Any other level `Error` (the cell still holds the Spreadsheet Server formula) | Re-run | P10 |
 
-## GL Wand (all level Error)
+## GL Wand (level Error unless noted)
 
 | Message | Class | Proc |
 |---|---|---|
@@ -217,6 +237,12 @@ again on this workbook. **Proc** = the procedure in `fixes.md`.
 | `left unconverted: a segment description whose segment number is not a literal number` | Fix, then Re-run | P10 |
 | `left unconverted: a segment description names segment &lt;n&gt;, which the ledger&#x27;s chart of accounts does not carry` | Ask | — |
 | `left unconverted: a GL Wand call could not be parsed` | Re-run after correcting the syntax | P10 |
+| `left unconverted: ledger ids need your ledger list, which is not loaded - log in and convert again` | Re-run (log in first) | P10 |
+| `left unconverted: ledger id &lt;n&gt; is not one of the ledgers your responsibilities offer`, `parameter cell: ledger id &lt;n&gt; is not one of ...` | Ask | P12 |
+| `left unconverted: the ledger argument &lt;ids&gt; names several ledgers, which one Blitz Report balance cannot read - split the formula per ledger` | Ask | P12 |
+| `left unconverted: GL Wand combination criteria (USE_SEGn) and flexfield criteria ({n:value}) have no Blitz Report equivalent`, also with the parameter cell named after `left unconverted:` | Ask | P13 |
+| `left unconverted: no Blitz Report equivalent for &lt;functions&gt;` | Ask | P13 |
+| `the independent value &lt;v&gt; is not used, a dependent value is described without its parent` (level Warning) | Ask (confirm only: the description is right unless the value exists under several parents) | — |
 | `could not be written: &lt;error&gt;`, `parameter cell could not be written: &lt;error&gt;` | Re-run (unprotect the sheet first) | P10 |
 
 ## Batch lines (no cell)

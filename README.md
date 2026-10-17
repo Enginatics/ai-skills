@@ -43,6 +43,10 @@ Without Claude Code:
 - Microsoft 365 Copilot in Excel: copy the folder `plugins/blitz-report-excel-addin-ai-skills/excel-skills/<name>` into `Documents/Copilot/Microsoft Excel/Skills` in your OneDrive.
 - All skill folders in one zip: `blitz-report-excel-addin-ai-skills.zip` in the latest release.
 
+## License
+
+MIT, see [LICENSE](LICENSE). You may use, adapt and redistribute the skills, for example as reference material for your own assistant, keeping the copyright notice.
+
 ## Feedback
 
 support@enginatics.com

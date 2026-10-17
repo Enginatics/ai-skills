@@ -10,7 +10,7 @@
       "name": "blitz-report-ai-skills",
       "source": "./plugins/blitz-report-ai-skills",
       "description": "Build, convert, test and tune Blitz Reports and Blitz Uploads for Oracle E-Business Suite: report and upload XML, report SQL, upload PL/SQL packages, Custom Reports Converter migrations, Oracle report and form analysis",
-      "version": "1.20261016.788",
+      "version": "1.20261017.796",
       "category": "development",
       "homepage": "https://www.enginatics.com/ai-skills/",
       "keywords": [
@@ -21,13 +21,14 @@
         "reporting",
         "upload",
         "excel"
-      ]
+      ],
+      "license": "MIT"
     },
     {
       "name": "blitz-report-excel-addin-ai-skills",
       "source": "./plugins/blitz-report-excel-addin-ai-skills",
       "description": "AI skills for business users of the Blitz Report Excel add-in: Oracle E-Business Suite analysis, period close readiness and upload actions in Claude in Excel and Microsoft 365 Copilot in Excel. Installs and explains the skills; they run in Excel.",
-      "version": "1.20261016.788",
+      "version": "1.20261017.796",
       "category": "productivity",
       "homepage": "https://www.enginatics.com/ai-skills/",
       "keywords": [
@@ -39,7 +40,8 @@
         "copilot",
         "finance",
         "period close"
-      ]
+      ],
+      "license": "MIT"
     }
   ]
 }

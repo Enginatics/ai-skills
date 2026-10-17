@@ -35,9 +35,10 @@ again on this workbook. **Proc** = the procedure in `fixes.md`.
 | `<cell> is used as <a> and <b>, converted as <a>` | Ask (the cell feeds two different parameters; offer a second cell for <b>) | P3 |
 | `<list> of ledger <L> could not be read: <error>` | Info | — |
 | `balance type <cell> is empty` (level Error) | Ask | P11 |
+| `<FUNCTION> has no Blitz Report equivalent; use FSG Expand or Drilldown` (level Error, GXE, GXC, GEXD or a GPX function) | Ask | P13 |
 | Any other level `Error` (the cell still holds the Spreadsheet Server formula) | Re-run | P10 |
 
-## GL Wand (all level Error)
+## GL Wand (level Error unless noted)
 
 | Message | Class | Proc |
 |---|---|---|
@@ -46,6 +47,12 @@ again on this workbook. **Proc** = the procedure in `fixes.md`.
 | `left unconverted: a segment description whose segment number is not a literal number` | Fix, then Re-run | P10 |
 | `left unconverted: a segment description names segment <n>, which the ledger's chart of accounts does not carry` | Ask | — |
 | `left unconverted: a GL Wand call could not be parsed` | Re-run after correcting the syntax | P10 |
+| `left unconverted: ledger ids need your ledger list, which is not loaded - log in and convert again` | Re-run (log in first) | P10 |
+| `left unconverted: ledger id <n> is not one of the ledgers your responsibilities offer`, `parameter cell: ledger id <n> is not one of ...` | Ask | P12 |
+| `left unconverted: the ledger argument <ids> names several ledgers, which one Blitz Report balance cannot read - split the formula per ledger` | Ask | P12 |
+| `left unconverted: GL Wand combination criteria (USE_SEGn) and flexfield criteria ({n:value}) have no Blitz Report equivalent`, also with the parameter cell named after `left unconverted:` | Ask | P13 |
+| `left unconverted: no Blitz Report equivalent for <functions>` | Ask | P13 |
+| `the independent value <v> is not used, a dependent value is described without its parent` (level Warning) | Ask (confirm only: the description is right unless the value exists under several parents) | — |
 | `could not be written: <error>`, `parameter cell could not be written: <error>` | Re-run (unprotect the sheet first) | P10 |
 
 ## Batch lines (no cell)
