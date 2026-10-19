@@ -155,7 +155,7 @@ the prepare step fill them in.
 - `Gl Date`, `Terms`, `Terms Date`, `Payment Method` — leave to defaults unless the user specifies.
 
 **🚨 A PO number printed on a supplier&#x27;s bill is usually THEIR reference, not your Oracle PO
-number.** `Invoice Po Number` is a `Validate From List = Yes` column, and Oracle PO numbers are your
+number.** `Invoice Po Number` is an LOV column without `Free Text`, and Oracle PO numbers are your
 own internal numbers (often plain numerics like `1163`, `1497`) — a printed `PO-2026-8842` will not
 match. Treat it exactly like Supplier Number: **look it up before you write it**
 ```

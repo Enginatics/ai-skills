@@ -211,7 +211,7 @@ From the Form Analysis Document, map form fields to upload columns:
    - SQL: use `xxen_util.display_flexfield_context()` and `xxen_util.display_flexfield_value()` — never raw `table.attribute1`
    - LOVs: context column queries `fnd_descr_flex_contexts_vl`; attribute columns use `xxen_util.dff_attribute_lov()` with `$column$` references to context and all siblings
    - COMMENTS: each attribute column has a SQL query showing the DFF context usage per attribute
-   - All attribute columns have `VALIDATE_FROM_LIST_DSP=Y`
+   - No attribute column has `FREE_TEXT`
    - Add a dynamic column translation rule in `content/r12/dynamic_column_translation_rules.xml` with the upload's GUID, using the entity prefix pattern (`'PREFIX_'||x.application_column_name`)
    - PL/SQL: call `xxen_fnd_upload.validate_dff_attributes()` with `p_values_or_ids_in=>'V', p_values_or_ids_out=>'I'`
    - See `upload-development` skill section E for the full checklist
@@ -265,7 +265,7 @@ end validate_asset;
 
 **Key rules:**
 - Use nested `message()` procedure to concatenate ALL errors (never return on first error)
-- Don't validate fields already covered by LOV with VALIDATE_FROM_LIST=Y
+- Don't validate fields already covered by an LOV that is not free text
 - Use `not exists` pattern instead of `l_found` flag variables
 - Follow `coding-standards` skill (no spaces around operators, lowercase, etc.)
 
@@ -477,7 +477,6 @@ end post_entity;
  <PARAMETER_TYPE_DSP>LOV</PARAMETER_TYPE_DSP>
  <LOV_NAME>Blitz Upload Mode</LOV_NAME>
  <LOV_GUID>E811F942597A2075E0530100007FF4F2</LOV_GUID>
- <VALIDATE_FROM_LIST_DSP>Y</VALIDATE_FROM_LIST_DSP>
  <LOV_QUERY_DSP>select xxen_upload.action_create id, xxen_upload.action_meaning(xxen_upload.action_create) value, null description from dual union all
 select xxen_upload.action_create || ',' || xxen_upload.action_update id, xxen_upload.action_meaning(xxen_upload.action_create)||', '||xxen_upload.action_meaning(xxen_upload.action_update) value, null description from dual</LOV_QUERY_DSP>
  <REQUIRED>Y</REQUIRED>
@@ -525,7 +524,7 @@ hca.account_number=:$column$.customer_number
 ### 3.5 KFF Column Groups
 
 For each KFF, add columns in this order:
-1. **Alias** — LOV custom, VALIDATE_FROM_LIST=Y, queries `fnd_shorthand_flex_aliases`
+1. **Alias** — LOV custom, not free text, queries `fnd_shorthand_flex_aliases`
 2. **Concatenated** — LOV custom, queries `_kfv` view, DEFAULT_VALUE from alias
 3. **Segment1..N** — LOV custom, queries `fnd_flex_values_vl`, DEFAULT_VALUE from concatenated
 

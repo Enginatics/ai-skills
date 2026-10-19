@@ -55,16 +55,16 @@ clear it before re-running, rather than working down the sheet into ground you a
   framework columns. The business columns (e.g. `PO Number`, `Item`, `Quantity`) follow from column D.
 - **Get the exact column contract from `=br_upload_columns_external()`** (call it on `blitz_` with
   the upload sheet name: `=br_upload_columns_external(FALSE, "<Upload Sheet Name>")`). It spills one
-  row per column: `Sheet Column | Column | Type | Required | Read Only | Has LOV | Validate From
-  List | Comments` — the REAL Excel column letter, the row-2 header text, the flags, and whether the
+  row per column: `Sheet Column | Column | Type | Required | Read Only | Has LOV | Free Text |
+  Comments` — the REAL Excel column letter, the row-2 header text, the flags, and whether the
   list is binding. **Always write cells by the returned `Sheet Column` letter — never derive a
   column's position by counting**, because hidden columns sit between visible ones and counting
   drifts. Hidden columns are excluded from the spill so every listed column is safe to write (except
   the read-only ones).
-- **`Validate From List = Yes` means the value MUST be one from the list** — the server rejects
-  anything else, so look it up (below) and never type your own. `Has LOV = Yes` with a blank
-  `Validate From List` means the list only assists entry; a value outside it is allowed but still
-  has to make sense to EBS, so prefer a looked-up value there too.
+- **`Has LOV = Yes` with a blank `Free Text` means the value MUST be one from the list** — the server
+  rejects anything else, so look it up (below) and never type your own. `Free Text = Yes` means the
+  list only assists entry; a value outside it is allowed but still has to make sense to EBS, so
+  prefer a looked-up value there too.
 - **🚨 The sheet has HIDDEN columns to the RIGHT of the last one the contract lists** (framework
   internals and round-trip ids — often dozens). So "the last column" for the purpose of placing a
   trigger formula is NOT the last row of the contract spill: read the sheet's **used range** and go
@@ -252,7 +252,7 @@ happened, in terms of their work:
 | "Ready to submit this invoice to Oracle Payables — shall I go ahead?" | "Say the word and I'll run `br_process_upload_external()` to submit it to EBS." |
 | "I validated both lines against Oracle — both passed." | "I ran `br_prepare_upload_external()` and `_blitz_run_status` came back `DONE: prepared 2 row(s) - 2 valid`." |
 | "The supplier resolved to Advanced Network Devices, number 1013." | "`br_column_values_external` returned Value/Description 1013." |
-| "I couldn't find that PO in Oracle, so I left the PO field blank." | "`Invoice Po Number` has `Validate From List = Yes` and the LOV returned no match." |
+| "I couldn't find that PO in Oracle, so I left the PO field blank." | "`Invoice Po Number` has an LOV without `Free Text` and the LOV returned no match." |
 
 **Sheet, column and value names ARE fine** — the user can see those on screen ("I left *Invoice Po
 Number* blank", "row 3", "the *AP Invoice Upload* sheet"). It is the add-in's internals that stay
@@ -305,7 +305,7 @@ User: "Create a new standard PO line item on document 6504."
 | `br_prepare_upload_external()` | mark the rows you wrote + autofill + validate, WITHOUT submitting (review point) | `BLITZ_PREPARING: ...`; `_blitz_run_status` → `DONE: prepared <n> row(s) - <n> valid, <n> flagged` |
 | `br_process_upload_external()` | mark + autofill + validate + submit the upload sheet the formula is on; render per-row results in place | `BLITZ_PROCESSING: ...`; `_blitz_run_status` → `DONE: <n> succeeded, <n> errored` / `ERROR:` |
 | `br_report_templates_external(name)` | list the upload's templates (the column set) | `Template \| Default? \| Description` |
-| `br_upload_columns_external([include_hidden], [sheet])` | the upload sheet's column contract — real column letters, headers, required/read-only/LOV flags; call from `blitz_` with `sheet` = the upload sheet name | `Sheet Column \| Column \| Type \| Required \| Read Only \| Has LOV \| Validate From List \| Comments` |
+| `br_upload_columns_external([include_hidden], [sheet])` | the upload sheet's column contract — real column letters, headers, required/read-only/LOV flags; call from `blitz_` with `sheet` = the upload sheet name | `Sheet Column \| Column \| Type \| Required \| Read Only \| Has LOV \| Free Text \| Comments` |
 | `br_validation_results_external([include_valid], [sheet])` | per-row validation/upload outcome for rows needing attention (pass TRUE to include the valid/succeeded rows); call from `blitz_` with `sheet` = the upload sheet name | `Row \| Action \| Status \| Message`, or `BLITZ_OK: no rows need attention` |
 | `br_column_values_external(column_header, [row], [search], [sheet])` | valid values for a GRID COLUMN under that row's context (what double-clicking the cell shows); call it from `blitz_` and pass `sheet` = the upload sheet name | `Value \| Description` |
 | `br_report_list_external`, `br_report_params_external`, `br_param_values_external`, `br_environments_external`, `br_responsibilities_external` | discovery — SAME as br-run-reports (uploads are `Type = U`) | see br-run-reports |

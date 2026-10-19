@@ -21,7 +21,7 @@ PARAMS lists one dict per PARAMETERS_ROW, in order:
   sub                     a further anchor of the same parameter: no display sequence, type, LOV, default or required
   lexical                 anchor '&name' placed where the fragment goes; sql is a select returning one line per fragment
                           row (the engine substitutes all rows); hidden + a constant default so the value is always set
-Shared-LOV fallback payloads (LOV_GUID, VALIDATE_FROM_LIST_DSP, LOV_QUERY_DSP) are copied from the shipped content
+Shared-LOV fallback payloads (LOV_GUID, FILTER_BEFORE_DISPLAY_DSP, LOV_QUERY_DSP) are copied from the shipped content
 (the repository's content/r12/reports, or the folder of report XMLs named by the BLITZ_CONTENT_DIR environment variable).
 """
 import collections
@@ -41,9 +41,9 @@ SQL_FUNCTIONS = {"abs", "add_months", "bitand", "cast", "ceil", "chr", "coalesce
 def shared_lov(name):
     for p in glob.glob(REPO + "*.xml"):
         s = open(p, encoding="utf-8").read()
-        m = re.search(r"<LOV_NAME>" + re.escape(name) + r"</LOV_NAME>\s*<LOV_GUID>(\w+)</LOV_GUID>\s*<VALIDATE_FROM_LIST_DSP>(\w)</VALIDATE_FROM_LIST_DSP>\s*(<FILTER_BEFORE_DISPLAY_DSP>\w</FILTER_BEFORE_DISPLAY_DSP>\s*)?<LOV_QUERY_DSP>(.*?)</LOV_QUERY_DSP>", s, re.S)
+        m = re.search(r"<LOV_NAME>" + re.escape(name) + r"</LOV_NAME>\s*<LOV_GUID>(\w+)</LOV_GUID>\s*(?:<FREE_TEXT>\w</FREE_TEXT>\s*)?(<FILTER_BEFORE_DISPLAY_DSP>\w</FILTER_BEFORE_DISPLAY_DSP>\s*)?<LOV_QUERY_DSP>(.*?)</LOV_QUERY_DSP>", s, re.S)
         if m:
-            return m.group(1), m.group(2), (m.group(3) or "").strip(), m.group(4)
+            return m.group(1), (m.group(2) or "").strip(), m.group(3)
     raise SystemExit("shared LOV not found: " + name)
 
 
@@ -64,12 +64,12 @@ def param_rows(rep):
         if not p.get("sub"):
             r.append(f"<PARAMETER_TYPE_DSP>{p['type']}</PARAMETER_TYPE_DSP>")
             if p["type"] == "LOV":
-                guid, val, fbd, q = shared_lov(p["lov"])
-                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>", f"<LOV_GUID>{guid}</LOV_GUID>", f"<VALIDATE_FROM_LIST_DSP>{val}</VALIDATE_FROM_LIST_DSP>"] + ([fbd] if fbd else []) + [f"<LOV_QUERY_DSP>{q}</LOV_QUERY_DSP>"]
+                guid, fbd, q = shared_lov(p["lov"])
+                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>", f"<LOV_GUID>{guid}</LOV_GUID>"] + ([fbd] if fbd else []) + [f"<LOV_QUERY_DSP>{q}</LOV_QUERY_DSP>"]
             elif p["type"] == "LOV Oracle":
-                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>", "<VALIDATE_FROM_LIST_DSP>Y</VALIDATE_FROM_LIST_DSP>"]
+                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>"]
             elif p["type"] == "LOV custom":
-                r += ["<VALIDATE_FROM_LIST_DSP>Y</VALIDATE_FROM_LIST_DSP>"] + (["<FILTER_BEFORE_DISPLAY_DSP>Y</FILTER_BEFORE_DISPLAY_DSP>"] if p.get("fbd") else []) + [f"<LOV_QUERY_DSP>{e(p['lov_query'].strip())}</LOV_QUERY_DSP>"]
+                r += (["<FILTER_BEFORE_DISPLAY_DSP>Y</FILTER_BEFORE_DISPLAY_DSP>"] if p.get("fbd") else []) + [f"<LOV_QUERY_DSP>{e(p['lov_query'].strip())}</LOV_QUERY_DSP>"]
         if p.get("matching"):
             r.append(f"<MATCHING_VALUE>{e(p['matching'])}</MATCHING_VALUE>")
         if not p.get("sub"):

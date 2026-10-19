@@ -271,6 +271,17 @@
     "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review"
   },
   {
+    "name": "br-fsg-variance-analysis",
+    "title": "GL variance analysis",
+    "type": "excel",
+    "category": "General Ledger",
+    "description": "Explain why Oracle EBS GL balances moved - compare a financial statement or account balances between two periods, year over year or actual against budget with Blitz FSG, flag the material variances, drill the largest to journal lines and subledger transactions, and draft variance commentary for the user to review. Use for \"why did expenses go up\", flux analysis, variance analysis, month-over-month or budget-vs-actual review, \"explain the movement in this account\". Read-only - never writes to Oracle EBS.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-fsg-variance-analysis.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-variance-analysis"
+  },
+  {
     "name": "br-gl-account-coder",
     "title": "GL Account Coding Assistant",
     "type": "excel",
@@ -318,6 +329,17 @@
     "reports": [],
     "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-report-finder.zip",
     "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-report-finder"
+  },
+  {
+    "name": "br-run-fsg",
+    "title": "Financial statements in Excel",
+    "type": "excel",
+    "category": "Getting Started",
+    "description": "Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger transactions, then to a detailed Blitz Report of those transactions. Use when the user asks for a financial statement, P&L, balance sheet, a GL or account balance for a period (\"what was cash at the end of December\"), or to explain, drill, trace or tie out a balance. Read-only - never writes to Oracle EBS.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-run-fsg.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-run-fsg"
   },
   {
     "name": "br-run-reports",

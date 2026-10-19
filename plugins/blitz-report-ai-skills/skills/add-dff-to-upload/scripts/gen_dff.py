@@ -122,13 +122,13 @@ def main():
     def el(tag, val, ind=4):
         return f"{' ' * ind}<{tag}>{val}</{tag}>"
 
-    cols = [(ctx_alias.upper(), {"VALIDATE_FROM_LIST_DSP": "Y", "LOV_QUERY_DSP": x(ctx_lov)})]
-    cols += [(col_alias(i).upper(), {"VALIDATE_FROM_LIST_DSP": "Y", "LOV_QUERY_DSP": x(attr_lov(i)), "COMMENTS": x(comment(i))}) for i in attrs]
+    cols = [(ctx_alias.upper(), {"LOV_QUERY_DSP": x(ctx_lov)})]
+    cols += [(col_alias(i).upper(), {"LOV_QUERY_DSP": x(attr_lov(i)), "COMMENTS": x(comment(i))}) for i in attrs]
     ucols = []
     for k, (name, o) in enumerate(cols):
         r = ["   <UPLOAD_COLUMNS_ROW>", el("COLUMN_NUMBER", a.first_column + k), el("COLUMN_NAME", name),
              el("COLUMN_TYPE_DSP", "LOV custom"), el("DATA_TYPE", "varchar2")]
-        r += [el(t, o[t]) for t in ("VALIDATE_FROM_LIST_DSP", "LOV_QUERY_DSP", "COMMENTS") if t in o]
+        r += [el(t, o[t]) for t in ("LOV_QUERY_DSP", "COMMENTS") if t in o]
         ucols.append("\n".join(r + ["   </UPLOAD_COLUMNS_ROW>"]))
     ups = [(a.context_param, ctx_alias.upper())] + [(f"{a.param_prefix}{i}", col_alias(i).upper()) for i in attrs]
     uparams = ["\n".join(["   <UPLOAD_PARAMETERS_ROW>", el("SOURCE", "U"), el("DISPLAY_SEQUENCE", a.first_sequence + k),

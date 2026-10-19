@@ -12,6 +12,9 @@ connection to look for. The add-in must be loaded and connected to an environmen
 this once via the ribbon): `#BLITZ_NOT_CONNECTED` means ask the user to connect first, and
 `#NAME?` means the add-in is not loaded.
 
+Financial statements, account balances by period, or explaining a balance down to its journals:
+use the **br-run-fsg** skill instead - it builds live statements rather than running a report.
+
 **Read `references/run-mechanics.md` BEFORE your first run.** It carries the full workflow
 detail: environment and responsibility selection, parameter and template rules, LOV value
 lookups, run monitoring and recovery, error handling, worked examples, and the complete function

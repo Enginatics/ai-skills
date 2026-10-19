@@ -404,13 +404,13 @@ class UploadLint:
                          search_text=f'<COLUMN_NAME>{cn}</COLUMN_NAME>')
 
     def check_no_overrides_on_shared_lov_columns(self):
-        """L4: `VALIDATE_FROM_LIST_DSP` / `FILTER_BEFORE_DISPLAY_DSP` may only ever
-        hold `Y` (the storage convention is `Y` or null, never `N`).
+        """L4: `FREE_TEXT` / `FILTER_BEFORE_DISPLAY_DSP` may only ever hold `Y`
+        (the storage convention is `Y` or null, never `N`).
 
-        These elements are NOT an override even when the row also carries
+        `FILTER_BEFORE_DISPLAY_DSP` is NOT an override even when the row also carries
         LOV_NAME/LOV_GUID: the export deliberately emits the resolved LOV query and
-        flags so that a target system on which the shared LOV does not exist still
-        imports a self-contained, validating custom LOV. `import_xml_clob` keys off
+        flag so that a target system on which the shared LOV does not exist still
+        imports a self-contained custom LOV. `import_xml_clob` keys off
         that — `nvl2(lov_id,null,<..._dsp>)` — storing NULL when the shared LOV
         resolves and the exported values only when it does not. Flagging their mere
         presence therefore reports the fallback payload as a defect, and removing
@@ -422,7 +422,7 @@ class UploadLint:
                      re.search(r'<PARAMETER_NAME>([^<]+)</PARAMETER_NAME>', block)
                 nm = nm.group(1) if nm else '?'
                 kind = 'column' if tag == 'UPLOAD_COLUMNS_ROW' else 'parameter'
-                for flag in ('VALIDATE_FROM_LIST_DSP', 'FILTER_BEFORE_DISPLAY_DSP'):
+                for flag in ('FREE_TEXT', 'FILTER_BEFORE_DISPLAY_DSP'):
                     v = re.search(rf'<{flag}>([^<]*)</{flag}>', block)
                     if v and v.group(1).strip().upper() == 'N':
                         self.add('L4', f'{kind} `{nm}` has `{flag}=N` — `N` is never a valid stored value; the convention is `Y` or null (omit the element).',

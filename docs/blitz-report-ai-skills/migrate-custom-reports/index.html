@@ -193,7 +193,7 @@ PARAMS lists one dict per PARAMETERS_ROW, in order:
   sub                     a further anchor of the same parameter: no display sequence, type, LOV, default or required
   lexical                 anchor &#x27;&amp;name&#x27; placed where the fragment goes; sql is a select returning one line per fragment
                           row (the engine substitutes all rows); hidden + a constant default so the value is always set
-Shared-LOV fallback payloads (LOV_GUID, VALIDATE_FROM_LIST_DSP, LOV_QUERY_DSP) are copied from the shipped content
+Shared-LOV fallback payloads (LOV_GUID, FILTER_BEFORE_DISPLAY_DSP, LOV_QUERY_DSP) are copied from the shipped content
 (the repository&#x27;s content/r12/reports, or the folder of report XMLs named by the BLITZ_CONTENT_DIR environment variable).
 &quot;&quot;&quot;
 import collections
@@ -213,9 +213,9 @@ SQL_FUNCTIONS = {&quot;abs&quot;, &quot;add_months&quot;, &quot;bitand&quot;, &q
 def shared_lov(name):
     for p in glob.glob(REPO + &quot;*.xml&quot;):
         s = open(p, encoding=&quot;utf-8&quot;).read()
-        m = re.search(r&quot;&lt;LOV_NAME&gt;&quot; + re.escape(name) + r&quot;&lt;/LOV_NAME&gt;\s*&lt;LOV_GUID&gt;(\w+)&lt;/LOV_GUID&gt;\s*&lt;VALIDATE_FROM_LIST_DSP&gt;(\w)&lt;/VALIDATE_FROM_LIST_DSP&gt;\s*(&lt;FILTER_BEFORE_DISPLAY_DSP&gt;\w&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;\s*)?&lt;LOV_QUERY_DSP&gt;(.*?)&lt;/LOV_QUERY_DSP&gt;&quot;, s, re.S)
+        m = re.search(r&quot;&lt;LOV_NAME&gt;&quot; + re.escape(name) + r&quot;&lt;/LOV_NAME&gt;\s*&lt;LOV_GUID&gt;(\w+)&lt;/LOV_GUID&gt;\s*(?:&lt;FREE_TEXT&gt;\w&lt;/FREE_TEXT&gt;\s*)?(&lt;FILTER_BEFORE_DISPLAY_DSP&gt;\w&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;\s*)?&lt;LOV_QUERY_DSP&gt;(.*?)&lt;/LOV_QUERY_DSP&gt;&quot;, s, re.S)
         if m:
-            return m.group(1), m.group(2), (m.group(3) or &quot;&quot;).strip(), m.group(4)
+            return m.group(1), (m.group(2) or &quot;&quot;).strip(), m.group(3)
     raise SystemExit(&quot;shared LOV not found: &quot; + name)
 
 
@@ -236,12 +236,12 @@ def param_rows(rep):
         if not p.get(&quot;sub&quot;):
             r.append(f&quot;&lt;PARAMETER_TYPE_DSP&gt;{p[&#x27;type&#x27;]}&lt;/PARAMETER_TYPE_DSP&gt;&quot;)
             if p[&quot;type&quot;] == &quot;LOV&quot;:
-                guid, val, fbd, q = shared_lov(p[&quot;lov&quot;])
-                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;, f&quot;&lt;LOV_GUID&gt;{guid}&lt;/LOV_GUID&gt;&quot;, f&quot;&lt;VALIDATE_FROM_LIST_DSP&gt;{val}&lt;/VALIDATE_FROM_LIST_DSP&gt;&quot;] + ([fbd] if fbd else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{q}&lt;/LOV_QUERY_DSP&gt;&quot;]
+                guid, fbd, q = shared_lov(p[&quot;lov&quot;])
+                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;, f&quot;&lt;LOV_GUID&gt;{guid}&lt;/LOV_GUID&gt;&quot;] + ([fbd] if fbd else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{q}&lt;/LOV_QUERY_DSP&gt;&quot;]
             elif p[&quot;type&quot;] == &quot;LOV Oracle&quot;:
-                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;, &quot;&lt;VALIDATE_FROM_LIST_DSP&gt;Y&lt;/VALIDATE_FROM_LIST_DSP&gt;&quot;]
+                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;]
             elif p[&quot;type&quot;] == &quot;LOV custom&quot;:
-                r += [&quot;&lt;VALIDATE_FROM_LIST_DSP&gt;Y&lt;/VALIDATE_FROM_LIST_DSP&gt;&quot;] + ([&quot;&lt;FILTER_BEFORE_DISPLAY_DSP&gt;Y&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;&quot;] if p.get(&quot;fbd&quot;) else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{e(p[&#x27;lov_query&#x27;].strip())}&lt;/LOV_QUERY_DSP&gt;&quot;]
+                r += ([&quot;&lt;FILTER_BEFORE_DISPLAY_DSP&gt;Y&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;&quot;] if p.get(&quot;fbd&quot;) else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{e(p[&#x27;lov_query&#x27;].strip())}&lt;/LOV_QUERY_DSP&gt;&quot;]
         if p.get(&quot;matching&quot;):
             r.append(f&quot;&lt;MATCHING_VALUE&gt;{e(p[&#x27;matching&#x27;])}&lt;/MATCHING_VALUE&gt;&quot;)
         if not p.get(&quot;sub&quot;):

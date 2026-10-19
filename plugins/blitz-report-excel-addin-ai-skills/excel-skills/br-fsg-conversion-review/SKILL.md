@@ -22,7 +22,7 @@ listed on the **`Conversion Log`** sheet (row 1 headers `Level | Cell | Message`
 
 ## Rules
 1. **Only what the log names.** Never rewrite a formula the log does not point at, never "tidy" a
-   converted formula, never recalculate or refresh balances yourself.
+   converted formula, and refresh balances only once the user says yes (Op 6).
 2. **One confirmation before any edit.** Show every change as `cell: before -> after` and ask. A
    line that needs a business decision (which ledger, which currency, which values) is a question
    in that same message, never a guess.
@@ -65,6 +65,10 @@ Write a `Status` heading in D1 of `Conversion Log` and, in one block write down 
 `Needs you`, `Info` or `Run the converter again` for every line. Never delete log lines.
 
 ## Op 6 — Reply
-What was changed (cell by cell), what still needs the user (with the question), and: "Refresh the
-workbook (Blitz Report ribbon > Refresh > Other > Workbook) to calculate the balances." If the user answered an Ask
+What was changed (cell by cell), what still needs the user (with the question), and an offer to
+calculate the balances now. On yes: in an empty cell of a new helper sheet `blitz_` write
+`=br_fsg_refresh_external()` and read its return in the same operation, replace that cell with plain
+text, then read `=_blitz_run_status` once per turn until it reads `DONE: ...` or `ERROR: ...` (a value
+read before your write is stale). Report the cells it names as still without an answer, then delete
+`blitz_`. The user can also refresh from the ribbon (Blitz Report > Refresh > Other > Workbook). If the user answered an Ask
 question, apply it in a further Op 4 + Op 5 round.

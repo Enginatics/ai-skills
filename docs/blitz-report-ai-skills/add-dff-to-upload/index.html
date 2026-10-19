@@ -65,7 +65,7 @@ Output: `main_sql_columns.sql`, `success_sql_columns.sql`, `upload_columns.xml`,
 1. **Main SQL**: insert `main_sql_columns.sql` after the entity&#x27;s columns, before `upload_row`.
 2. **Upload columns**: insert the `upload_columns.xml` rows and renumber the `COLUMN_NUMBER` of the columns after them, which must follow the select-list order.
    - Context column: `LOV custom` over `fnd_descr_flex_contexts_vl`, returning context names. Keep it when the DFF has only global segments: its list stays empty until a context is defined, as in the shipped uploads.
-   - Attribute columns: `LOV custom` over `xxen_util.dff_attribute_lov`, with all siblings passed as `:$column$`, the `value~description` split, Validate From List `Y`, and a `select` comment listing the segment per context in the shipped format `(Context) Attribute1: (Global) &lt;prompt&gt;, (&lt;context&gt;) &lt;prompt&gt;`.
+   - Attribute columns: `LOV custom` over `xxen_util.dff_attribute_lov`, with all siblings passed as `:$column$`, the `value~description` split, not free text, and a `select` comment listing the segment per context in the shipped format `(Context) Attribute1: (Global) &lt;prompt&gt;, (&lt;context&gt;) &lt;prompt&gt;`.
    - Keep the generated LOV text as it is (named arguments, lower case, literals at the start): the framework reads those literals from the first 1,000 characters to give Excel per-context date and number checks.
 3. **Upload parameters**: insert the `upload_parameters.xml` rows in the procedure&#x27;s parameter order and renumber `DISPLAY_SEQUENCE` after them.
 4. **Success SQL**: add `success_sql_columns.sql` at the same position as in the main SQL. The tables sit in an inline view `x` that selects `rowid row_id`, because pre-12c databases allow an outer-joined table to reference only one other table:
@@ -365,13 +365,13 @@ def main():
     def el(tag, val, ind=4):
         return f&quot;{&#x27; &#x27; * ind}&lt;{tag}&gt;{val}&lt;/{tag}&gt;&quot;
 
-    cols = [(ctx_alias.upper(), {&quot;VALIDATE_FROM_LIST_DSP&quot;: &quot;Y&quot;, &quot;LOV_QUERY_DSP&quot;: x(ctx_lov)})]
-    cols += [(col_alias(i).upper(), {&quot;VALIDATE_FROM_LIST_DSP&quot;: &quot;Y&quot;, &quot;LOV_QUERY_DSP&quot;: x(attr_lov(i)), &quot;COMMENTS&quot;: x(comment(i))}) for i in attrs]
+    cols = [(ctx_alias.upper(), {&quot;LOV_QUERY_DSP&quot;: x(ctx_lov)})]
+    cols += [(col_alias(i).upper(), {&quot;LOV_QUERY_DSP&quot;: x(attr_lov(i)), &quot;COMMENTS&quot;: x(comment(i))}) for i in attrs]
     ucols = []
     for k, (name, o) in enumerate(cols):
         r = [&quot;   &lt;UPLOAD_COLUMNS_ROW&gt;&quot;, el(&quot;COLUMN_NUMBER&quot;, a.first_column + k), el(&quot;COLUMN_NAME&quot;, name),
              el(&quot;COLUMN_TYPE_DSP&quot;, &quot;LOV custom&quot;), el(&quot;DATA_TYPE&quot;, &quot;varchar2&quot;)]
-        r += [el(t, o[t]) for t in (&quot;VALIDATE_FROM_LIST_DSP&quot;, &quot;LOV_QUERY_DSP&quot;, &quot;COMMENTS&quot;) if t in o]
+        r += [el(t, o[t]) for t in (&quot;LOV_QUERY_DSP&quot;, &quot;COMMENTS&quot;) if t in o]
         ucols.append(&quot;\n&quot;.join(r + [&quot;   &lt;/UPLOAD_COLUMNS_ROW&gt;&quot;]))
     ups = [(a.context_param, ctx_alias.upper())] + [(f&quot;{a.param_prefix}{i}&quot;, col_alias(i).upper()) for i in attrs]
     uparams = [&quot;\n&quot;.join([&quot;   &lt;UPLOAD_PARAMETERS_ROW&gt;&quot;, el(&quot;SOURCE&quot;, &quot;U&quot;), el(&quot;DISPLAY_SEQUENCE&quot;, a.first_sequence + k),

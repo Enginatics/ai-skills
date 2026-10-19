@@ -116,7 +116,7 @@ For each field with a LOV in the form:
 - Verify upload column has matching LOV
 - Compare LOV query: same values? same filters? (enabled, date-active, org-specific)
 - Check dependent filtering matches form behavior
-- Check VALIDATE_FROM_LIST_DSP matches form's LOV validation
+- Check FREE_TEXT matches the form's LOV validation (set only where the form accepts values outside the list)
 - Check FILTER_BEFORE_DISPLAY_DSP for large LOVs
 
 #### 2.4a LOV Performance (CRITICAL)
@@ -150,7 +150,7 @@ Compare each LOV's dependent filtering against the form's actual data entry work
 - Missing org/book-dependent filtering
 - Wrong table (base table instead of _vl for translated values)
 - `fnd_lookup_values` with language filter instead of `fnd_lookup_values_vl` with `security_group_id=0`
-- VALIDATE_FROM_LIST=Y on free-text fields or N on validated fields
+- A validated field marked FREE_TEXT, or a free-text field without it
 - Missing VALUE_TO_ID_QUERY when PL/SQL needs the ID
 - `is null or` pattern on joins where form enforces parent-first entry (performance killer)
 - `FILTER_BEFORE_DISPLAY_DSP` used as a workaround for slow LOV instead of fixing the query

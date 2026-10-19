@@ -17,7 +17,7 @@ $ARGUMENTS should be the path to the XML file to validate (e.g., "content/r12/up
 - Check that UPLOAD_COLUMN_NUMBER assignments are sequential and correct
 - Ensure PARAMETER_TYPE_DSP matches the column data type
 - Verify VALUE_TO_ID_QUERY references are valid (if column has one)
-- Check that VALIDATE_FROM_LIST_DSP is appropriate for each column
+- Check that FREE_TEXT is set only on columns that must accept values outside their LOV
 
 ### 2. Upload Dependencies
 - For each DEFAULT_VALUE that contains `:$column$.column_name` references:

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Financial statements in Excel - Blitz Report Excel Add-in Skills</title><meta name="description" content="Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-run-fsg/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Financial statements in Excel - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-run-fsg/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-run-fsg/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Getting Started</p><h1>Financial statements in Excel</h1><p class='name'>br-run-fsg</p><p class='lead'>Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger transactions, then to a detailed Blitz Report of those transactions.</p><h2>When to use</h2><p>Use when the user asks for a financial statement, P&amp;L, balance sheet, a GL or account balance for a period (&quot;what was cash at the end of December&quot;), or to explain, drill, trace or tie out a balance. Read-only - never writes to Oracle EBS.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-run-fsg.zip'>Download br-run-fsg.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-run-fsg'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-run-fsg'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-drill-and-detail-md'>references/drill-and-detail.md</a><a href='#file-references-fsg-mechanics-md'>references/fsg-mechanics.md</a><a href='#file-references-statement-recipes-md'>references/statement-recipes.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Financial statements in Excel (br-run-fsg)
+
+A Blitz FSG statement is an ordinary worksheet whose cells hold balance formulas the Blitz
+Report add-in calculates from Oracle General Ledger. You write the statement (labels, account
+rows, balance formulas, totals); the add-in&#x27;s `br_fsg_*` worksheet functions give you the ledger&#x27;s
+structure and lists, make the sheet a statement, refresh it and drill a balance. They are Excel
+functions you write into a cell - never tools or connectors. `#BLITZ_NOT_CONNECTED` = ask the user
+to connect on the Blitz Report ribbon; `#NAME?` = the add-in is not loaded.
+
+**Read `references/fsg-mechanics.md` before your first statement** (functions, balance formula
+arguments, segment syntax, statuses). Recipes for common statements: `references/statement-recipes.md`.
+Drilling, analysing drilled lines and running detail reports: `references/drill-and-detail.md`.
+
+## Workflow summary
+
+1. **Ledger.** On a helper sheet `blitz_`: `=br_fsg_ledgers_external()`. Use the ledger the user
+   names; if several fit, ask.
+2. **Ledger profile.** `=br_fsg_ledger_external(&quot;&lt;Ledger&gt;&quot;)` - functional currency, latest open
+   period, the segments in display order with the balance formula argument each goes into, and
+   the ready balance formula pattern. Segment values: `=br_fsg_values_external(&quot;&lt;Ledger&gt;&quot;,&quot;&lt;Segment&gt;&quot;,&quot;&lt;search&gt;&quot;)`.
+3. **Statement sheet.** `=br_fsg_new_statement_external(&quot;&lt;Ledger&gt;&quot;,&quot;&lt;Sheet name&gt;&quot;)` - a new sheet,
+   or the user&#x27;s own sheet claimed as it is. Write the formula and read its return in the SAME
+   operation, then replace that cell with plain text. Wait for `=_blitz_run_status` to read
+   `DONE: sheet &#x27;&lt;name&gt;&#x27; ...`. A workbook that already holds the user&#x27;s statement needs no new sheet.
+4. **Write the statement** on that sheet: criteria cells (period, amount type, currency...), one
+   row per account or parent value, balance formulas from the pattern referencing those cells,
+   descriptions, totals - per the recipes. Nothing is calculated yet: cells show `(pending)`.
+5. **Refresh.** `=br_fsg_refresh_external(&quot;&lt;Sheet name&gt;&quot;)` (same write-read-replace), then poll
+   `_blitz_run_status` for `DONE: &lt;n&gt; value(s) refreshed` - it names any cell still without an
+   answer; fix those cells and refresh again.
+6. **Read and answer** from the cells. Never compute a balance yourself or invent one.
+7. **Explain a number** on request: `=br_fsg_drill_external(&quot;&lt;cell&gt;&quot;,&quot;Journals&quot;,&quot;&lt;Sheet name&gt;&quot;)`
+   puts the journal lines behind it on a new sheet; drill on to the subledger and run a detailed
+   Blitz Report of those transactions per `references/drill-and-detail.md`.
+
+## Core rules
+
+- One action at a time (statement, refresh, drill): wait for `DONE:` or `ERROR:` before the next.
+  Poll only `_blitz_run_status`, one check per turn; never re-enter an action formula to check on it.
+  A status read before your own trigger is stale - ignore it.
+- Every argument of a balance, period or description formula is a quoted literal or a plain cell
+  reference - never an expression. Segment values are text: quote them (`&quot;01&quot;`, never `01`) and
+  give a cell holding one the Text format before writing it. A literal period such as `Dec-12`
+  goes into a Text-format cell, or Excel turns it into a date; a FORMULA never goes into a
+  Text-format cell.
+- Ask before writing over cells the user already has; build into empty cells or a new sheet.
+- Keep `blitz_` for helper formulas, never activate it, delete it when done. The statement and
+  drill sheets are the user&#x27;s deliverables.
+- Talk about ledgers, periods, accounts, balances and journals in the user&#x27;s terms - never name
+  the add-in&#x27;s functions, `blitz_` or the status name.
+- Read-only: this skill never posts or changes anything in Oracle EBS.</pre></section><section id='file-references-drill-and-detail-md'><h3 class='fname'>references/drill-and-detail.md</h3><pre class='md'># br-run-fsg — drilling a balance and the detail behind it
+
+## Drill levels
+
+`=br_fsg_drill_external(&quot;&lt;cells&gt;&quot;,&quot;&lt;level&gt;&quot;,&quot;&lt;sheet&gt;&quot;)` writes the lines behind the cells onto a NEW
+sheet of this workbook and reports `DONE: &lt;n&gt; rows on sheet &#x27;&lt;name&gt;&#x27;`. Run it like any action
+(write and read in one operation, replace the cell with text, poll the status).
+
+| Drilled from | Level | You get |
+|---|---|---|
+| balance cells of a statement | `Balances` | one row per account combination behind the balance: opening, period debits and credits, closing |
+| balance cells of a statement | `Journals` | the journal lines behind the balance |
+| balance cells of a statement | `Subledger` | the subledger transaction lines behind the balance, directly |
+| rows of a Balances drill sheet | `Journals` | the journal lines of those accounts |
+| rows of a Journals drill sheet | `Subledger` | the subledger transactions behind those journal lines |
+| rows of a Journals drill sheet | `Full Journal` | every line of those journals, all accounts |
+
+Several cells or rows drill in ONE request onto one sheet (`&quot;C8:C12&quot;`, `&quot;A4:A40&quot;`). To keep each
+balance&#x27;s lines apart (one explanation per statement line), drill each cell on its own. A text or
+total cell is not a balance, and rows without a drilldown link have nothing behind them: the status
+then reads `ERROR: Select a balance cell ...` / `ERROR: Select one or more rows carrying a journal
+drilldown.` / `ERROR: Select one or more journal rows to drill to the subledger.` - point the drill
+at the balance cells or the drill sheet&#x27;s data rows instead.
+
+## The drill sheet
+
+- Row 1 title, row 2 the criteria (period, amount type, currency, ledger), row 3 the column
+  headings, data from row 4, and a total row (SUBTOTAL) after the data - leave it out of your own
+  sums and counts.
+- Find columns by their heading text, never by letter: the columns follow the chart of accounts and
+  the site&#x27;s drilldown setup.
+- Journal lines carry, among others: Effective Date, Batch Name, Journal Name, Source Name, Category
+  Name, Period, Currency, Line Number, entered and accounted debit/credit, Concatenated Segments,
+  Line Description, and a drilldown link per row.
+- Subledger lines carry, among others: Source Name, Category Name, Journal Name, Document Number,
+  Transaction Number, Transaction Date, Vendor Or Customer, DESCRIPTION, Purchase Order, Asset
+  Number, Project, Sales Order, Goods Receipt Number, Cash Receipt Number, entered and accounted
+  amounts.
+- Journals whose source has no subledger detail (manual, spreadsheet, intercompany, payroll and
+  similar journals) show no link and drill to nothing - explain them from the journal lines.
+
+## Analysing the drilled lines (in the workbook, as Excel formulas)
+
+1. **Tie-out first.** The drill restates the balance it came from: compare the drill&#x27;s net
+   (accounted debits minus credits) with the balance cell and report any difference before drawing
+   conclusions. A difference usually means a restriction the drill does not share (an amount type
+   other than PTD, journal source or category filters) - say so rather than guessing.
+2. **Where the amount comes from.** Group by Source Name, then Category Name, then Journal Name (journal
+   lines) or Vendor Or Customer and Transaction Number (subledger lines); give each group&#x27;s total and
+   share, largest first. Use dynamic-array formulas (`UNIQUE`, `SUMIFS`, `SORTBY`) on a new analysis
+   sheet so the user can see and re-use the working; never type computed numbers in. Subledger lines
+   with no Vendor Or Customer and no Transaction Number (older or converted data posted without
+   document links) are a group of their own, `No document reference`, with their total: the groups
+   still add up to the drill. Never present the documents you can name as all of a source - say how
+   much of its amount they cover.
+3. **What stands out.** Manual journals in a subledger-fed account, one-off large lines, round
+   amounts, entries late in the period or reversed in the next, a single vendor or customer driving
+   most of the movement.
+4. Report the findings with the cells or rows they come from.
+
+## A detailed Blitz Report of the subledger transactions
+
+When the user wants the documents themselves (invoice lines, receipts, assets), run a Blitz Report
+restricted to the transaction numbers on the subledger drill sheet, with the **br-run-reports**
+skill (inspect the report&#x27;s parameters first - names can differ by version and setup). Run it with
+a responsibility of that subledger (a Payables one for invoices, `br_responsibilities_external()`):
+after statement work the session is on the statement&#x27;s General Ledger responsibility, under which a
+subledger report may not be available or may see other operating units.
+
+| Subledger lines from | Report | Restrict with (several values allowed) |
+|---|---|---|
+| Payables invoices | AP Invoices and Lines | Invoice Number (+ the ledger or operating unit the report requires) - invoice numbers repeat across suppliers, so keep only the rows of the drill&#x27;s suppliers afterwards |
+| Payables payments | AP Invoice Payments | Check Number |
+| Receivables transactions and adjustments | AR Transactions and Lines | Transaction Number |
+| Assets | FA Asset Additions or FA Asset Transfers | Asset Number |
+| Receiving (Cost Management) | PO Receiving Transactions | Receipt Number |
+| Purchasing | PO Headers and Lines | PO Number |
+| Receipts, Projects, Cash Management, anything else | no exact match - explain from the subledger lines | |
+
+- Take the distinct transaction numbers of one source from the drill sheet (a `UNIQUE` formula), and
+  pass them as one comma-separated parameter value. A long list goes into a helper cell on `blitz_`
+  that the run formula references (`=br_run_report_external(&quot;AP Invoices and Lines&quot;, B2)`), because a
+  formula&#x27;s text is limited. A number containing `,` or `;` cannot be passed - say so and use the
+  drill lines for it instead.
+- The report lands on its own sheet; relate its rows back to the drill (same transaction numbers)
+  and say how many of the drill&#x27;s transactions it covers.</pre></section><section id='file-references-fsg-mechanics-md'><h3 class='fname'>references/fsg-mechanics.md</h3><pre class='md'># br-run-fsg — mechanics
+
+## The functions
+
+Write each into a cell of the helper sheet `blitz_` (never activate it) and read the result. They
+are Excel worksheet functions of the Blitz Report add-in, not tools or connectors.
+
+| Function | Purpose | Returns |
+|---|---|---|
+| `br_fsg_ledgers_external([environment])` | ledgers a statement can be built for | `Ledger` |
+| `br_fsg_ledger_external(ledger, [environment])` | what a balance formula for the ledger needs | `Item \| Value \| Balance Argument`: Ledger, Functional Currency, Latest Open Period, one `Segment` row per segment in display order (its name, e.g. `Account (3)`, and its argument number), `Balance Formula` (the pattern) |
+| `br_fsg_values_external(ledger, list_name, [search], [parent_value], [environment])` | values of one list, as the formula takes them | `Value \| Description`, plus `Parent` (Yes = a parent value that rolls up children) for a segment |
+| `br_fsg_new_statement_external(ledger, [sheet_name], [environment])` | make a sheet a statement of the ledger | action: `BLITZ_RUNNING: ...`, then status `DONE: sheet &#x27;&lt;name&gt;&#x27; is a statement for ledger &#x27;&lt;ledger&gt;&#x27; (functional currency ..., latest open period ...)` |
+| `br_fsg_refresh_external([sheet_name], [force])` | calculate the statement&#x27;s balances | action: status `DONE: &lt;n&gt; value(s) refreshed[; still without an answer: &lt;cells&gt;][; &lt;warnings&gt;]` |
+| `br_fsg_drill_external(cell_address, level, [sheet_name])` | the lines behind balance cells, on a new sheet | action: status `DONE: &lt;n&gt; rows on sheet &#x27;&lt;name&gt;&#x27;` or `DONE: 0 rows - the drill found no lines` |
+| `_blitz_run_status` (workbook name, read with `=_blitz_run_status`) | outcome of the last action | `RUNNING: ...` / `DONE: ...` / `ERROR: ...` |
+
+`list_name`: a segment as the ledger profile names it (`Account (3)` or just `Account`), or one of
+`Period`, `Amount Type`, `Balance Type`, `Currency`, `Currency Type`, `Budget`, `Encumbrance Type`,
+`Journal Source`, `Journal Category`, `Conversion Type`, `Movement`. `search` keeps values whose value
+or description contains it - use it on large segments (a list stops after 2000 values and says so).
+`parent_value` lists the members of that parent value of a segment.
+
+The three lookups and the statement function take an optional environment as their last argument,
+the way the report functions do (see the br-run-reports skill): omit it to use the current one;
+`br_environments_external()` lists them; only a connected environment can be used, since a worksheet
+function cannot log in. Refresh and drill take NO environment argument: a statement is always
+refreshed and drilled by the environment and responsibility it was made in.
+
+### Errors returned in the cell
+| Return | Meaning / what to do |
+|---|---|
+| `#BLITZ_NOT_CONNECTED` | ask the user to connect on the Blitz Report ribbon |
+| `#BLITZ_ENV_NOT_CONNECTED` / `#BLITZ_ENV_NOT_FOUND` / `#BLITZ_ENV_SWITCH_FAILED` | that environment is not connected / not known / could not be switched to - ask the user to connect to it on the ribbon |
+| `#BLITZ_LEDGER_NOT_FOUND` | the name is not a ledger of the user&#x27;s responsibilities - list the ledgers and pick the exact name |
+| `#BLITZ_LIST_NOT_FOUND` | not a list or segment of the ledger - use the names above or the profile&#x27;s segment names |
+| `#BLITZ_SHEET_NOT_FOUND` / `#BLITZ_NOT_FSG` | no such sheet / the sheet is not a statement - make it one first |
+| `BLITZ_RUNNING: a run is already in progress` | another action is still running - wait for its status, do not retry |
+| `#BLITZ_ERROR: ...` | anything else - report the message |
+
+## Running an action and waiting
+
+Same discipline as running a report:
+1. Write the action formula and read the cell&#x27;s return in the SAME operation, then in your next
+   operation replace that cell with plain text. A second read of a still-present action formula
+   can start the action twice.
+2. Read `=_blitz_run_status` once per turn, generously spaced; never re-enter the action formula
+   to check on it. A value read before your own trigger is stale - it belongs to an earlier action.
+3. While an action runs, pause other workbook edits: the add-in is writing the sheet.
+4. `ERROR: ...` is the add-in&#x27;s reason - report it, fix what it names, and try once more at most.
+
+## The balance formula
+
+`=br_balance(period, amount type, currency, currency type, balance type, budget, encumbrance type,
+ledger, movement, multiplier, journal source, journal category, segment 1, ..., segment 20)` -
+arguments 13 onward are the segments in COLUMN order, which on many charts is not the display
+order: always take each segment&#x27;s argument number from the ledger profile, or start from its
+`Balance Formula` pattern and replace each `&lt;placeholder&gt;`.
+
+| # | Argument | Values |
+|---|---|---|
+| 1 | Period | a period name (`Dec-12`); a range of periods for CTD (`Jan-12-Mar-12`); an effective date or date range for the JED types (`01-Dec-2012-15-Dec-2012`) |
+| 2 | Amount type | `PTD` period to date, `QTD`, `YTD`, `CTD` custom range, `FYS` fiscal year start, `FYE` fiscal year end, `JED` journal effective date - full list with descriptions from the `Amount Type` list |
+| 3 | Currency | normally the ledger&#x27;s functional currency (profile) |
+| 4 | Currency type | `T` total in the ledger currency (the normal choice), `E` entered amounts in a foreign currency - see the `Currency Type` list |
+| 5 | Balance type | `A` actual, `B` budget (with argument 6), `E` encumbrance (with argument 7) |
+| 6 | Budget | a name from the `Budget` list, only with `B` |
+| 7 | Encumbrance type | from the `Encumbrance Type` list, only with `E` |
+| 8 | Ledger | leave empty: the statement&#x27;s own ledger |
+| 9 | Movement | empty = net, `Dr` debits only, `Cr` credits only |
+| 10 | Multiplier | empty = 1; `-1` shows the balance with the opposite sign |
+| 11, 12 | Journal source, journal category | restrict to journals of that source / category; empty = all |
+| 13+ | Segments | see below; empty = every value of that segment |
+
+Segment value syntax: one value `&quot;1110&quot;`, a range `&quot;1110-1199&quot;`, several `&quot;1110;1210&quot;`, an exclusion
+`&quot;~1120&quot;` (combine: `&quot;11%;~1120&quot;`), a wildcard `&quot;11%&quot;`, a parent value (expands to its children).
+Always restrict the account segment: a balance restricted only on the balancing segment (company)
+nets to zero, as double entry does.
+
+Signs: balances are debit positive and credit negative, so revenue, liabilities and equity come
+back negative. Present them positive with multiplier `-1` on those rows, and say which convention
+the statement uses.
+
+## The other FSG functions (also calculated by the refresh)
+
+| Formula | Returns |
+|---|---|
+| `=br_segment_description(&quot;&lt;Segment name&gt;&quot;, &lt;value&gt;)` | the description of a segment value; the segment name exactly as the profile lists it, e.g. `&quot;Account (3)&quot;` |
+| `=br_period_offset(&lt;period&gt;, &lt;n&gt;, , [adjustment])` | the period n periods before (negative) or after; `&quot;Exclude&quot;` as the 4th argument skips adjustment periods - use it for the same period last year (`-12`) |
+| `=br_period_name(&lt;year&gt;, &lt;period number&gt;)` | the name of a period by year and number |
+| `=br_daily_rate(&lt;from currency&gt;, &lt;to currency&gt;, &lt;conversion type&gt;, &lt;date&gt;)` | a daily exchange rate |
+
+## Formula hygiene (each mistake gives a wrong number or a dead cell)
+
+- Every argument is a quoted literal or a plain cell reference (`$B$1`, `C$1`, `$A8`), never an
+  expression or a nested function - the add-in reads the arguments from the formula text.
+- Cells holding a literal period, segment value or code are Text format, set BEFORE the value is
+  written (`Dec-12` would become a date, `01` would become 1).
+- A formula is never written into a Text-format cell (it would stay text): set General first.
+- Anchor references with `$` so one formula fills across the period columns and down the rows.
+- After writing or changing formulas the cells show `(pending)` until the next refresh. That is
+  normal - refresh, do not rewrite them.
+
+## The statement sheet
+
+`br_fsg_new_statement_external(ledger, sheet_name)`:
+- no sheet carries that name: a new sheet with it (blank name: a new sheet Excel names);
+- an empty sheet: built into;
+- a sheet holding the user&#x27;s layout: claimed as it is, nothing on it changes;
+- already a statement of the same ledger: `DONE`, nothing to do; of another ledger: `ERROR` - use
+  another sheet rather than re-pointing the user&#x27;s statement.
+
+## Refresh
+
+- `br_fsg_refresh_external(&quot;&lt;Sheet&gt;&quot;)` calculates the values still pending (new or changed formulas).
+  `force` TRUE fetches every value again - use it for current balances after new postings. A blank
+  sheet name refreshes every statement of the workbook, always forced.
+- `&lt;n&gt; value(s) refreshed` counts server answers, not cells - cells with the same arguments share one.
+- `still without an answer: &lt;cells&gt;` lists cells showing `(pending)`, an error, or the add-in&#x27;s own
+  answer: `Error (Period)` / `(Amount Type)` / `(Currency)` / `(Currency Type)` / `(Balance Type)` -
+  that argument is empty or unusable; `invalid (Period)` - no such period in the ledger;
+  `Error(Segment)` - the segment name of a description is not the profile&#x27;s. A cell waiting on a
+  period cell that is still `(pending)` resolves on the next refresh.</pre></section><section id='file-references-statement-recipes-md'><h3 class='fname'>references/statement-recipes.md</h3><pre class='md'># br-run-fsg — statement recipes
+
+All formulas below assume a five-segment chart whose profile pattern is
+`=br_balance(&quot;&lt;Period&gt;&quot;,&quot;PTD&quot;,&quot;USD&quot;,&quot;T&quot;,&quot;A&quot;,,,,,,,,&quot;&lt;Company (1)&gt;&quot;,&quot;&lt;Department (2)&gt;&quot;,&quot;&lt;Account (3)&gt;&quot;,&quot;&lt;Sub-Account (4)&gt;&quot;,&quot;&lt;Product (5)&gt;&quot;)`.
+Build every formula from YOUR ledger&#x27;s pattern: same idea, the segment slots it lists.
+
+## The criteria block (every statement starts with it)
+
+Set B1:B5 to Text, then write:
+
+| | A | B |
+|---|---|---|
+| 1 | Period | `Dec-12` |
+| 2 | Amount Type | `PTD` (income statement) or `YTD` (balance sheet) |
+| 3 | Currency | the functional currency from the profile |
+| 4 | Currency Type | `T` |
+| 5 | Balance Type | `A` |
+
+Every balance formula then takes `$B$1,$B$2,$B$3,$B$4,$B$5` as its first five arguments, so the
+user changes the period in one cell and refreshes. Leave one empty row under the block.
+
+## One balance (&quot;what was cash at the end of December?&quot;)
+
+1. Find the account: `=br_fsg_values_external(&quot;&lt;Ledger&gt;&quot;,&quot;Account&quot;,&quot;cash&quot;)`.
+2. On the statement sheet, under the criteria block (Amount Type `YTD` for a balance at period end):
+   `A8` (Text) `1110`, `B8` `=br_segment_description(&quot;Account (3)&quot;,$A8)`,
+   `C8` `=br_balance($B$1,$B$2,$B$3,$B$4,$B$5,,,,,,,,&quot;&quot;,&quot;&quot;,$A8,&quot;&quot;,&quot;&quot;)`.
+3. Refresh the sheet, read C8, answer with the value and the period, and say where it is.
+
+## Trial balance by account
+
+1. List the detail accounts: `=br_fsg_values_external(&quot;&lt;Ledger&gt;&quot;,&quot;Account&quot;)` (rows with Parent blank;
+   use `search` or a parent value when the list is long).
+2. Headings in row 7 (`Account`, `Description`, `Balance`), one account per row from row 8: account
+   in column A (Text), `=br_segment_description(&quot;Account (3)&quot;,$A8)` in B,
+   `=br_balance($B$1,$B$2,$B$3,$B$4,$B$5,,,,,,,,&quot;&quot;,&quot;&quot;,$A8,&quot;&quot;,&quot;&quot;)` in C, filled down.
+3. A total row `=SUM(C8:C&lt;last&gt;)` - a trial balance on all accounts of a balanced ledger totals 0.
+4. Refresh. Rows that came back 0 can be hidden or filtered once the user agrees.
+
+## Income statement / balance sheet
+
+1. Agree the structure with the user before building: which accounts or account ranges make up each
+   line (revenue, cost of sales, operating expenses...; assets, liabilities, equity). Offer what the
+   chart already has: parent values (`Parent` = Yes in the segment list) are ready-made summary lines,
+   and `=br_fsg_values_external(&quot;&lt;Ledger&gt;&quot;,&quot;Account&quot;,,&quot;&lt;parent&gt;&quot;)` lists what one rolls up. Never
+   guess the account classification silently - state it, the user confirms. Built from a parent,
+   the statement carries EVERY detail value it rolls up: one that fits no section goes on an
+   `Other` line, never off the statement.
+2. One row per line: label in A, the account criterion in B as Text (`4000-4999`, a parent value, or
+   `5100;5200`), the balance in C with `$B8` in the account slot; revenue, liability and equity rows
+   take multiplier `-1` (argument 10) if the user wants them positive.
+3. Subtotals and totals as ordinary Excel formulas (`=SUM(C8:C10)`, `=C11-C15`), never as balance
+   formulas.
+4. Income statement: Amount Type `PTD` for the month, `YTD` for the year to date (two columns: put
+   `PTD` and `YTD` in a header row and reference that cell instead of `$B$2`). Balance sheet: `YTD`.
+5. A `Check` row under the bottom line: the bottom line minus the balance of the parent itself (the
+   parent value in the account slot, multiplier `-1` when profit shows positive). It reads 0 when no
+   account is missing; anything else is an account left off - add it, never report around it.
+
+## Columns per period
+
+Period headings in row 7: C7 `=$B$1`, D7 `=br_period_offset(C7,-1)`, E7 `=br_period_offset(D7,-1)`
+and so on - the refresh resolves the periods before the balances that read them. Balance in C8:
+`=br_balance(C$7,$B$2,$B$3,$B$4,$B$5,,,,,,,,&quot;&quot;,&quot;&quot;,$A8,&quot;&quot;,&quot;&quot;)`, filled right and down.
+Same period last year: `=br_period_offset($B$1,-12,,&quot;Exclude&quot;)`.
+
+## Columns per department (or any other segment)
+
+Department values across row 7 (Text, from `=br_fsg_values_external(&quot;&lt;Ledger&gt;&quot;,&quot;Department&quot;)`), the
+balance in C8: `=br_balance($B$1,$B$2,$B$3,$B$4,$B$5,,,,,,,,&quot;&quot;,C$7,$A8,&quot;&quot;,&quot;&quot;)`.
+
+## Actual against budget
+
+Budget names: `=br_fsg_values_external(&quot;&lt;Ledger&gt;&quot;,&quot;Budget&quot;)`. Actual in C, budget in D:
+`=br_balance($B$1,$B$2,$B$3,$B$4,&quot;B&quot;,&quot;&lt;Budget name&gt;&quot;,,,,,,,&quot;&quot;,&quot;&quot;,$A8,&quot;&quot;,&quot;&quot;)` (or the budget name in
+a Text cell referenced instead), variance `=C8-D8`, and `%` as `=IF(D8=0,&quot;&quot;,(C8-D8)/ABS(D8))` - over the magnitude, so a credit
+balance that grows shows a negative % like its negative variance.
+
+## Before you report
+
+- Refresh status `DONE` with no cells &quot;still without an answer&quot; - else fix and refresh.
+- Totals that should tie do (trial balance 0; assets = liabilities + equity on a full balance sheet,
+  where the current year&#x27;s result is part of equity until closed; the `Check` row of a statement
+  built from a parent reads 0).
+- Say the ledger, period, amount type, currency and sign convention the numbers are in.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

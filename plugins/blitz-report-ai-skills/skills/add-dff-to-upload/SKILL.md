@@ -63,7 +63,7 @@ Output: `main_sql_columns.sql`, `success_sql_columns.sql`, `upload_columns.xml`,
 1. **Main SQL**: insert `main_sql_columns.sql` after the entity's columns, before `upload_row`.
 2. **Upload columns**: insert the `upload_columns.xml` rows and renumber the `COLUMN_NUMBER` of the columns after them, which must follow the select-list order.
    - Context column: `LOV custom` over `fnd_descr_flex_contexts_vl`, returning context names. Keep it when the DFF has only global segments: its list stays empty until a context is defined, as in the shipped uploads.
-   - Attribute columns: `LOV custom` over `xxen_util.dff_attribute_lov`, with all siblings passed as `:$column$`, the `value~description` split, Validate From List `Y`, and a `select` comment listing the segment per context in the shipped format `(Context) Attribute1: (Global) <prompt>, (<context>) <prompt>`.
+   - Attribute columns: `LOV custom` over `xxen_util.dff_attribute_lov`, with all siblings passed as `:$column$`, the `value~description` split, not free text, and a `select` comment listing the segment per context in the shipped format `(Context) Attribute1: (Global) <prompt>, (<context>) <prompt>`.
    - Keep the generated LOV text as it is (named arguments, lower case, literals at the start): the framework reads those literals from the first 1,000 characters to give Excel per-context date and number checks.
 3. **Upload parameters**: insert the `upload_parameters.xml` rows in the procedure's parameter order and renumber `DISPLAY_SEQUENCE` after them.
 4. **Success SQL**: add `success_sql_columns.sql` at the same position as in the main SQL. The tables sit in an inline view `x` that selects `rowid row_id`, because pre-12c databases allow an outer-joined table to reference only one other table:
