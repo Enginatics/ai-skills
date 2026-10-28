@@ -388,6 +388,7 @@
     "writes": false,
     "reports": [
       "CAC Accounting Period Status",
+      "CAC Inventory Pending Cost Adjustment",
       "CAC Missing Receiving Accounting Transactions",
       "CAC Missing WIP Accounting Transactions",
       "CST Period Close Subinventory Value",
@@ -743,6 +744,15 @@
     "description": "Reviewing and finishing Oracle Discoverer workbooks converted to Blitz Reports. Use when working on Discoverer-converted reports.",
     "reports": [],
     "path": "plugins/blitz-report-ai-skills/skills/discoverer-migration"
+  },
+  {
+    "name": "webadi-migration",
+    "title": "WebADI Migration Rules",
+    "type": "rules",
+    "category": "Migration",
+    "description": "Converting Oracle WebADI integrators gathered by the Blitz Report Custom Reports Converter into Blitz Uploads. Use with the upload-builder skill.",
+    "reports": [],
+    "path": "plugins/blitz-report-ai-skills/skills/webadi-migration"
   },
   {
     "name": "report-development",

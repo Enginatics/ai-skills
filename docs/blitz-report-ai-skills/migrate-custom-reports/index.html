@@ -932,6 +932,19 @@ class Inventory:
         # XML elements: &#x27;&lt;TAG&gt;&#x27;||expr||&#x27;&lt;/TAG&gt;&#x27;
         for m in re.finditer(r&quot;(?i)&#x27;\s*&lt;(\w+)&gt;\s*&#x27;\s*\|\|\s*(.+?)\s*\|\|\s*&#x27;\s*&lt;/\1&gt;\s*&#x27;&quot;, text[lo:hi]):
             add(m.group(1).upper(), text.count(&quot;\n&quot;, 0, lo + m.start()) + 1, m.group(2))
+        # XML elements written through a helper: &lt;helper&gt;(&#x27;TAG&#x27;,expr), where the helper builds &#x27;&lt;&#x27;||tag||&#x27;&gt;&#x27;
+        helpers = []
+        for m in re.finditer(r&quot;(?im)^\s*procedure\s+(\w+)\s*\(&quot;, text):
+            body_end = re.compile(r&quot;(?im)^\s*end\s+%s\s*;&quot; % re.escape(m.group(1))).search(text, m.end())
+            if body_end and re.search(r&quot;&#x27;&lt;&#x27;\s*\|\|&quot;, text[m.end():body_end.start()]):
+                helpers.append(m.group(1))
+        for h in set(helpers):
+            for m in re.finditer(r&quot;(?i)\b%s\s*\(\s*&#x27;(\w+)&#x27;\s*,\s*&quot; % re.escape(h), text[lo:hi]):
+                start, depth, i = lo + m.end(), 1, lo + m.end()
+                while i &lt; hi and depth:
+                    depth += {&quot;(&quot;: 1, &quot;)&quot;: -1}.get(text[i], 0)
+                    i += 1
+                add(m.group(1).upper(), text.count(&quot;\n&quot;, 0, lo + m.start()) + 1, text[start:i - 1])
         # delimited text lines: a heading line of literals, then data lines of values joined with &#x27;|&#x27;, &#x27;,&#x27; or a tab
         headings = []
         for m in re.finditer(r&quot;(?i)\b(?:fnd_file\.put_line\s*\(\s*fnd_file\.output\s*,|fnd_file\.put\s*\(\s*fnd_file\.output\s*,|utl_file\.put_line\s*\(\s*\w+\s*,|utl_file\.put\s*\(\s*\w+\s*,)&quot;, text[lo:hi]):

@@ -16,6 +16,7 @@ Rules checked (IDs match the Upload Completeness Checklist):
          must use COLUMN_TYPE=LOV with LOV_NAME=Yes + LOV_GUID=8E2FF36EDEA679D2E0530100007F1FF2
   G1     Upload Mode parameter must use shared LOV (LOV_NAME=Blitz Upload Mode + GUID)
   G2     Upload Mode must bind `:p_upload_mode`, in SQL_TEXT or as the ANCHOR
+  G3     Upload Mode literal default and template defaults must be C or C,U
   G4     Upload Mode parameter REQUIRED=Y
   H1     Error SQL row exists with NO SQL_TEXT (auto-generated)
   H2     Order By row exists
@@ -290,6 +291,16 @@ class UploadLint:
                 self.add('G2', f'Upload Mode must bind `:p_upload_mode`, either in SQL_TEXT or as the ANCHOR (got SQL_TEXT {sql!r}, ANCHOR {anchor!r})')
             if req != 'Y':
                 self.add('G4', f'Upload Mode parameter must have REQUIRED=Y (got: {req!r})')
+            if ln == 'Blitz Upload Mode':
+                # the list offers only C and C,U; any other literal default is dropped and the run screen opens with Upload Mode blank
+                dv = decode_xml_entities(self._get_inner(b, 'DEFAULT_VALUE') or '').strip()
+                if dv and not re.match(r'(?is)select\b', dv) and dv not in ('C', 'C,U'):
+                    self.add('G3', f'Upload Mode DEFAULT_VALUE must be C or C,U (got {dv!r})')
+                for t in self._row_blocks('TEMPLATE_PARAMETER_DEFAULTS_ROW'):
+                    if (self._get_inner(t, 'PARAMETER_NAME') or '').strip().lower() == 'upload mode':
+                        tv = decode_xml_entities(self._get_inner(t, 'DEFAULT_VALUE') or '').strip()
+                        if tv not in ('C', 'C,U'):
+                            self.add('G3', f'template default of Upload Mode must be C or C,U (got {tv!r})')
             return
         self.add('G1', 'Upload Mode parameter not found')
 
@@ -545,7 +556,8 @@ class UploadLint:
             # the framework binds the display value, not the id.
             if not has_id and lov_m is None and lov_name in shared_with_id:
                 has_id = True
-            if not has_id:
+            # Id or Value = Value binds the display value although the LOV has an id column.
+            if not has_id or re.search(r'<ID_OR_VALUE>value</ID_OR_VALUE>', block, re.IGNORECASE):
                 continue
             # Look for SQL_TEXT pattern matching display column = bind
             m = re.search(r'(\w+)\.(\w+)\s*=\s*:p_\w+', sql, re.IGNORECASE)

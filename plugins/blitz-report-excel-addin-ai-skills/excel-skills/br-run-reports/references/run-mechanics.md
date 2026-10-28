@@ -29,8 +29,8 @@ Every discovery/run function below takes an optional trailing **`environment`** 
 - See what's available: `=br_environments_external()` → `Environment | Connected | Current | URL`,
   and `=br_responsibilities_external("<Environment>")` → `Responsibility | Current`.
 - Only environments showing **`Connected = Yes`** can be targeted — a UDF cannot log in. If the user
-  names one that isn't connected (you get `#BLITZ_ENV_NOT_CONNECTED`), ask them to connect to it via
-  the Blitz Report ribbon first. `#BLITZ_RESP_NOT_FOUND` means that responsibility isn't available in
+  names one that isn't connected (you get `#BLITZ_ENV_NOT_CONNECTED`), ask them to select it under
+  Environments on the Blitz Report ribbon, which logs them in to it. `#BLITZ_RESP_NOT_FOUND` means that responsibility isn't available in
   the chosen environment — list them with `br_responsibilities_external` and pick a valid one.
 - Selection is **sticky**: passing `environment`/`responsibility` switches the session to it for that
   call and subsequent calls, so you can set it once (e.g. on the run) or repeat it on each call.
@@ -167,7 +167,7 @@ matching name, then re-run. Step 1 below is for when you do NOT already have the
 - Only pass parameters you have values for; respect `Required`.
 - `#BLITZ_NOT_CONNECTED` → tell the user to open the Blitz Report ribbon and connect to an environment first.
 - `#BLITZ_REPORT_NOT_FOUND` → the name didn't match; re-check with `br_report_list_external` (this is the fast-path fallback — search for the closest matching name, then re-run).
-- `#BLITZ_ENV_NOT_CONNECTED` / `#BLITZ_ENV_NOT_FOUND` → the named environment isn't connected/known; the add-in can't log in from a formula, so ask the user to connect to it via the Blitz Report ribbon (check `br_environments_external()`).
+- `#BLITZ_ENV_NOT_CONNECTED` / `#BLITZ_ENV_NOT_FOUND` → the named environment isn't connected/known; the add-in can't log in from a formula, so ask the user to select it under Environments on the Blitz Report ribbon (check `br_environments_external()`).
 - `#BLITZ_RESP_NOT_FOUND` → that responsibility isn't available in the chosen environment; pick one from `br_responsibilities_external("<Environment>")`.
 - `_blitz_run_status` = `ERROR: ...` → report the message to the user; do not invent data. In
   particular `ERROR: Please set required parameter(s): X` means a mandatory parameter with no default

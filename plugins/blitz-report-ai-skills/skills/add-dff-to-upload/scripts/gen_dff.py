@@ -52,7 +52,6 @@ def main():
     ap.add_argument("--cursor-from", help="comma separated from list of the stored-record cursor (default: the flexfield table)")
     ap.add_argument("--table", help="the flexfield's own table, used when --cursor-from is not given")
     ap.add_argument("--cursor-where", default="", help="predicates of the stored-record cursor, separated by ' and '")
-    ap.add_argument("--hidden", default="", help="comma separated columns of non-displayed segments (Query 2 display_flag N)")
     ap.add_argument("--dry-run", action="store_true", help="report the values the API would receive in message_ instead of calling it")
     ap.add_argument("--out", required=True, help="output directory")
     a = ap.parse_args()
@@ -167,35 +166,15 @@ def main():
     sel += [f"  {a.alias}.{famlc}{i}" + ("" if fam == "ATTRIBUTE" else f" attribute{i}") for i in attrs]
     frm = lines(a.cursor_from.split(",") if a.cursor_from else [f"{a.table} {a.alias}"], ",")
     whr = lines(a.cursor_where.split(" and ") if a.cursor_where else [], " and")
-    hidden = [h.strip().upper() for h in a.hidden.split(",") if h.strip()]
     stored = ["    l_stored.attribute_category:=c.attribute_category;"] + [f"    l_stored.attribute{i}:=c.attribute{i};" for i in attrs]
-    newv = [f"    l_dff.attribute_category:={a.context_param};"] + [f"    l_dff.attribute{i}:={a.param_prefix}{i};" for i in attrs]
-    merge = [f"      l_dff.attribute_category:=merged('{a.context_param}','ATTRIBUTE_CATEGORY',l_dff.attribute_category,l_stored.attribute_category);"]
-    merge += [f"      l_dff.attribute{i}:=merged('{a.param_prefix}{i}','{fam}{i}',l_dff.attribute{i},l_stored.attribute{i});" for i in attrs]
-    cmp = " or\n".join(["    nvl(l_dff.attribute_category,fnd_api.g_miss_char)<>nvl(l_stored.attribute_category,fnd_api.g_miss_char)"] +
-        [f"    nvl(l_dff.attribute{i},fnd_api.g_miss_char)<>nvl(l_stored.attribute{i},fnd_api.g_miss_char)" for i in attrs])
+    newv = [f"  l_dff.attribute_category:={a.context_param};"] + [f"  l_dff.attribute{i}:={a.param_prefix}{i};" for i in attrs]
     api = ",\n".join([f"    {k}=>{k}" for k in keys] + ["    p_attribute_category=>l_dff.attribute_category"] +
         [f"    p_{famlc}{i}=>l_dff.attribute{i}" for i in attrs])
-
-    def seg_fn(name, extra):
-        return f"""function {name}(p_context_code in varchar2, p_column_name in varchar2) return boolean is
-begin
-  for c in (
-  select
-  null
-  from
-  fnd_descr_flex_column_usages fdfcu
-  where
-  fdfcu.application_id=g_application_id and
-  fdfcu.descriptive_flexfield_name=g_flexfield_name and
-  fdfcu.descriptive_flex_context_code in ('Global Data Elements',p_context_code) and
-  fdfcu.application_column_name=p_column_name and
-  fdfcu.enabled_flag='Y'{extra}
-  ) loop
-    return true;
-  end loop;
-  return false;
-end {name};"""
+    optional = ""
+    if a.context_param != f"{a.param_prefix}_category":
+        optional += f",\n  p_context_parameter=>'{a.context_param}'"
+    if fam != "ATTRIBUTE":
+        optional += f",\n  p_column_prefix=>'{fam}'"
 
     if a.dry_run:
         write = ("    --test build: report the stored values that would be passed to the API instead of writing them\n"
@@ -207,19 +186,8 @@ end {name};"""
                  "    --and check its return status: on failure set message_ and raise le_validation_error,\n"
                  "    --which rolls the row back to its savepoint\n"
                  f"    xx_my_api.create_or_update(\n{api}\n    );")
-    hidden_fn = ("\n\n" + seg_fn("segment_hidden", " and\n  fdfcu.display_flag='N'")) if hidden else ""
-    slot = lambda col: "attribute" + col[len(fam):] if col.startswith(fam) and col[len(fam):].isdigit() else None
-    bad = [h for h in hidden if not slot(h)]
-    if bad:
-        sys.exit(f"--hidden columns must be {fam}<n>: {', '.join(bad)}")
-    restore = "".join(f"""
-    if segment_hidden(case when not l_context_changed then l_stored.attribute_category end,'{h}') then
-      l_dff.{slot(h)}:=l_stored.{slot(h)};
-    end if;""" for h in hidden)
-    prefix_arg = "" if fam == "ATTRIBUTE" else f"\n    p_column_prefix=>'{fam}',"
     body = f"""create or replace package body {a.package} as
 
-g_application_id constant fnd_application.application_id%type:={app};
 g_application_short_name constant fnd_application.application_short_name%type:='{a.app_short_name}';
 g_flexfield_name constant fnd_descriptive_flexs.descriptive_flexfield_name%type:='{dff}';
 
@@ -230,48 +198,8 @@ l_rowid rowid;
 l_stored xxen_fnd_upload.g_attribute_rec_type;
 l_dff xxen_fnd_upload.g_attribute_rec_type;
 l_dff_message varchar2(4000);
-l_context_changed boolean:=false;
-l_changed boolean:=false;
+l_changed boolean;
 le_validation_error exception;
-
---a hand-built csv or xlsx counts every parameter as modified, also one whose column the upload's
---template leaves out
-function modified(p_parameter_name in varchar2) return boolean is
-begin
-  return xxen_upload.parameter_exists(p_parameter_name) and xxen_upload.value_modified(p_parameter_name);
-end modified;
-
-function dff_modified return boolean is
-begin
-  if modified('{a.context_param}') then
-    return true;
-  end if;
-  for i in 1..{n} loop
-    if modified('{a.param_prefix}'||i) then
-      return true;
-    end if;
-  end loop;
-  return false;
-end dff_modified;
-
-{seg_fn("segment_enabled", "")}{hidden_fn}
-
---an unmodified cell keeps the stored value: in the display form the download shows if an enabled
---segment uses the column, unconverted otherwise; a context change clears the old context's segments
-function merged(p_parameter_name in varchar2, p_column_name in varchar2, p_new_value in varchar2, p_stored_value in varchar2) return varchar2 is
-begin
-  if modified(p_parameter_name) then
-    return p_new_value;
-  elsif p_column_name='ATTRIBUTE_CATEGORY' then
-    return xxen_util.display_flexfield_context(g_application_id,g_flexfield_name,p_stored_value);
-  elsif segment_enabled(case when not l_context_changed then l_stored.attribute_category end,p_column_name) then
-    return xxen_util.display_flexfield_value(g_application_id,g_flexfield_name,l_stored.attribute_category,p_column_name,l_rowid,p_stored_value);
-  elsif not l_context_changed then
-    return p_stored_value;
-  end if;
-  return null;
-end merged;
-
 begin
   status_:=xxen_upload.g_status_success;
   savepoint before_row;
@@ -288,36 +216,27 @@ begin
     l_rowid:=c.row_id;
 {chr(10).join(stored)}
   end loop;
-  l_dff:=l_stored;
-
-  if not l_exists or dff_modified then
 {chr(10).join(newv)}
-    if l_exists then
-      l_context_changed:=modified('{a.context_param}') and
-      nvl({a.context_param},fnd_api.g_miss_char)<>nvl(xxen_util.display_flexfield_context(g_application_id,g_flexfield_name,l_stored.attribute_category),fnd_api.g_miss_char);
-{chr(10).join(merge)}
-    end if;
-    xxen_fnd_upload.validate_dff_attributes(
-    p_appl_sn=>g_application_short_name,
-    p_flexfield_name=>g_flexfield_name,
-    p_values_or_ids_in=>'V',
-    p_values_or_ids_out=>'I',{prefix_arg}
-    px_attribute_rec=>l_dff,
-    x_error_message=>l_dff_message
-    );
-    if l_dff_message is not null then
-      message_:=l_dff_message;
-      raise le_validation_error;
-    end if;{restore}
-    l_changed:=not l_exists or
-{cmp};
+  l_changed:=xxen_fnd_upload.merge_dff(
+  p_application_short_name=>g_application_short_name,
+  p_flexfield_name=>g_flexfield_name,
+  p_parameter_prefix=>'{a.param_prefix}',
+  p_create=>not l_exists,
+  p_rowid=>l_rowid,
+  p_stored_rec=>l_stored,
+  px_dff_rec=>l_dff,
+  x_message=>l_dff_message{optional}
+  );
+  if l_dff_message is not null then
+    message_:=l_dff_message;
+    raise le_validation_error;
   end if;
 
-  --merge the entity's other columns here and set l_changed when one of them changed;
-  --test each with modified(), since xxen_upload.new_value alone treats a column that
-  --the csv/xlsx template omits as cleared
+  --merge the entity's other columns here and set l_changed when one of them changed; test each with
+  --xxen_upload.parameter_exists and xxen_upload.value_modified, since a csv or xlsx file counts every
+  --parameter as modified, also one whose column the upload's template leaves out
 
-  if l_changed then
+  if not l_exists or l_changed then
 {write}
   else
     message_:='No change.';

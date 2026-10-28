@@ -289,6 +289,19 @@ class Inventory:
         # XML elements: '<TAG>'||expr||'</TAG>'
         for m in re.finditer(r"(?i)'\s*<(\w+)>\s*'\s*\|\|\s*(.+?)\s*\|\|\s*'\s*</\1>\s*'", text[lo:hi]):
             add(m.group(1).upper(), text.count("\n", 0, lo + m.start()) + 1, m.group(2))
+        # XML elements written through a helper: <helper>('TAG',expr), where the helper builds '<'||tag||'>'
+        helpers = []
+        for m in re.finditer(r"(?im)^\s*procedure\s+(\w+)\s*\(", text):
+            body_end = re.compile(r"(?im)^\s*end\s+%s\s*;" % re.escape(m.group(1))).search(text, m.end())
+            if body_end and re.search(r"'<'\s*\|\|", text[m.end():body_end.start()]):
+                helpers.append(m.group(1))
+        for h in set(helpers):
+            for m in re.finditer(r"(?i)\b%s\s*\(\s*'(\w+)'\s*,\s*" % re.escape(h), text[lo:hi]):
+                start, depth, i = lo + m.end(), 1, lo + m.end()
+                while i < hi and depth:
+                    depth += {"(": 1, ")": -1}.get(text[i], 0)
+                    i += 1
+                add(m.group(1).upper(), text.count("\n", 0, lo + m.start()) + 1, text[start:i - 1])
         # delimited text lines: a heading line of literals, then data lines of values joined with '|', ',' or a tab
         headings = []
         for m in re.finditer(r"(?i)\b(?:fnd_file\.put_line\s*\(\s*fnd_file\.output\s*,|fnd_file\.put\s*\(\s*fnd_file\.output\s*,|utl_file\.put_line\s*\(\s*\w+\s*,|utl_file\.put\s*\(\s*\w+\s*,)", text[lo:hi]):

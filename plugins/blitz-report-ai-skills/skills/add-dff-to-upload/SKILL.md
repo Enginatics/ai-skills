@@ -18,7 +18,7 @@ Adds one descriptive flexfield to an existing upload the standard Blitz Report w
 
 ## Step 0 - Check the Blitz Report build
 
-Run the last query of `references/flexfield_facts.sql`. It must return `P_COLUMN_PREFIX`. Otherwise the build predates 18 September 2026, lacks `xxen_upload.parameter_exists` or `p_column_prefix`, and validates DFFs with contexts incorrectly. Stop and ask for an upgrade.
+Run the last query of `references/flexfield_facts.sql`. It must return `P_PARAMETER_PREFIX`. Otherwise the build lacks the shared merge routine `xxen_fnd_upload.merge_dff` that the generated procedure calls. Stop and ask for an upgrade.
 
 ## Step 1 - Collect the flexfield facts
 
@@ -30,7 +30,6 @@ Run queries 1 to 3 of `references/flexfield_facts.sql`:
 | `context_column_name` | `--context-column` (not always `ATTRIBUTE_CATEGORY`; `GL_CODE_COMBINATIONS` uses `CONTEXT`) |
 | attribute column family and count (Query 3) | `--family` (default `ATTRIBUTE`; HR uses `PEI_INFORMATION`, `ORG_INFORMATION`, ...), `--count` = number of attribute columns of the table, whether used or not. Query 3 returns one row per schema with a table of that name: take the product schema's. |
 | `max_length` (Query 3) | over 150: the procedure's record holds 150 bytes per attribute, values above that raise `ORA-06502`; tell the user |
-| `display_flag` `N` (Query 2) | `--hidden` with those columns |
 | `context_user_override_flag` `N` with a `default_context_field_name` | the context follows a reference field: see Special cases |
 
 ## Step 2 - Generate the artefacts
@@ -96,21 +95,18 @@ Import the XML through the setup form (Tools > Import) or `bin/import_xml`. Edit
 
 ## Step 4 - Upload procedure
 
-Add the generated parameters (`default null`) to the procedure in spec and body. Then merge the generated declarations, helper functions and DFF block into it:
+Add the generated parameters (`default null`) to the procedure in spec and body. Then merge the generated declarations and DFF block into it. The block never merges segments itself: it calls the shared routine `xxen_fnd_upload.merge_dff`, which every Blitz Upload uses.
 
-- **Helper functions:**
-  - `modified(p)`: `parameter_exists` plus `value_modified`. A hand-built csv/xlsx counts every parameter as modified, also those its template omits. Test the entity's other columns with it too: `xxen_upload.new_value` alone clears a column the csv template omits.
-  - `dff_modified`: true on any DFF change.
-  - `segment_enabled`: whether an enabled segment uses a column.
-  - `merged`: builds the value of each cell:
-    - a changed cell takes the uploaded value;
-    - an untouched cell takes the stored value in display form;
-    - a column without an enabled segment keeps its stored value unconverted;
-    - after a context change, the old context's untouched segments are cleared, as in the Oracle form.
-- **Read the stored row** with its `rowid` into `l_stored`, and initialise `l_dff:=l_stored`. The generated code treats a key without a stored row as a create; in an update-only upload, keep the procedure's own not-found error ahead of the DFF block.
-- **Merge and validate** only on create or when `dff_modified`: merge, then `validate_dff_attributes` from `'V'` to `'I'`. On error, set `message_` and raise.
-- **Detect a change** by comparing the converted ids with `l_stored`, and report "No change." when nothing changed.
-- **Rename consistently:** every parameter name literal (`modified('p_attribute5')`, the first argument of each `merged` call, the context parameter) must match the declared parameters, or edits are dropped silently.
+- **Read the stored row** with its `rowid` into `l_stored`. The generated code treats a key without a stored row as a create; in an update-only upload, keep the procedure's own not-found error ahead of the DFF block.
+- **Fill `l_dff`** with all uploaded cells, then call `merge_dff`. It returns the ids to store and whether they differ from `l_stored`:
+  - nothing modified on an existing record: the stored record, no validation;
+  - a changed cell takes the uploaded value, an untouched cell the stored value in display form, a column without an enabled segment its stored value unconverted;
+  - after a context change the old context's untouched segments are cleared, as in the Oracle form;
+  - a blank flexfield is validated only when it requires a value; hidden segments keep their stored values;
+  - "modified" means `parameter_exists` plus `value_modified`, as a csv or xlsx file counts every parameter as modified, also those its template omits. Test the entity's other columns the same way: `xxen_upload.new_value` alone clears a column the csv template omits.
+- **On error** (`x_message` set) set `message_` and raise. Report "No change." when neither the DFF nor another column changed.
+- **Parameter names:** `p_parameter_prefix` plus the attribute number, and the context parameter (`p_context_parameter`, default prefix plus `_category`), must match the declared parameters, or edits are dropped silently. A procedure that reads the upload view itself instead of parameters passes the lowercase column names and the row's `modified_columns_` as `p_modified_columns`.
+- **Options:** `p_column_prefix` for another column family (`ORG_INFORMATION`), `p_validate=>false` to keep stored values unconverted without validation (an upload option bypassing DFF validation).
 - **API call:** replace `xx_my_api.create_or_update` with the entity's API and check its return status. A cleared cell is null in the record. How to pass it:
 
 | API family | Null means | Pass |
@@ -125,13 +121,12 @@ Never convert the stored record with `validate_dff_attributes('I','V')`: the con
 ## Special cases
 
 - **Reference-field context** (override `N`, `default_context_field_name` set): give the context column a `DEFAULT_VALUE` that derives the context name from the reference column, as the FND Lookup Upload does for `FND_COMMON_LOOKUPS`.
-- **Context set by the Oracle form itself**, with neither override nor reference field (`MTL_EAM_ASSET_ATTR_VALUES`): in `'V'` mode only global segments are validated, and context segments come back as typed. Convert each segment with `xxen_util.dff_attribute_value_to_id` and validate in `'I'` mode. That function converts only segments with a list; convert dates and numbers with `fnd_date`/`fnd_number` yourself.
-- **Non-displayed segments** (`--hidden`): `'V'` mode returns them empty, so the generated code copies their stored values back.
+- **Context set by the Oracle form itself**, with neither override nor reference field (`MTL_EAM_ASSET_ATTR_VALUES`): in `'V'` mode only global segments are validated, and context segments come back as typed, so `merge_dff` does not apply. Convert each segment with `xxen_util.dff_attribute_value_to_id` and validate in `'I'` mode. That function converts only segments with a list; convert dates and numbers with `fnd_date`/`fnd_number` yourself.
 - **Value sets joining `fnd_sessions`** (common in HR): call `hr_integration_utils.add_or_update_session(<effective date>)` at the start of the procedure.
 - **Date segments**:
   - DFF dates travel as text in the Blitz Report XLSX Date Format profile, or else the ICX date mask, but validation reads them in the ICX mask. Keep the two equal.
   - Set Blitz Report XLSX Use Long Date Format = Yes when a date can fall outside 1950-2049; otherwise even untouched dates change century.
-- **Several DFFs in one upload**: one prefix, parameter set and translation rule per DFF. Generate each with its own `--prefix`, `--param-prefix` and `--context-param`. Merge the helper functions under per-DFF names, or parametrise them with flexfield, record, rowid and context flag.
+- **Several DFFs in one upload**: one prefix, parameter set and translation rule per DFF. Generate each with its own `--prefix`, `--param-prefix` and `--context-param`, and call `merge_dff` once per DFF.
 - **One DFF on several records of a row** (the contact points of a party, a site and a contact all carry the same flexfield): the translated headings must start with the record they belong to (`Site Email Email Invoice`), otherwise identical prompts give duplicate column headings. Edit the generated rule's translation to put the prefix first and truncate only the prompt, so prefix and prompt fit `xxen_report.max_column_length` (30 bytes before database 12.2).
 
 ## Step 5 - Deploy and test
@@ -158,7 +153,7 @@ Never convert the stored record with `validate_dff_attributes('I','V')`: the con
 |---|---|
 | List shows `value~description`, downloaded values rejected | LOV returns `column_value` without the split |
 | Headers still generic | rule not enabled or not assigned to the upload, prefix differs from the column names, or no segment uses the column |
-| Edits report "No change." | a parameter name literal does not match the declared parameter |
+| Edits report "No change." | `p_parameter_prefix` or `p_context_parameter` of the `merge_dff` call does not match the declared parameters |
 | Untouched segments rejected | the stored value is no longer valid (disabled, expired, newly required): correct it in the same row |
 | Stored DFF cleared by an upload | parameters passed instead of the merged record, or a csv/xlsx uploaded without a template |
 | Every download fails with `ORA-00923` | a plain-text column comment starts with the word "select" |
@@ -169,6 +164,7 @@ Never convert the stored record with `validate_dff_attributes('I','V')`: the con
 - `xxen_util.display_flexfield_context(app_id, flexfield, context_code)`: returns the context name.
 - `xxen_util.display_flexfield_value(app_id, flexfield, context_code, column_name, rowid, value)`: returns the display value.
 - `xxen_util.dff_attribute_lov(p_application_id, p_descriptive_flexfield_name, p_context_name, p_column_name, p_lov_delimter default '~', p_attribute1..30)`: pipelined, one `value~description` row per value. Call it with named notation.
+- `xxen_fnd_upload.merge_dff(p_application_short_name, p_flexfield_name, p_parameter_prefix, p_create, p_rowid, p_stored_rec, px_dff_rec, x_message, p_context_parameter, p_column_prefix, p_modified_columns, p_validate) return boolean`: merges, validates and converts one DFF; true when the ids differ from the stored record.
 - `xxen_fnd_upload.validate_dff_attributes(p_appl_sn, p_flexfield_name, p_values_or_ids_in, p_values_or_ids_out, p_column_prefix, px_attribute_rec, x_error_message)`: on error the record is unchanged and the message is set.
 - `xxen_upload.value_modified(p)` / `xxen_upload.parameter_exists(p)`: parameter names in lower case, as declared.
 - Shipped uploads to compare: INV Manufacturer Upload (one DFF), AR Customer Upload (five DFFs, one rule with a `case` on the flexfield name), FND Lookup Upload (reference-field context).

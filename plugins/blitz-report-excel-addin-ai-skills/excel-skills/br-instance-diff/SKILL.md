@@ -40,8 +40,8 @@ instance — that is an ordinary report question.
 1. **Both environments must be configured in the add-in** (ribbon → Environments) and reachable.
    `=br_environments_external()` first; if the target is missing, the user adds it — you cannot.
 2. **Logins are interactive.** A run against a not-yet-connected environment returns
-   `#BLITZ_NOT_CONNECTED` — ask the user to connect to THAT environment via the ribbon, then
-   retry. Expect this once per environment per session. The responsibility must exist for the user
+   `#BLITZ_NOT_CONNECTED` — ask the user to select THAT environment under Environments on the
+   Blitz Report ribbon, then retry. Expect this once per environment per session. The responsibility must exist for the user
    on both sides; pass the same responsibility name to both runs.
 3. **Identical parameters, restrictive parameters.** Never diff wide-open extracts — pick filters
    that bound the set (a period, an OU, a customer range) and pass the byte-same values to both

@@ -58,12 +58,12 @@ regexp_like(atc.column_name,'^<FAMILY>\d+$')
 group by
 atc.owner;
 
---Is the Blitz Report build recent enough? Must return P_COLUMN_PREFIX.
+--Is the Blitz Report build recent enough? Must return P_PARAMETER_PREFIX.
 select
 aa.argument_name
 from
 all_arguments aa
 where
 aa.package_name='XXEN_FND_UPLOAD' and
-aa.object_name='VALIDATE_DFF_ATTRIBUTES' and
-aa.argument_name='P_COLUMN_PREFIX';
+aa.object_name='MERGE_DFF' and
+aa.argument_name='P_PARAMETER_PREFIX';

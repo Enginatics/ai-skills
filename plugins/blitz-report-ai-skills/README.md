@@ -22,6 +22,7 @@ Then run `/blitz-report-ai-skills:blitz-environment-setup` once to describe your
 - [Discoverer Migration Rules](https://www.enginatics.com/ai-skills/discoverer-migration/) (`discoverer-migration`): Reviewing and finishing Oracle Discoverer workbooks converted to Blitz Reports.
 - [Migrate Custom Reports](https://www.enginatics.com/ai-skills/migrate-custom-reports/) (`migrate-custom-reports`): Phase-2 engagement workflow for migrating a customer's gathered custom Oracle EBS reports (the Blitz Report Custom Reports Converter zip output) into Blitz Reports — inventory, extract SQL, classify each report into one of three outcomes (complete map / enhance / new custom build), build/recommend, categorize as "Custom Reports <ABBR>", and prove each report prints what the original prints (field inventory + value fidelity gate) on the conversion instance.
 - [Oracle Report Analyzer](https://www.enginatics.com/ai-skills/rdf-analyzer/) (`rdf-analyzer`): Analyze Oracle EBS standard reports (.rdf and XML Publisher data templates) to extract SQL queries, parameters, output structure, and PL/SQL logic.
+- [WebADI Migration Rules](https://www.enginatics.com/ai-skills/webadi-migration/) (`webadi-migration`): Converting Oracle WebADI integrators gathered by the Blitz Report Custom Reports Converter into Blitz Uploads.
 
 ## Report Development
 
