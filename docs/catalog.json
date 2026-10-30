@@ -36,6 +36,17 @@
     "path": "plugins/blitz-report-ai-skills/skills/migrate-custom-reports"
   },
   {
+    "name": "migrate-webadi",
+    "title": "Migrate WebADI Integrators",
+    "type": "development",
+    "category": "Migration",
+    "description": "Convert a customer's Oracle WebADI integrators, gathered by the Blitz Report Custom Reports Converter (Include WebADI Integrators), into Blitz Uploads - inventory the gathered zip, generate a form analysis document per integrator from its definition, decide between a template of a shipped upload and a new upload, build it with the upload-builder skill keeping the integrator's commit behaviour, and prove it against the customer's own spreadsheet on an instance of the customer's release.",
+    "reports": [
+      "Blitz Report Custom Reports Converter"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/migrate-webadi"
+  },
+  {
     "name": "rdf-analyzer",
     "title": "Oracle Report Analyzer",
     "type": "development",
@@ -750,7 +761,7 @@
     "title": "WebADI Migration Rules",
     "type": "rules",
     "category": "Migration",
-    "description": "Converting Oracle WebADI integrators gathered by the Blitz Report Custom Reports Converter into Blitz Uploads. Use with the upload-builder skill.",
+    "description": "Converting Oracle WebADI integrators gathered by the Blitz Report Custom Reports Converter into Blitz Uploads. Use with the migrate-webadi skill.",
     "reports": [],
     "path": "plugins/blitz-report-ai-skills/skills/webadi-migration"
   },

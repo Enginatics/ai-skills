@@ -10,7 +10,7 @@
       "name": "blitz-report-ai-skills",
       "source": "./plugins/blitz-report-ai-skills",
       "description": "Build, convert, test and tune Blitz Reports and Blitz Uploads for Oracle E-Business Suite: report and upload XML, report SQL, upload PL/SQL packages, Custom Reports Converter migrations, Oracle report and form analysis",
-      "version": "1.20261028.863",
+      "version": "1.20261030.892",
       "category": "development",
       "homepage": "https://www.enginatics.com/ai-skills/",
       "keywords": [
