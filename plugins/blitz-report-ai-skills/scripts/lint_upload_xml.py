@@ -517,11 +517,23 @@ class UploadLint:
             return
         declared = set(re.findall(r'<ANCHOR>([^<]+)</ANCHOR>', am.group(1)))
         used = set()
+        sql_texts = []
         for pm in re.finditer(r'<PARAMETERS_ROW>(.*?)</PARAMETERS_ROW>', self.text, flags=re.S):
             an = re.search(r'<ANCHOR>([^<]+)</ANCHOR>', pm.group(1))
             if an:
                 used.add(an.group(1))
+            st = re.search(r'<SQL_TEXT>(.*?)</SQL_TEXT>', pm.group(1), flags=re.S)
+            if st:
+                sql_texts.append(st.group(1))
+        # a bind used inside a parameter's SQL_TEXT, or a lexical filled in by a result SQL, is in use
+        for sm in re.finditer(r'<UPLOAD_SQLS_ROW>(.*?)</UPLOAD_SQLS_ROW>', self.text, flags=re.S):
+            st = re.search(r'<SQL_TEXT>(.*?)</SQL_TEXT>', sm.group(1), flags=re.S)
+            if st:
+                sql_texts.append(st.group(1))
+        sql_text = '\n'.join(sql_texts)
         for u in declared - used:
+            if re.search(re.escape(u) + r'(?![A-Za-z0-9_$#])', sql_text, flags=re.I):
+                continue
             self.add('G6', f'anchor `{u}` declared in ANCHORS but no parameter uses it — remove it (and remove its `{u}` from the main SQL WHERE clause)',
                      search_text=f'<ANCHOR>{u}</ANCHOR>')
 
