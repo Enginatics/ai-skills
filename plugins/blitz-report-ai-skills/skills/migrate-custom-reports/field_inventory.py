@@ -218,7 +218,8 @@ class Inventory:
     # ---------- RTF layout ----------
     def rtf(self, path):
         text = read(path)
-        text = re.sub(r"\\'[0-9a-fA-F]{2}", "", text)
+        # a format mask's ';' and quotes are hex escapes, which must not glue the field name to the mask
+        text = re.sub(r"\\'([0-9a-fA-F]{2})", lambda m: bytes([int(m.group(1), 16)]).decode("cp1252", "replace"), text)
         text = re.sub(r"\\(rquote|lquote)\s?", "'", text)
         text = re.sub(r"\\(rdblquote|ldblquote)\s?", '"', text)
         text = re.sub(r"\\[a-zA-Z]+-?\d* ?", "", text)
