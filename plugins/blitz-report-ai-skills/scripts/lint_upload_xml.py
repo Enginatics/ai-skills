@@ -33,6 +33,8 @@ Rules checked (IDs match the Upload Completeness Checklist):
          column should reference that shared LOV via LOV_NAME + LOV_GUID, not be `LOV custom`.
   P1     PARAMETERS_ROW with a DISPLAY_SEQUENCE must carry a PARAMETER_TYPE_DSP
          (checked for reports too, not just uploads)
+  P2     every :$flex$ token in a parameter default or custom LOV names a parameter, LOV or value
+         set of the same report and carries its leading colon (reports too; FSG reports exempt)
 
 A file may suppress a specific rule with a documented XML comment, for the rare legitimate case
 (e.g. a purge/converter/tool upload that persists nothing to re-query, so an echo Success SQL is correct):
@@ -614,6 +616,38 @@ class UploadLint:
                            f'add the element (Char/Number/Date/DateTime/LOV/LOV custom/LOV Oracle)',
                      search_text=f'<DISPLAY_SEQUENCE>{seq}</DISPLAY_SEQUENCE>')
 
+    def check_p2_flex_references(self):
+        """P2: every :$flex$ token in a parameter's default value or custom list of values must name
+        a parameter, or the LOV / Oracle value set of one, of the same report (spaces as underscores,
+        case-insensitive). The engine binds an unmatched token as null without an error, and a token
+        without its leading colon is not a token at all, so the default or dependent list never fires.
+        Shared and Oracle LOVs are exempt: they serve reports that lack some of their parameters.
+        So is an FSG report (TYPE F), whose function LOVs take binds the add-in supplies."""
+        if '<TYPE>F</TYPE>' in self.text:
+            return
+        bind = lambda s: re.sub(r'\W+', '_', re.sub(r'^\W+|\W+$', '', s)).lower()
+        rows = []
+        names = set()
+        for block in self._row_blocks('PARAMETERS_ROW'):
+            m = re.search(r'<LANGUAGE>US</LANGUAGE>\s*<PARAMETER_NAME>([^<]*)</PARAMETER_NAME>', block)
+            name = decode_xml_entities(m.group(1)) if m else '?'
+            ptype = (self._get_inner(block, 'PARAMETER_TYPE_DSP') or '').strip()
+            lov_name = self._get_inner(block, 'LOV_NAME')
+            names.add(bind(name))
+            if ptype in ('LOV', 'LOV Oracle') and lov_name:
+                names.add(bind(decode_xml_entities(lov_name)))
+            rows.append((name, ptype, block))
+        for name, ptype, block in rows:
+            texts = [self._get_inner(block, 'DEFAULT_VALUE') or '']
+            if ptype == 'LOV custom':
+                texts.append(self._get_inner(block, 'LOV_QUERY_DSP') or '')
+            for text in texts:
+                for m in re.finditer(r'(:?)\$flex\$\.(\w+)', decode_xml_entities(text), re.I):
+                    if not m.group(1):
+                        self.add('P2', f'parameter `{name}` references `{m.group(0)}` without the leading colon', search_text=m.group(0))
+                    elif re.sub(r'^v__', '', m.group(2).lower()) not in names:
+                        self.add('P2', f'parameter `{name}` references `{m.group(0)}`, which matches no parameter, LOV or value set name of this report', search_text=m.group(0))
+
     def check_structural_elements(self):
         # I1: GUID
         if not re.search(r'<REPORTS_ROW>.*?<GUID>[A-F0-9]{32}</GUID>', self.text, flags=re.S):
@@ -637,6 +671,7 @@ class UploadLint:
     def run(self, always_on_only=False):
         # Rules that hold for any report definition, upload or not, run before the gate
         self.check_p1_parameter_type_present()
+        self.check_p2_flex_references()
         # Confirm this is an upload XML before running upload-specific rules
         if always_on_only or '<TYPE>U</TYPE>' not in self.text:
             self.violations.sort()

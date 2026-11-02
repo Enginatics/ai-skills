@@ -126,6 +126,7 @@ Verify every suspect object/column against the 11i dictionary (`all_tab_columns`
 | R12 construct | 11i replacement |
 |---|---|
 | `gl_ledgers` / `<alias>.ledger_id` on GL tables | `xxen_gl_ledgers_v` compat view (`sql/extensions/XXEN_GL_LEDGERS_V_11i.sql`) / `set_of_books_id` |
+| `xxen_util.meaning(code,'<FA lookup type>',140)` | returns null on 11i, where FA lookups live in `fa_lookups_b`/`fa_lookups_tl` rather than `fnd_lookup_values`: join `fa_lookups` (`fl.lookup_type='ASSET TYPE'`) in dual-use FA content, as the shipped FA reports do |
 | GL data access sets (`gl_access_set_norm_assign_v`, `GL_ACCESS_SET_ID` profile) | one SOB per responsibility: `GL_SET_OF_BKS_ID` profile |
 | `ap_suppliers` / `ap_supplier_sites_all` | `po_vendors` / `po_vendor_sites_all` (`vendor_id`/`vendor_site_id` match) |
 | R12 CE bank model (`ce_bank_accounts`, `ce_bank_acct_uses_all`, `ce_bank_branches_v`) | `ap_bank_accounts_all` / `ap_bank_branches` (`ar_receipt_method_accounts_all` carries `bank_account_id` directly; `inactive_date` not `end_date`) |
