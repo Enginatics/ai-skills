@@ -403,6 +403,7 @@ Self-audit every SQL / PL-SQL / VBA edit against these rules before presenting o
 29. **Use cursor for loop instead of select into with exception handling**
     - Shorter and more elegant than begin/exception/end blocks
     - Loop naturally handles no_data_found (just doesn't execute)
+    - An aggregate without `group by` (`select max(papf.person_id) ...`) returns one row whether or not anything matches, so a loop over it always runs and `%found` is always true. When the test is whether a row exists, select the row itself (`order by` it and take the first).
     - For multi-line SQL, keep same indentation level as the `for` statement
     ```sql
     -- Bad (verbose with exception handling):

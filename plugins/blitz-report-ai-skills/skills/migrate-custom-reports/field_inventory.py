@@ -224,6 +224,8 @@ class Inventory:
         text = re.sub(r"\\(rdblquote|ldblquote)\s?", '"', text)
         text = re.sub(r"\\[a-zA-Z]+-?\d* ?", "", text)
         text = re.sub(r"[{}\r\n]", "", text)
+        # a program with an RTF layout prints the RTF; an RDF's old paper layout never reaches the output
+        self.printed = [p for p in self.printed if not p[1].startswith("paper layout field")]
         seen = set(n for n, _, _ in self.printed)
         for tok in re.findall(r"<\?(.{1,400}?)\?>", text):
             tok = tok.strip()

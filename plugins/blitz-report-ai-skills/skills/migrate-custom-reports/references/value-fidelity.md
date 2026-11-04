@@ -26,7 +26,7 @@ The gate applies to the first delivery and to every correction. Record each resu
 
 Reproduce these exactly. They are where conversions silently diverge.
 
-- **Single-row lookup** (`select ... into` in a formula): 0 or 2+ rows prints what the exception handler returns, usually blank or 0. Write it as `case when count(*)=1 then max(x) end`. When the handler does not reset the variable, PL/SQL leaves an undefined value that is in practice the first fetched row. Measure the shape on the instance before choosing: kept for a group-by and a unique-key join, not kept for an `in` list.
+- **Single-row lookup** (`select ... into` in a formula): 0 or 2+ rows prints what the exception handler returns, usually blank or 0. Write it as `case when count(*)=1 then max(x) end`. When the handler does not reset the variable, PL/SQL leaves an undefined value that is in practice the first fetched row. Measure the shape on the instance before choosing: kept for a group-by and a unique-key join and in the local of an RDF `into` that mixes a local and a bind placeholder, not kept for an `in` list or a plain join into locals only. Find lines that really reach the path, restricted as the original's secured views are, and compare those.
 - **Declared widths:** a `varchar2(n)` placeholder or variable overflows into its handler, so the value prints blank. `number(p,s)` rounds.
 - **Null defaults:** `nvl` defaults in the code (`'NA'`, `0`, `'No'`) and the RDF column's `valueIfNull`.
 - **Dates:** a date the original prints as text in a fixed mask stays text in that mask. A date it prints as a date stays a date, without time where the original truncates.
@@ -36,11 +36,13 @@ Reproduce these exactly. They are where conversions silently diverge.
 - **Report modes:** a summary option, sections switched by a parameter, and a group filter that suppresses a whole section each print what the original prints.
 - **Header values** printed once (legal entity, customer on a ledger) become a column on every row.
 - **Empty and odd parameter values:** with an empty parameter `col=nvl(:p,col)` drops the rows whose column is null; a value equal to the original's `nvl()` stand-in also matches the empty rows; an upper-case-only value set upper-cases free text. Each is a test case of the proof, not only the filled, ordinary value.
+- **Whether the test reached the code:** count the rows that took each path before trusting 0 differences. Two zero-row runs match, and data that never takes a branch proves nothing about it (an instance's plan whose shipments never matched left the claiming function unused: 0 claimed rows, 2,636 rows compared). Build stand-in rows for each path and feed them to both sides. Compare under a responsibility the report is assigned to, since secured views return nothing under System Administrator.
+- **An original that differs from itself:** when it takes rows in an order nothing fixes (no `order by`, a heap table refilled per run), run the original several times, alternating with the conversion, and compare every pair. The original against itself is the noise level, and only a difference above it is a defect. Assume neither way: a difference that looked like that noise was caused by a correction, and it showed only because the original matched itself on the same data. Compare by position as well as by value, so a reordered output cannot read as changed values.
 - **What the layout actually reads:** Oracle Reports writes a column under its XML tag, which can differ from the column name, and an RTF field whose name matches no tag prints blank. When the source cannot settle what the original prints, run it: the data template and RTF through the BI Publisher engine on the instance, or the package's own procedure into its session temp table and roll back.
 
 ## Skeletons
 
-Upload the Blitz SQL as a file and read it into a clob from the `TMP` directory. Resolve the anchors as a run would: replace each `n=n` with its predicates, and each `:bind` with a literal. Keep `dbms_output` lines under 255 bytes.
+Upload the Blitz SQL as a file and read it into a clob from the `TMP` directory. Resolve the anchors as a run would: replace each `n=n` with its predicates, and each `:bind` with a literal. Keep `dbms_output` lines under 255 bytes. A script that pastes a data-model query verbatim into SQLcl or SQL*Plus needs `set sqlblanklines on`: a blank line otherwise ends the statement (`ORA-00907` at its last line). A check is only proof when it returns rows: choose filter and security values that exist in the test data, and count the non-zero values per column so a measure that is zero on both sides is visible.
 
 **A. Formula port**, one function per ported formula, compared per row:
 

@@ -1,16 +1,17 @@
 ---
 name: br-fsg-conversion-review
 description: >
-  Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG:
+  Finish a financial statement workbook converted from Spreadsheet Server, GL Wand or GL Connect to
+  Blitz FSG:
   read its Conversion Log sheet, fix in the workbook what the converter could not (period cells
   read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported
   currency types, cells left unconverted), ask the user about the rest, and mark every log line.
-  Use when the user asks to review, finish, fix or check a converted Spreadsheet Server or GL Wand
-  workbook, its conversion log, or "the warnings from the conversion". Edits the workbook only;
+  Use when the user asks to review, finish, fix or check a converted Spreadsheet Server, GL Wand or
+  GL Connect workbook, its conversion log, or "the warnings from the conversion". Edits the workbook only;
   never writes to Oracle EBS.
 ---
 
-# Finish a Spreadsheet Server / GL Wand conversion (br-fsg-conversion-review)
+# Finish a Spreadsheet Server / GL Wand / GL Connect conversion (br-fsg-conversion-review)
 
 The Blitz Report add-in has already converted this workbook: every balance, period and segment
 description formula now uses the add-in's own functions, and what the converter could not finish is
@@ -50,8 +51,8 @@ One message, grouped:
 - **I need your answer** — the Ask lines, each with the options the procedure lists.
 - **For your information** — the Info lines in one sentence each (no action).
 - **The converter can finish these** — Re-run lines: what to correct first (you may propose that
-  correction above) and that they then run the Spreadsheet Server or GL Wand converter again on
-  this workbook from the Blitz Report ribbon (Tools > Converter), which converts only what is
+  correction above) and that they then run the Spreadsheet Server, GL Wand or GL Connect converter
+  again on this workbook from the Blitz Report ribbon (Tools > Converter), which converts only what is
   still unconverted.
 Options: `Yes — make the changes` / `Change some first` / `Cancel`. Nothing is written before Yes.
 

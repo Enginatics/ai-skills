@@ -584,7 +584,8 @@ class Lint:
                     continue
                 name = m.group(2)
                 if len(name) > 30:
-                    self.add(li+1, 'R55', f'{re.sub(r"\\s+"," ",m.group(1).lower())} name `{name}` is {len(name)} bytes (>30) - rename to <=30; over-30 fails on 11.2/12.1 with ORA-00972')
+                    kind = re.sub(r"\s+", " ", m.group(1).lower())
+                    self.add(li+1, 'R55', f'{kind} name `{name}` is {len(name)} bytes (>30) - rename to <=30; over-30 fails on 11.2/12.1 with ORA-00972')
 
     def check_no_record_type_constructor(self):
         """R56: PL/SQL record type constructors (qualified expressions, e.g.

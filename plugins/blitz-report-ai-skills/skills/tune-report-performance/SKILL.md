@@ -115,6 +115,11 @@ Common performance killers in Blitz Reports:
    - When outer joining to inline views/CTEs, Oracle may not push predicates
    - Fix: Add `/*+ push_pred(alias) */` hint
 
+6. **Journal-to-subledger query driven from the accounts, or XLA tables without `application_id`**
+   - `xla_ae_headers`, `xla_ae_lines`, `xla_distribution_links` and `xla_transaction_entities` are list partitioned by `application_id`; without it every probe visits all partitions (`PARTITION LIST ALL` in the plan)
+   - A query going `gl_code_combinations` > `gl_je_lines` > `gl_import_references` > XLA with the date test on `xah.accounting_date` reads the whole journal history of every account in the range, so run time follows the width of the account range, not the date range. `to_number(segment)` range parameters are estimated at 5% each, so the optimizer sees one account and keeps this order however wide the range is
+   - Fix: add `application_id` on every XLA table and start from the headers, `leading(xah xal xdl gir gjl gjh gcc)`; `gl_import_references` is reached through its `gl_sl_link_id` index
+
 ### Phase 4: Apply Fixes
 
 1. **Parameter-gated CTE pattern:**

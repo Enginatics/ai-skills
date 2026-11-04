@@ -98,7 +98,7 @@ an unrecognised customer naming convention is exactly how a customer package goe
 - `field_inventory.py &lt;program folder&gt; [&lt;PROG&gt;] [--out &lt;file&gt;]` writes the field inventory of step 2. It reads `_rdf.xml`, `.rex` (through `rex_parse.py`), data templates, RTF layouts and custom package bodies.
 - `rex_parse.py &lt;folder&gt; &lt;PROG&gt;` decodes a `.rex` text export when rwconverter fails, writing each query&#x27;s SQL and the PL/SQL units next to it.
 - `vs_parse.py` (run inside a program&#x27;s folder) prints every gathered value set: validation type, table, id and value columns, where clause. Use it to pick the shared LOV that matches each parameter.
-- `build_xml.py &lt;spec.py&gt; &lt;out.xml&gt;` writes the import XML. The spec defines `CATEGORY` and `REPORTS`, a list of report dicts (`NAME`, `DESCRIPTION`, `SQL` file, `GUID`, `ASSIGNMENTS` = the converter&#x27;s `_assignments.xml`, `PARAMS`, and `SHORT_NAME` and `PROGRAM` of the program the report replaces, written as the description&#x27;s last lines `Source:` and `Short Name:`), so one call writes the category deliverable with every report and all assignments; a single report at top level still works. A `PARAMS` row takes name, anchor, sql (omit for a `:bind` anchor), type `LOV`/`LOV Oracle`/`LOV custom`/`Date`/`Char`/`Number`, `lov` or `lov_query`, `required`, `default`, `matching`, `hidden`, and `sub` for a further anchor of the parameter above. Shared LOVs are copied with their fallback payload from the shipped report XMLs (`content/r12/reports` in the Blitz Report repository, or the folder named by the environment variable `BLITZ_CONTENT_DIR`, e.g. `xxen_api.export_report` exports of shipped reports using those LOVs); the build stops when a parameter has other than one display row or an `n=n` anchor is not unique in the SQL. Keep the spec and SQL files next to the category file so a re-issue rebuilds from them.
+- `build_xml.py &lt;spec.py&gt; &lt;out.xml&gt;` writes the import XML. The spec defines `CATEGORY` and `REPORTS`, a list of report dicts (`NAME`, `DESCRIPTION`, `SQL` file, `GUID`, `ASSIGNMENTS` = the converter&#x27;s `_assignments.xml`, `PARAMS`, optional `DB_PACKAGE`, and `SHORT_NAME` and `PROGRAM` of the program the report replaces, written as the description&#x27;s last lines `Source:` and `Short Name:`), so one call writes the category deliverable with every report and all assignments; a single report at top level still works. A `PARAMS` row takes name, anchor, sql (omit for a `:bind` anchor), type `LOV`/`LOV Oracle`/`LOV custom`/`Date`/`Char`/`Number`, `lov` or `lov_query`, `required`, `default`, `matching`, `hidden`, and `sub` for a further anchor of the parameter above. Shared LOVs are copied with their fallback payload from the shipped report XMLs (`content/r12/reports` in the Blitz Report repository, or the folder named by the environment variable `BLITZ_CONTENT_DIR`, e.g. `xxen_api.export_report` exports of shipped reports using those LOVs); the build stops when a parameter has other than one display row or an `n=n` anchor is not unique in the SQL. Keep the spec and SQL files next to the category file so a re-issue rebuilds from them. Run this script in place, or set `BLITZ_CONTENT_DIR` for a copy: it finds the shipped reports relative to itself, and a copy stops with `shared LOV not found`.
 - A report cloned from a shipped one (an aging, a trial balance) is built by transforming the shipped XML instead: new GUID, name, description (ending with the `Source:` and `Short Name:` lines), category and assignments, extra columns inserted at the level where their keys are, extra parameters appended. Invoice-level extras go into the detail lexical as `max(x1.col)` so summary mode is untouched.
 
 ### 4. Build / recommend per outcome
@@ -177,6 +177,9 @@ report plus all their assignments in one file) or the keys of a single report at
 A report dict: NAME, DESCRIPTION, SQL (path), GUID, ASSIGNMENTS (the converter&#x27;s _assignments.xml), PARAMS,
 SHORT_NAME (the short name of the program the report replaces, the view name for a custom view) and optional PROGRAM
 (its user-visible name), optional NUMBER_FORMAT (default #,##0.00;[Red]-#,##0.00; &#x27;General&#x27; prints numbers as the original prints them),
+optional DB_PACKAGE (the APPS package holding beforereport/afterreport),
+optional VALIDATE_FROM_LIST=True for a target build dated before 18-Oct-2026 (Build Date on the converter workbook&#x27;s Parameters
+sheet), which validates a list only when the file says so and is ignored by later builds,
 optional TEMPLATES and DEFAULT_TEMPLATE (the name of the template every user gets without choosing one).
 
 PARAMS lists one dict per PARAMETERS_ROW, in order:
@@ -235,13 +238,14 @@ def param_rows(rep):
             r.append(f&quot;&lt;SQL_TEXT&gt;{e(p[&#x27;sql&#x27;])}&lt;/SQL_TEXT&gt;&quot;)
         if not p.get(&quot;sub&quot;):
             r.append(f&quot;&lt;PARAMETER_TYPE_DSP&gt;{p[&#x27;type&#x27;]}&lt;/PARAMETER_TYPE_DSP&gt;&quot;)
+            validate = [&quot;&lt;VALIDATE_FROM_LIST_DSP&gt;Y&lt;/VALIDATE_FROM_LIST_DSP&gt;&quot;] if rep.get(&quot;VALIDATE_FROM_LIST&quot;) else []
             if p[&quot;type&quot;] == &quot;LOV&quot;:
                 guid, fbd, q = shared_lov(p[&quot;lov&quot;])
-                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;, f&quot;&lt;LOV_GUID&gt;{guid}&lt;/LOV_GUID&gt;&quot;] + ([fbd] if fbd else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{q}&lt;/LOV_QUERY_DSP&gt;&quot;]
+                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;, f&quot;&lt;LOV_GUID&gt;{guid}&lt;/LOV_GUID&gt;&quot;] + validate + ([fbd] if fbd else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{q}&lt;/LOV_QUERY_DSP&gt;&quot;]
             elif p[&quot;type&quot;] == &quot;LOV Oracle&quot;:
-                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;]
+                r += [f&quot;&lt;LOV_NAME&gt;{e(p[&#x27;lov&#x27;])}&lt;/LOV_NAME&gt;&quot;] + validate
             elif p[&quot;type&quot;] == &quot;LOV custom&quot;:
-                r += ([&quot;&lt;FILTER_BEFORE_DISPLAY_DSP&gt;Y&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;&quot;] if p.get(&quot;fbd&quot;) else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{e(p[&#x27;lov_query&#x27;].strip())}&lt;/LOV_QUERY_DSP&gt;&quot;]
+                r += validate + ([&quot;&lt;FILTER_BEFORE_DISPLAY_DSP&gt;Y&lt;/FILTER_BEFORE_DISPLAY_DSP&gt;&quot;] if p.get(&quot;fbd&quot;) else []) + [f&quot;&lt;LOV_QUERY_DSP&gt;{e(p[&#x27;lov_query&#x27;].strip())}&lt;/LOV_QUERY_DSP&gt;&quot;]
         if p.get(&quot;matching&quot;):
             r.append(f&quot;&lt;MATCHING_VALUE&gt;{e(p[&#x27;matching&#x27;])}&lt;/MATCHING_VALUE&gt;&quot;)
         if not p.get(&quot;sub&quot;):
@@ -290,7 +294,8 @@ def check(rep, sql):
         if display[name] != 1:
             raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: parameter {name} has {display[name]} display rows&quot;)
     for a in {p[&quot;anchor&quot;] for p in rep[&quot;PARAMS&quot;]}:
-        n = len(re.findall(r&quot;(?&lt;![\w&amp;:])&quot; + re.escape(a) + r&quot;(?!\w)&quot;, sql, re.I))
+        # the engine replaces an n=n anchor as plain text, so x.oh_row1=1 holds the anchor 1=1 too
+        n = len(re.findall(re.escape(a) if re.fullmatch(r&quot;(\d+)=\1&quot;, a) else r&quot;(?&lt;![\w&amp;:])&quot; + re.escape(a) + r&quot;(?!\w)&quot;, sql, re.I))
         # the framework injects an n=n parameter at EVERY occurrence of its anchor; a report that wants the
         # filters inside each union branch declares the intended count as REPEATED_ANCHOR (anchor -&gt; count)
         expected = rep.get(&quot;REPEATED_ANCHOR&quot;, {}).get(a, 1)
@@ -385,7 +390,7 @@ def report_xml(rep, category):
  &lt;REPORTS_ROW&gt;
   &lt;GUID&gt;{rep[&#x27;GUID&#x27;]}&lt;/GUID&gt;
   &lt;SQL_TEXT&gt;{e(sql)}&lt;/SQL_TEXT&gt;
-  &lt;NUMBER_FORMAT&gt;{e(rep.get(&#x27;NUMBER_FORMAT&#x27;, &#x27;#,##0.00;[Red]-#,##0.00&#x27;))}&lt;/NUMBER_FORMAT&gt;
+  &lt;NUMBER_FORMAT&gt;{e(rep.get(&#x27;NUMBER_FORMAT&#x27;, &#x27;#,##0.00;[Red]-#,##0.00&#x27;))}&lt;/NUMBER_FORMAT&gt;{chr(10) + &#x27;  &lt;DB_PACKAGE&gt;&#x27; + rep[&#x27;DB_PACKAGE&#x27;] + &#x27;&lt;/DB_PACKAGE&gt;&#x27; if rep.get(&#x27;DB_PACKAGE&#x27;) else &#x27;&#x27;}
   &lt;REPORT_TRANSLATIONS&gt;
    &lt;REPORT_TRANSLATIONS_ROW&gt;
     &lt;LANGUAGE&gt;US&lt;/LANGUAGE&gt;
@@ -867,6 +872,8 @@ class Inventory:
         text = re.sub(r&quot;\\(rdblquote|ldblquote)\s?&quot;, &#x27;&quot;&#x27;, text)
         text = re.sub(r&quot;\\[a-zA-Z]+-?\d* ?&quot;, &quot;&quot;, text)
         text = re.sub(r&quot;[{}\r\n]&quot;, &quot;&quot;, text)
+        # a program with an RTF layout prints the RTF; an RDF&#x27;s old paper layout never reaches the output
+        self.printed = [p for p in self.printed if not p[1].startswith(&quot;paper layout field&quot;)]
         seen = set(n for n, _, _ in self.printed)
         for tok in re.findall(r&quot;&lt;\?(.{1,400}?)\?&gt;&quot;, text):
             tok = tok.strip()
@@ -1223,7 +1230,7 @@ The gate applies to the first delivery and to every correction. Record each resu
 
 Reproduce these exactly. They are where conversions silently diverge.
 
-- **Single-row lookup** (`select ... into` in a formula): 0 or 2+ rows prints what the exception handler returns, usually blank or 0. Write it as `case when count(*)=1 then max(x) end`. When the handler does not reset the variable, PL/SQL leaves an undefined value that is in practice the first fetched row. Measure the shape on the instance before choosing: kept for a group-by and a unique-key join, not kept for an `in` list.
+- **Single-row lookup** (`select ... into` in a formula): 0 or 2+ rows prints what the exception handler returns, usually blank or 0. Write it as `case when count(*)=1 then max(x) end`. When the handler does not reset the variable, PL/SQL leaves an undefined value that is in practice the first fetched row. Measure the shape on the instance before choosing: kept for a group-by and a unique-key join and in the local of an RDF `into` that mixes a local and a bind placeholder, not kept for an `in` list or a plain join into locals only. Find lines that really reach the path, restricted as the original&#x27;s secured views are, and compare those.
 - **Declared widths:** a `varchar2(n)` placeholder or variable overflows into its handler, so the value prints blank. `number(p,s)` rounds.
 - **Null defaults:** `nvl` defaults in the code (`&#x27;NA&#x27;`, `0`, `&#x27;No&#x27;`) and the RDF column&#x27;s `valueIfNull`.
 - **Dates:** a date the original prints as text in a fixed mask stays text in that mask. A date it prints as a date stays a date, without time where the original truncates.
@@ -1233,11 +1240,13 @@ Reproduce these exactly. They are where conversions silently diverge.
 - **Report modes:** a summary option, sections switched by a parameter, and a group filter that suppresses a whole section each print what the original prints.
 - **Header values** printed once (legal entity, customer on a ledger) become a column on every row.
 - **Empty and odd parameter values:** with an empty parameter `col=nvl(:p,col)` drops the rows whose column is null; a value equal to the original&#x27;s `nvl()` stand-in also matches the empty rows; an upper-case-only value set upper-cases free text. Each is a test case of the proof, not only the filled, ordinary value.
+- **Whether the test reached the code:** count the rows that took each path before trusting 0 differences. Two zero-row runs match, and data that never takes a branch proves nothing about it (an instance&#x27;s plan whose shipments never matched left the claiming function unused: 0 claimed rows, 2,636 rows compared). Build stand-in rows for each path and feed them to both sides. Compare under a responsibility the report is assigned to, since secured views return nothing under System Administrator.
+- **An original that differs from itself:** when it takes rows in an order nothing fixes (no `order by`, a heap table refilled per run), run the original several times, alternating with the conversion, and compare every pair. The original against itself is the noise level, and only a difference above it is a defect. Assume neither way: a difference that looked like that noise was caused by a correction, and it showed only because the original matched itself on the same data. Compare by position as well as by value, so a reordered output cannot read as changed values.
 - **What the layout actually reads:** Oracle Reports writes a column under its XML tag, which can differ from the column name, and an RTF field whose name matches no tag prints blank. When the source cannot settle what the original prints, run it: the data template and RTF through the BI Publisher engine on the instance, or the package&#x27;s own procedure into its session temp table and roll back.
 
 ## Skeletons
 
-Upload the Blitz SQL as a file and read it into a clob from the `TMP` directory. Resolve the anchors as a run would: replace each `n=n` with its predicates, and each `:bind` with a literal. Keep `dbms_output` lines under 255 bytes.
+Upload the Blitz SQL as a file and read it into a clob from the `TMP` directory. Resolve the anchors as a run would: replace each `n=n` with its predicates, and each `:bind` with a literal. Keep `dbms_output` lines under 255 bytes. A script that pastes a data-model query verbatim into SQLcl or SQL*Plus needs `set sqlblanklines on`: a blank line otherwise ends the statement (`ORA-00907` at its last line). A check is only proof when it returns rows: choose filter and security values that exist in the test data, and count the non-zero values per column so a measure that is zero on both sides is visible.
 
 **A. Formula port**, one function per ported formula, compared per row:
 

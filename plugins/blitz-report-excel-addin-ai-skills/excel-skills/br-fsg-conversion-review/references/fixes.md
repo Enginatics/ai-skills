@@ -87,7 +87,7 @@ into the cell.
 
 ## P10 - Let the converter finish
 Correct the input first, then the user runs the converter again on this workbook (Blitz Report ribbon
-> Tools > Converter > Spreadsheet Server or GL Wand). It converts only the formulas still in the
+> Tools > Converter > Spreadsheet Server, GL Wand or GL Connect). It converts only the formulas still in the
 old form, and writes a new Conversion Log sheet for what remains.
 - An argument that is an expression, or a period argument that is not a cell: move the expression
   into a helper cell and point the argument at it.
@@ -123,3 +123,30 @@ GL Wand function the converter does not know, a Spreadsheet Server GXE, GXC, GEX
 - GXE (expand to detail): the converted sheet does this with FSG Discover or Expand; offer to clear
   the cell after the user confirms.
 - Anything else: mark Needs you.
+
+## P14 - GL Connect layout
+GL Connect publishes no function reference: the converter knows the layout of `GLC_GetBalance` from
+a saved workbook and the fields of the product's dialogs. Argument 3 is the actual flag, 4 the
+currency, 5 the period type, 6 the budget or encumbrance name, 7 the entered flag, 8 debits/credits,
+9 to 23 the segments in display order, 24 to 26 numbers that were 0. Refused calls stay in GL Connect
+form and show `#NAME?` until they are finished.
+- Arguments 24 to 26 other than 0: ask what the cell shows in GL Connect. A period offset or trailing
+  months has no argument in a Blitz Report balance: offer one cell per period, each pointing at its own
+  period cell, added with `+`. Clear the numbers to 0 once that is done, then P10.
+- A flag or argument count the converter does not know: show the user the whole formula and mark Needs
+  you. The positions may differ from the layout above, and only the user can compare the cell's old
+  value.
+- `check that it selects the same accounts`, `check one balance`, `check the first result`: name the
+  cell and ask the user to compare its refreshed value with the value the workbook showed in GL Connect.
+  A criterion that came out wrong is rewritten with `;` between values, `-` for a range and `~` before
+  an excluded value.
+- `the segments of ledger <L> are not on this instance`: the balances read the wrong segments until
+  the user converts again under a responsibility that offers <L> (P10).
+
+## P15 - GL Connect accounted or entered amounts
+GL Connect's entered flag has no exact counterpart, so each conversion is named in the log.
+- `accounted balances in <C>`: currency type C gives the ledger currency value of the journals entered
+  in <C>. Ask whether the column should show that, or the amounts in <C> themselves (write E in its
+  currency type argument or cell).
+- `entered flag E on <C>`: type T is the ledger total. Ask whether the column should show only the
+  journals entered in <C> (write E).

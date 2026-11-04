@@ -272,10 +272,10 @@
   },
   {
     "name": "br-fsg-conversion-review",
-    "title": "Finish a Spreadsheet Server / GL Wand conversion",
+    "title": "Finish a Spreadsheet Server / GL Wand / GL Connect conversion",
     "type": "excel",
     "category": "General Ledger",
-    "description": "Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency types, cells left unconverted), ask the user about the rest, and mark every log line. Use when the user asks to review, finish, fix or check a converted Spreadsheet Server or GL Wand workbook, its conversion log, or \"the warnings from the conversion\". Edits the workbook only; never writes to Oracle EBS.",
+    "description": "Finish a financial statement workbook converted from Spreadsheet Server, GL Wand or GL Connect to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency types, cells left unconverted), ask the user about the rest, and mark every log line. Use when the user asks to review, finish, fix or check a converted Spreadsheet Server, GL Wand or GL Connect workbook, its conversion log, or \"the warnings from the conversion\". Edits the workbook only; never writes to Oracle EBS.",
     "writes": false,
     "reports": [],
     "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-fsg-conversion-review.zip",

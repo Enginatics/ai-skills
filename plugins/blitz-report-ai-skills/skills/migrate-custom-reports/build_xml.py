@@ -5,6 +5,9 @@ report plus all their assignments in one file) or the keys of a single report at
 A report dict: NAME, DESCRIPTION, SQL (path), GUID, ASSIGNMENTS (the converter's _assignments.xml), PARAMS,
 SHORT_NAME (the short name of the program the report replaces, the view name for a custom view) and optional PROGRAM
 (its user-visible name), optional NUMBER_FORMAT (default #,##0.00;[Red]-#,##0.00; 'General' prints numbers as the original prints them),
+optional DB_PACKAGE (the APPS package holding beforereport/afterreport),
+optional VALIDATE_FROM_LIST=True for a target build dated before 18-Oct-2026 (Build Date on the converter workbook's Parameters
+sheet), which validates a list only when the file says so and is ignored by later builds,
 optional TEMPLATES and DEFAULT_TEMPLATE (the name of the template every user gets without choosing one).
 
 PARAMS lists one dict per PARAMETERS_ROW, in order:
@@ -63,13 +66,14 @@ def param_rows(rep):
             r.append(f"<SQL_TEXT>{e(p['sql'])}</SQL_TEXT>")
         if not p.get("sub"):
             r.append(f"<PARAMETER_TYPE_DSP>{p['type']}</PARAMETER_TYPE_DSP>")
+            validate = ["<VALIDATE_FROM_LIST_DSP>Y</VALIDATE_FROM_LIST_DSP>"] if rep.get("VALIDATE_FROM_LIST") else []
             if p["type"] == "LOV":
                 guid, fbd, q = shared_lov(p["lov"])
-                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>", f"<LOV_GUID>{guid}</LOV_GUID>"] + ([fbd] if fbd else []) + [f"<LOV_QUERY_DSP>{q}</LOV_QUERY_DSP>"]
+                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>", f"<LOV_GUID>{guid}</LOV_GUID>"] + validate + ([fbd] if fbd else []) + [f"<LOV_QUERY_DSP>{q}</LOV_QUERY_DSP>"]
             elif p["type"] == "LOV Oracle":
-                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>"]
+                r += [f"<LOV_NAME>{e(p['lov'])}</LOV_NAME>"] + validate
             elif p["type"] == "LOV custom":
-                r += (["<FILTER_BEFORE_DISPLAY_DSP>Y</FILTER_BEFORE_DISPLAY_DSP>"] if p.get("fbd") else []) + [f"<LOV_QUERY_DSP>{e(p['lov_query'].strip())}</LOV_QUERY_DSP>"]
+                r += validate + (["<FILTER_BEFORE_DISPLAY_DSP>Y</FILTER_BEFORE_DISPLAY_DSP>"] if p.get("fbd") else []) + [f"<LOV_QUERY_DSP>{e(p['lov_query'].strip())}</LOV_QUERY_DSP>"]
         if p.get("matching"):
             r.append(f"<MATCHING_VALUE>{e(p['matching'])}</MATCHING_VALUE>")
         if not p.get("sub"):
@@ -118,7 +122,8 @@ def check(rep, sql):
         if display[name] != 1:
             raise SystemExit(f"{rep['NAME']}: parameter {name} has {display[name]} display rows")
     for a in {p["anchor"] for p in rep["PARAMS"]}:
-        n = len(re.findall(r"(?<![\w&:])" + re.escape(a) + r"(?!\w)", sql, re.I))
+        # the engine replaces an n=n anchor as plain text, so x.oh_row1=1 holds the anchor 1=1 too
+        n = len(re.findall(re.escape(a) if re.fullmatch(r"(\d+)=\1", a) else r"(?<![\w&:])" + re.escape(a) + r"(?!\w)", sql, re.I))
         # the framework injects an n=n parameter at EVERY occurrence of its anchor; a report that wants the
         # filters inside each union branch declares the intended count as REPEATED_ANCHOR (anchor -> count)
         expected = rep.get("REPEATED_ANCHOR", {}).get(a, 1)
@@ -213,7 +218,7 @@ def report_xml(rep, category):
  <REPORTS_ROW>
   <GUID>{rep['GUID']}</GUID>
   <SQL_TEXT>{e(sql)}</SQL_TEXT>
-  <NUMBER_FORMAT>{e(rep.get('NUMBER_FORMAT', '#,##0.00;[Red]-#,##0.00'))}</NUMBER_FORMAT>
+  <NUMBER_FORMAT>{e(rep.get('NUMBER_FORMAT', '#,##0.00;[Red]-#,##0.00'))}</NUMBER_FORMAT>{chr(10) + '  <DB_PACKAGE>' + rep['DB_PACKAGE'] + '</DB_PACKAGE>' if rep.get('DB_PACKAGE') else ''}
   <REPORT_TRANSLATIONS>
    <REPORT_TRANSLATIONS_ROW>
     <LANGUAGE>US</LANGUAGE>

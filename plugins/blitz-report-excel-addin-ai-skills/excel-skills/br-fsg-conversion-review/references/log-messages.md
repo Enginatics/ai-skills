@@ -55,6 +55,39 @@ again on this workbook. **Proc** = the procedure in `fixes.md`.
 | `the independent value <v> is not used, a dependent value is described without its parent` (level Warning) | Ask (confirm only: the description is right unless the value exists under several parents) | — |
 | `could not be written: <error>`, `parameter cell could not be written: <error>` | Re-run (unprotect the sheet first) | P10 |
 
+## GL Connect
+
+A level `Error` line leaves the cell's GL Connect formula as it was. GL Connect publishes no function
+reference, so the converter refuses a call it cannot read rather than guess.
+
+| Message | Class | Proc |
+|---|---|---|
+| `GLC_GetBalance has <n> arguments instead of the 26 this converter knows` (level Error) | Ask | P14 |
+| `GLC_GetBalance arguments 24 to 26 are <a>,<b>,<c>: a value other than 0 may be a period offset or trailing months, which is not converted` (level Error) | Ask | P14 |
+| `entered flag '<v>' is not A or E`, `debits/credits flag '<v>' is not N, D or C`, `actual flag '<v>' is not A, B or E` (level Error) | Ask | P14 |
+| `the period type is empty` (level Error) | Ask | P14 |
+| `segment position <n> is set and ledger <L> has <m> segments` (level Error) | Ask | P14 |
+| `'<argument>' is neither a cell reference nor a literal` (level Error) | Fix, then Re-run | P10 |
+| `segment <name> is not in the chart of accounts of ledger <L>` (level Error) | Ask | P14 |
+| `the segment names of ledger <L> are not loaded, log in and convert again` (level Error) | Re-run (log in first) | P10 |
+| `<FUNCTION> has no Blitz Report equivalent; use FSG Expand or Drilldown` (level Error) | Ask | P13 |
+| `could not be written: <error>`, `parameter cell could not be written: <error>` (level Error) | Re-run (unprotect the sheet first) | P10 |
+| `segment criterion <v> converted to <w>, check that it selects the same accounts` | Ask (confirm only: a hyphen in GL Connect excludes a value, it is no range) | P14 |
+| `the segments of ledger <L> are taken in display order, which differs from their column order; check one balance` | Ask (confirm only) | P14 |
+| `the segments of ledger <L> are not on this instance, their positions are taken as the segment columns` | Ask, recommend Re-run | P14 |
+| `<function> was converted from the fields of its dialog (...), check the first result` | Ask (confirm only) | P14 |
+| `accounted balances in <C> on ledger <L> are converted to currency type C, the <D> value of journals entered in <C>` | Ask | P15 |
+| `entered flag E on <C>, the currency of ledger <L>, is converted to currency type T, the ledger total; use E where only the journals entered in <C> are wanted` | Ask | P15 |
+| `translation type E kept, ledger <L> is not on this instance; change it to T where <C> is that ledger's currency` | Ask | P5 |
+| `T with <C> on ledger <L> returns that ledger's own currency total, verify <C> is its currency` | Ask (confirm only) | P5 |
+| `the budget or encumbrance name <v> of an actual balance is ignored` | Info | — |
+| `argument <n> of GLC_GetSegmentDesc, <v>, is ignored` | Info | — |
+| `the computed argument <v> is kept, check that it yields a Blitz Report value` | Fix | P8 |
+| `cell <cell> is formula-driven, <value> embedded as a literal` | Info | — |
+| `unknown period type '<t>' left unchanged` | Ask | P4 |
+| `numeric cell <cell> displays <text> but holds <value>, converted from the stored value` | Info (check the value) | — |
+| `<cell> is used as <a> and <b>, converted as <a>` | Ask (the cell feeds two different parameters; offer a second cell for <b>) | P3 |
+
 ## Batch lines (no cell)
 
 | Message | Class |

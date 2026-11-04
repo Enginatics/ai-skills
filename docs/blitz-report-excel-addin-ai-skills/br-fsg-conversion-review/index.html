@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Finish a Spreadsheet Server / GL Wand conversion - Blitz Report Excel Add-in Skills</title><meta name="description" content="Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency typ">
+<title>Finish a Spreadsheet Server / GL Wand / GL Connect conversion - Blitz Report Excel Add-in Skills</title><meta name="description" content="Finish a financial statement workbook converted from Spreadsheet Server, GL Wand or GL Connect to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported ">
 <link rel="canonical" href="https://www.enginatics.com/ai-skills/br-fsg-conversion-review/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
-<meta property="og:title" content="Finish a Spreadsheet Server / GL Wand conversion - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency typ"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-fsg-conversion-review/">
+<meta property="og:title" content="Finish a Spreadsheet Server / GL Wand / GL Connect conversion - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Finish a financial statement workbook converted from Spreadsheet Server, GL Wand or GL Connect to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported "><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-fsg-conversion-review/">
 <link rel="stylesheet" href="../../assets/site.css"></head>
 <body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
 <nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
 <main>
-<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / General Ledger</p><h1>Finish a Spreadsheet Server / GL Wand conversion</h1><p class='name'>br-fsg-conversion-review</p><p class='lead'>Finish a financial statement workbook converted from Spreadsheet Server or GL Wand to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency types, cells left unconverted), ask the user about the rest, and mark every log line.</p><h2>When to use</h2><p>Use when the user asks to review, finish, fix or check a converted Spreadsheet Server or GL Wand workbook, its conversion log, or &quot;the warnings from the conversion&quot;. Edits the workbook only; never writes to Oracle EBS.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-fsg-conversion-review.zip'>Download br-fsg-conversion-review.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-fixes-md'>references/fixes.md</a><a href='#file-references-log-messages-md'>references/log-messages.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Finish a Spreadsheet Server / GL Wand conversion (br-fsg-conversion-review)
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / General Ledger</p><h1>Finish a Spreadsheet Server / GL Wand / GL Connect conversion</h1><p class='name'>br-fsg-conversion-review</p><p class='lead'>Finish a financial statement workbook converted from Spreadsheet Server, GL Wand or GL Connect to Blitz FSG: read its Conversion Log sheet, fix in the workbook what the converter could not (period cells read by other formulas, formula-driven format and segment cells, hierarchy suffixes, unsupported currency types, cells left unconverted), ask the user about the rest, and mark every log line.</p><h2>When to use</h2><p>Use when the user asks to review, finish, fix or check a converted Spreadsheet Server, GL Wand or GL Connect workbook, its conversion log, or &quot;the warnings from the conversion&quot;. Edits the workbook only; never writes to Oracle EBS.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-fsg-conversion-review.zip'>Download br-fsg-conversion-review.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-fsg-conversion-review'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-fixes-md'>references/fixes.md</a><a href='#file-references-log-messages-md'>references/log-messages.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Finish a Spreadsheet Server / GL Wand / GL Connect conversion (br-fsg-conversion-review)
 
 The Blitz Report add-in has already converted this workbook: every balance, period and segment
 description formula now uses the add-in&#x27;s own functions, and what the converter could not finish is
@@ -47,8 +47,8 @@ One message, grouped:
 - **I need your answer** — the Ask lines, each with the options the procedure lists.
 - **For your information** — the Info lines in one sentence each (no action).
 - **The converter can finish these** — Re-run lines: what to correct first (you may propose that
-  correction above) and that they then run the Spreadsheet Server or GL Wand converter again on
-  this workbook from the Blitz Report ribbon (Tools &gt; Converter), which converts only what is
+  correction above) and that they then run the Spreadsheet Server, GL Wand or GL Connect converter
+  again on this workbook from the Blitz Report ribbon (Tools &gt; Converter), which converts only what is
   still unconverted.
 Options: `Yes — make the changes` / `Change some first` / `Cancel`. Nothing is written before Yes.
 
@@ -157,7 +157,7 @@ into the cell.
 
 ## P10 - Let the converter finish
 Correct the input first, then the user runs the converter again on this workbook (Blitz Report ribbon
-&gt; Tools &gt; Converter &gt; Spreadsheet Server or GL Wand). It converts only the formulas still in the
+&gt; Tools &gt; Converter &gt; Spreadsheet Server, GL Wand or GL Connect). It converts only the formulas still in the
 old form, and writes a new Conversion Log sheet for what remains.
 - An argument that is an expression, or a period argument that is not a cell: move the expression
   into a helper cell and point the argument at it.
@@ -192,7 +192,34 @@ GL Wand function the converter does not know, a Spreadsheet Server GXE, GXC, GEX
   or argument, then P10.
 - GXE (expand to detail): the converted sheet does this with FSG Discover or Expand; offer to clear
   the cell after the user confirms.
-- Anything else: mark Needs you.</pre></section><section id='file-references-log-messages-md'><h3 class='fname'>references/log-messages.md</h3><pre class='md'># Conversion Log messages
+- Anything else: mark Needs you.
+
+## P14 - GL Connect layout
+GL Connect publishes no function reference: the converter knows the layout of `GLC_GetBalance` from
+a saved workbook and the fields of the product&#x27;s dialogs. Argument 3 is the actual flag, 4 the
+currency, 5 the period type, 6 the budget or encumbrance name, 7 the entered flag, 8 debits/credits,
+9 to 23 the segments in display order, 24 to 26 numbers that were 0. Refused calls stay in GL Connect
+form and show `#NAME?` until they are finished.
+- Arguments 24 to 26 other than 0: ask what the cell shows in GL Connect. A period offset or trailing
+  months has no argument in a Blitz Report balance: offer one cell per period, each pointing at its own
+  period cell, added with `+`. Clear the numbers to 0 once that is done, then P10.
+- A flag or argument count the converter does not know: show the user the whole formula and mark Needs
+  you. The positions may differ from the layout above, and only the user can compare the cell&#x27;s old
+  value.
+- `check that it selects the same accounts`, `check one balance`, `check the first result`: name the
+  cell and ask the user to compare its refreshed value with the value the workbook showed in GL Connect.
+  A criterion that came out wrong is rewritten with `;` between values, `-` for a range and `~` before
+  an excluded value.
+- `the segments of ledger &lt;L&gt; are not on this instance`: the balances read the wrong segments until
+  the user converts again under a responsibility that offers &lt;L&gt; (P10).
+
+## P15 - GL Connect accounted or entered amounts
+GL Connect&#x27;s entered flag has no exact counterpart, so each conversion is named in the log.
+- `accounted balances in &lt;C&gt;`: currency type C gives the ledger currency value of the journals entered
+  in &lt;C&gt;. Ask whether the column should show that, or the amounts in &lt;C&gt; themselves (write E in its
+  currency type argument or cell).
+- `entered flag E on &lt;C&gt;`: type T is the ledger total. Ask whether the column should show only the
+  journals entered in &lt;C&gt; (write E).</pre></section><section id='file-references-log-messages-md'><h3 class='fname'>references/log-messages.md</h3><pre class='md'># Conversion Log messages
 
 `Message` texts as the converters write them (`&lt;...&gt;` = a variable part). Match on the fixed words.
 **Class**: Fix = you can correct it after the confirmation; Ask = needs the user&#x27;s answer first;
@@ -248,6 +275,39 @@ again on this workbook. **Proc** = the procedure in `fixes.md`.
 | `left unconverted: no Blitz Report equivalent for &lt;functions&gt;` | Ask | P13 |
 | `the independent value &lt;v&gt; is not used, a dependent value is described without its parent` (level Warning) | Ask (confirm only: the description is right unless the value exists under several parents) | — |
 | `could not be written: &lt;error&gt;`, `parameter cell could not be written: &lt;error&gt;` | Re-run (unprotect the sheet first) | P10 |
+
+## GL Connect
+
+A level `Error` line leaves the cell&#x27;s GL Connect formula as it was. GL Connect publishes no function
+reference, so the converter refuses a call it cannot read rather than guess.
+
+| Message | Class | Proc |
+|---|---|---|
+| `GLC_GetBalance has &lt;n&gt; arguments instead of the 26 this converter knows` (level Error) | Ask | P14 |
+| `GLC_GetBalance arguments 24 to 26 are &lt;a&gt;,&lt;b&gt;,&lt;c&gt;: a value other than 0 may be a period offset or trailing months, which is not converted` (level Error) | Ask | P14 |
+| `entered flag &#x27;&lt;v&gt;&#x27; is not A or E`, `debits/credits flag &#x27;&lt;v&gt;&#x27; is not N, D or C`, `actual flag &#x27;&lt;v&gt;&#x27; is not A, B or E` (level Error) | Ask | P14 |
+| `the period type is empty` (level Error) | Ask | P14 |
+| `segment position &lt;n&gt; is set and ledger &lt;L&gt; has &lt;m&gt; segments` (level Error) | Ask | P14 |
+| `&#x27;&lt;argument&gt;&#x27; is neither a cell reference nor a literal` (level Error) | Fix, then Re-run | P10 |
+| `segment &lt;name&gt; is not in the chart of accounts of ledger &lt;L&gt;` (level Error) | Ask | P14 |
+| `the segment names of ledger &lt;L&gt; are not loaded, log in and convert again` (level Error) | Re-run (log in first) | P10 |
+| `&lt;FUNCTION&gt; has no Blitz Report equivalent; use FSG Expand or Drilldown` (level Error) | Ask | P13 |
+| `could not be written: &lt;error&gt;`, `parameter cell could not be written: &lt;error&gt;` (level Error) | Re-run (unprotect the sheet first) | P10 |
+| `segment criterion &lt;v&gt; converted to &lt;w&gt;, check that it selects the same accounts` | Ask (confirm only: a hyphen in GL Connect excludes a value, it is no range) | P14 |
+| `the segments of ledger &lt;L&gt; are taken in display order, which differs from their column order; check one balance` | Ask (confirm only) | P14 |
+| `the segments of ledger &lt;L&gt; are not on this instance, their positions are taken as the segment columns` | Ask, recommend Re-run | P14 |
+| `&lt;function&gt; was converted from the fields of its dialog (...), check the first result` | Ask (confirm only) | P14 |
+| `accounted balances in &lt;C&gt; on ledger &lt;L&gt; are converted to currency type C, the &lt;D&gt; value of journals entered in &lt;C&gt;` | Ask | P15 |
+| `entered flag E on &lt;C&gt;, the currency of ledger &lt;L&gt;, is converted to currency type T, the ledger total; use E where only the journals entered in &lt;C&gt; are wanted` | Ask | P15 |
+| `translation type E kept, ledger &lt;L&gt; is not on this instance; change it to T where &lt;C&gt; is that ledger&#x27;s currency` | Ask | P5 |
+| `T with &lt;C&gt; on ledger &lt;L&gt; returns that ledger&#x27;s own currency total, verify &lt;C&gt; is its currency` | Ask (confirm only) | P5 |
+| `the budget or encumbrance name &lt;v&gt; of an actual balance is ignored` | Info | — |
+| `argument &lt;n&gt; of GLC_GetSegmentDesc, &lt;v&gt;, is ignored` | Info | — |
+| `the computed argument &lt;v&gt; is kept, check that it yields a Blitz Report value` | Fix | P8 |
+| `cell &lt;cell&gt; is formula-driven, &lt;value&gt; embedded as a literal` | Info | — |
+| `unknown period type &#x27;&lt;t&gt;&#x27; left unchanged` | Ask | P4 |
+| `numeric cell &lt;cell&gt; displays &lt;text&gt; but holds &lt;value&gt;, converted from the stored value` | Info (check the value) | — |
+| `&lt;cell&gt; is used as &lt;a&gt; and &lt;b&gt;, converted as &lt;a&gt;` | Ask (the cell feeds two different parameters; offer a second cell for &lt;b&gt;) | P3 |
 
 ## Batch lines (no cell)
 
