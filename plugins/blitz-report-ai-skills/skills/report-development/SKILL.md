@@ -104,6 +104,7 @@ Applies to `/build-upload`, `/review-upload`, report conversion, and every hand-
 - A bind in the main SQL takes the value of the parameter whose bind variable has that name, whether or not that parameter's anchor occurs in the SQL; a bind that matches no parameter's bind variable is bound null without an error. So after renaming a bind in the main SQL, or moving a filter out of an `n=n` anchor into an inline view, check every bind against the parameters' bind names (a rate view binding `:p_conversion_date1` while the parameter binds `:p_curr_conv_date1` finds no rate and converts at 1).
 - `xxen_api.set_parameter_value_` stores raw values (no LOV resolution): pass ids for id LOVs and `DD-MON-YYYY` dates; to test a multiple-values run, prefix the delimited list with the engine’s marker (`<multiple_values>A;B`) — a bare `A;B` is stored as one literal value and silently matches nothing; it does not evaluate hidden defaults — feed them by evaluating each hidden `DEFAULT_VALUE` with `:$flex$` substituted (filter `display_sequence<0`).
 - Every visible parameter needs a `PARAMETER_TYPE_DSP` (a null type disables the multi-value `like` expansion).
+- A custom LOV returns a `description` column next to `value` (`null description` when there is none): the run screen opens it as `select null id, x.value, x.description from (<lov>) x`, so a value-only list fails with `The LOV query is not valid. ORA-00904: "X"."DESCRIPTION"`. Test a list inside that wrapper; the query on its own runs fine.
 
 ### Matching values, defaults, dependencies
 
