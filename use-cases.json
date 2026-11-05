@@ -1,0 +1,813 @@
+[
+  {
+    "theme": "Month-End Close Command Centre",
+    "slug": "month-end-close-command-centre",
+    "intro": "A finance lead asks one question and gets a red, amber or green scorecard per module, the ranked blockers and the recommended close sequence, assembled by an orchestrator that delegates to a specialist skill per module.",
+    "cases": [
+      {
+        "title": "Close readiness, one question",
+        "prompts": [
+          "Are we ready to close May?",
+          "What is still blocking the period close, module by module?",
+          "Give me the close scorecard for AP, AR, inventory, assets and GL, with the blockers ranked."
+        ],
+        "skills": [
+          "br-month-end-readiness",
+          "br-ap-close-readiness",
+          "br-ar-close-readiness",
+          "br-inv-cost-close-readiness",
+          "br-fa-close-readiness",
+          "br-gl-close-readiness"
+        ],
+        "slug": "close-readiness-one-question",
+        "reports": [
+          "AP Period Close Exceptions",
+          "AP Trial Balance",
+          "AR Unaccounted Transaction Sweep",
+          "AR Autoinvoice Interface Summary",
+          "INV Period Close Pending Transactions",
+          "CAC Inventory Pending Cost Adjustment",
+          "FA Unposted Mass Additions",
+          "GL Period Status",
+          "CAC Accounting Period Status"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Purchasing accrual leg",
+        "prompts": [
+          "Does the receipt accrual tie out, and how big is the uninvoiced backlog?",
+          "Which uninvoiced receipts are the oldest and largest?",
+          "Is purchasing ready for the close?"
+        ],
+        "skills": [
+          "br-po-close-readiness"
+        ],
+        "slug": "purchasing-accrual-leg",
+        "reports": [
+          "CST AP and PO Accrual Reconciliation",
+          "CST Uninvoiced Receipts",
+          "CAC Accounting Period Status"
+        ],
+        "note": "Refuses to score a stale accrual snapshot green: it tells the user to run the accrual load first.",
+        "writes": false
+      },
+      {
+        "title": "Subledger-to-GL reconciliation",
+        "prompts": [
+          "Do AP, AR, inventory and assets tie to the ledger for this period?",
+          "Where does the AP trial balance differ from the GL liability account?",
+          "Reconcile the subledgers to the general ledger for last month."
+        ],
+        "skills": [
+          "br-subledger-gl-reconciliation"
+        ],
+        "slug": "subledger-to-gl-reconciliation",
+        "reports": [
+          "AP Trial Balance",
+          "CST Period Close Subinventory Value",
+          "CST AP and PO Accrual Reconciliation",
+          "GL Trial Balance Detail"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Close-process health and bank reconciliation readiness",
+        "prompts": [
+          "Are the close programs actually running clean, and is the bank reconciliation caught up?",
+          "Which concurrent programs failed or ran long during the close?",
+          "How many bank statement lines are still unreconciled, and how old are they?"
+        ],
+        "skills": [
+          "br-close-process-monitor",
+          "br-ce-recon-readiness"
+        ],
+        "slug": "close-process-health-and-bank-reconciliation-readiness",
+        "reports": [
+          "FND Concurrent Requests",
+          "CE Transactions Available for Reconciliation"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Financial statements and variance commentary",
+        "prompts": [
+          "Refresh the income statement for this period and explain the main variances to last year.",
+          "Why did operating expenses go up this month? Drill the largest movements to the journals.",
+          "Compare actuals against budget by cost center and draft the variance commentary."
+        ],
+        "skills": [
+          "br-run-fsg",
+          "br-fsg-variance-analysis"
+        ],
+        "slug": "financial-statements-and-variance-commentary",
+        "reports": [
+          "GL Financial Statement and Drilldown (FSG)",
+          "GL Account Analysis"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Finish a converted financial statement",
+        "prompts": [
+          "Finish this statement converted from Spreadsheet Server: fix what the converter could not.",
+          "Go through the conversion log of this workbook and tell me what still needs attention."
+        ],
+        "skills": [
+          "br-fsg-conversion-review"
+        ],
+        "slug": "finish-a-converted-financial-statement",
+        "reports": [],
+        "note": "",
+        "writes": false
+      }
+    ]
+  },
+  {
+    "theme": "Cash and Working Capital",
+    "slug": "cash-and-working-capital",
+    "intro": "Four levers on the same goal, cash. Each is a standalone skill; the working-capital orchestrator runs them as one review.",
+    "cases": [
+      {
+        "title": "Duplicate payment recovery",
+        "prompts": [
+          "Have we paid anyone twice in the last two years?",
+          "Find likely duplicate supplier invoices and rank them by amount at risk.",
+          "Which duplicates are already paid and recoverable, and which can still be stopped?"
+        ],
+        "skills": [
+          "br-ap-duplicate-payments"
+        ],
+        "slug": "duplicate-payment-recovery",
+        "reports": [
+          "AP Invoices and Lines",
+          "AP Invoice Payments"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Collections worklist with drafted follow-ups",
+        "prompts": [
+          "Who do we chase this week, and what do we say to each of them?",
+          "Prioritise our overdue customers and draft a reminder for the top ten.",
+          "Which customers have disputed invoices holding up collection?"
+        ],
+        "skills": [
+          "br-ar-collections-worklist"
+        ],
+        "slug": "collections-worklist-with-drafted-follow-ups",
+        "reports": [
+          "AR Aging",
+          "AR Disputed Invoice",
+          "AR Applied Receipts"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Customer credit risk and DSO",
+        "prompts": [
+          "Which customers are a credit risk, and why is our DSO rising?",
+          "Which customers are close to or over their credit limit?",
+          "Break down DSO by customer segment and show the biggest contributors."
+        ],
+        "skills": [
+          "br-ar-credit-risk"
+        ],
+        "slug": "customer-credit-risk-and-dso",
+        "reports": [
+          "AR Customer Credit Snapshot",
+          "AR Customer Credit Limits",
+          "AR Aging",
+          "AR Customer Open Balances Period Lookback",
+          "AR Applied Receipts"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Payment run optimization",
+        "prompts": [
+          "What should this week's pay run look like: what do we capture, what can wait?",
+          "Which early payment discounts are worth taking this week?",
+          "Project the cash outflow for the next four weeks of supplier payments."
+        ],
+        "skills": [
+          "br-ap-payment-optimizer"
+        ],
+        "slug": "payment-run-optimization",
+        "reports": [
+          "AP Cash Requirement",
+          "AP Invoice on Hold"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "AP holds analysis and working-capital review",
+        "prompts": [
+          "What is stuck on hold, why, and what could we release?",
+          "Analyse our AP invoice holds: group them by reason and age, and show the oldest ones.",
+          "Give me the full working-capital picture: payables, receivables and holds."
+        ],
+        "skills": [
+          "br-ap-holds-analysis",
+          "br-cash-working-capital"
+        ],
+        "slug": "ap-holds-analysis-and-working-capital-review",
+        "reports": [
+          "AP Invoice on Hold",
+          "AP Invoice Payments"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Payables dashboard",
+        "prompts": [
+          "Build me a payables dashboard with invoices on hold, overdue and due this week.",
+          "What needs action in AP today?"
+        ],
+        "skills": [
+          "br-ap-intelligence"
+        ],
+        "slug": "payables-dashboard",
+        "reports": [
+          "AP Cash Requirement"
+        ],
+        "note": "",
+        "writes": false
+      }
+    ]
+  },
+  {
+    "theme": "Closed Loops: From Analysis to Action",
+    "slug": "closed-loops-from-analysis-to-action",
+    "intro": "The AI finds it, stages the fix in EBS, and a human approves it. Every write goes through a shipped Blitz Upload: standard Oracle APIs, row-level validation, double confirmation with the money named, and a concurrent request audit trail.",
+    "cases": [
+      {
+        "title": "Invoice entry from documents",
+        "prompts": [
+          "Here are this week's supplier PDFs: stage them as AP invoices.",
+          "Enter this invoice into Payables and tell me what does not match the supplier record.",
+          "Load these scanned invoices, but stop if any of them already exists."
+        ],
+        "skills": [
+          "br-ap-invoice-upload"
+        ],
+        "slug": "invoice-entry-from-documents",
+        "reports": [
+          "AP Invoice Upload"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Release the holds we can",
+        "prompts": [
+          "Action the holds analysis: release what qualifies.",
+          "Release the price holds under our tolerance and tell me which ones you left."
+        ],
+        "skills": [
+          "br-ap-hold-release"
+        ],
+        "slug": "release-the-holds-we-can",
+        "reports": [
+          "AP Invoice Hold Upload"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Block the duplicates before they pay",
+        "prompts": [
+          "Put the unpaid duplicate suspects on hold before the next pay run.",
+          "Hold the suspected duplicate invoices and note the evidence for the AP reviewer."
+        ],
+        "skills": [
+          "br-ap-duplicate-hold"
+        ],
+        "slug": "block-the-duplicates-before-they-pay",
+        "reports": [
+          "AP Invoice Hold Upload"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Log the collections worklist into EBS",
+        "prompts": [
+          "Record those follow-ups in Advanced Collections so the team sees them.",
+          "Save a collection note for each customer on this week's worklist."
+        ],
+        "skills": [
+          "br-ar-collections-notes"
+        ],
+        "slug": "log-the-collections-worklist-into-ebs",
+        "reports": [
+          "IEX Collection Note Upload"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Act on the payment optimization",
+        "prompts": [
+          "Defer what we agreed to defer, and give me the pay-now list for Payments.",
+          "Put the invoices we decided to pay next week on a payment hold with the reason."
+        ],
+        "skills": [
+          "br-ap-payment-actions"
+        ],
+        "slug": "act-on-the-payment-optimization",
+        "reports": [
+          "AP Invoice Hold Upload"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Account coding from the ledger's own history",
+        "prompts": [
+          "Which account does this belong to, and draft the reclass journal.",
+          "Suggest the GL coding for these transactions based on how we coded them before.",
+          "Find postings that look miscoded this quarter."
+        ],
+        "skills": [
+          "br-gl-account-coder"
+        ],
+        "slug": "account-coding-from-the-ledger-s-own-history",
+        "reports": [
+          "GL Journal Upload",
+          "GL Account Analysis"
+        ],
+        "note": "",
+        "writes": true
+      }
+    ]
+  },
+  {
+    "theme": "Operations and Supply Chain",
+    "slug": "operations-and-supply-chain",
+    "intro": "",
+    "cases": [
+      {
+        "title": "Inventory exception triage",
+        "prompts": [
+          "What is broken in inventory: negative stock, stuck transactions, counts in limbo?",
+          "Which inventory interface errors are blocking costing?",
+          "List the cycle counts waiting for approval and how long they have waited."
+        ],
+        "skills": [
+          "br-inv-exception-triage"
+        ],
+        "slug": "inventory-exception-triage",
+        "reports": [
+          "INV Onhand Quantities",
+          "CAC Interface Error Summary",
+          "INV Cycle counts pending approval"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "WIP job health and cost exposure",
+        "prompts": [
+          "Which jobs are stuck, where does the WIP value sit, and what can we close?",
+          "Which discrete jobs are short of components?",
+          "Show the jobs with the largest variances before we close them."
+        ],
+        "skills": [
+          "br-wip-variance-analysis"
+        ],
+        "slug": "wip-job-health-and-cost-exposure",
+        "reports": [
+          "WIP Entities",
+          "WIP Value",
+          "WIP Discrete Job Shortage",
+          "WIP Account Distribution"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Supplier risk scoring",
+        "prompts": [
+          "Which suppliers should procurement review this quarter, and why, in one line each?",
+          "Which suppliers cause the most invoice holds and price variances?",
+          "Score our top suppliers on dependency, delivery and price stability."
+        ],
+        "skills": [
+          "br-supplier-risk-scoring"
+        ],
+        "slug": "supplier-risk-scoring",
+        "reports": [
+          "AP Invoices and Lines",
+          "AP Invoice on Hold",
+          "PO Invoice Price Variance",
+          "AP Suppliers",
+          "PO Vendor Service Performance Analysis"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "3-way match exception triage",
+        "prompts": [
+          "Why are these invoices on match hold, and whose problem is each one?",
+          "Which match holds are waiting for a receipt, and which are price differences?",
+          "Route the quantity and price holds to receiving, buyers or AP."
+        ],
+        "skills": [
+          "br-po-match-exceptions"
+        ],
+        "slug": "3-way-match-exception-triage",
+        "reports": [
+          "AP Invoice on Hold",
+          "AP Invoices and Lines",
+          "PO Headers and Lines",
+          "PO Receipts/Deliveries Discrepancy"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Stock level optimization",
+        "prompts": [
+          "Are our min/max and safety stock settings right, and apply the approved changes.",
+          "Recommend reorder points from the last twelve months of demand.",
+          "How much working capital would the new safety stock levels free up?"
+        ],
+        "skills": [
+          "br-inv-stock-optimizer"
+        ],
+        "slug": "stock-level-optimization",
+        "reports": [
+          "INV Item Subinventory Upload",
+          "INV Safety Stock Upload",
+          "INV Item Demand History",
+          "INV Onhand Quantities",
+          "INV Safety Stocks"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Cycle count planning",
+        "prompts": [
+          "What should we count next, and why is accuracy slipping?",
+          "Which high-value items have not been counted this year?",
+          "Where do our counts miss most often?"
+        ],
+        "skills": [
+          "br-inv-cycle-count-planner"
+        ],
+        "slug": "cycle-count-planning",
+        "reports": [
+          "INV Physical inventory accuracy analysis",
+          "INV Onhand Quantities"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "BOM accuracy validation",
+        "prompts": [
+          "Is the bill right, or does the shop floor consume something else?",
+          "Which BOM components are never issued to jobs?",
+          "Correct the quantities per assembly where actual usage differs, after I approve them."
+        ],
+        "skills": [
+          "br-bom-validator"
+        ],
+        "slug": "bom-accuracy-validation",
+        "reports": [
+          "BOM Bill of Materials Upload",
+          "BOM Bill of Material Structure",
+          "WIP Required Components",
+          "WIP Discrete Job Shortage"
+        ],
+        "note": "",
+        "writes": true
+      }
+    ]
+  },
+  {
+    "theme": "Platform and Governance",
+    "slug": "platform-and-governance",
+    "intro": "",
+    "cases": [
+      {
+        "title": "Find the right report by meaning",
+        "prompts": [
+          "Which report shows unapplied receipts by operating unit?",
+          "Which report shows supplier invoices on hold with the hold reason?",
+          "I need open purchase orders that were received but not invoiced: which report?"
+        ],
+        "skills": [
+          "br-report-finder"
+        ],
+        "slug": "find-the-right-report-by-meaning",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Run any report by asking",
+        "prompts": [
+          "Run GL Account Analysis for last period and summarise the largest movements by account.",
+          "Show me the open sales orders of my largest customer.",
+          "Run the AR aging for my operating unit and chart the buckets."
+        ],
+        "skills": [
+          "br-run-reports"
+        ],
+        "slug": "run-any-report-by-asking",
+        "reports": [
+          "GL Account Analysis"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Upload from Excel by asking",
+        "prompts": [
+          "Upload this journal entry to the general ledger.",
+          "Create these new suppliers from the sheet.",
+          "Update the list prices on these items from my spreadsheet."
+        ],
+        "skills": [
+          "br-run-uploads"
+        ],
+        "slug": "upload-from-excel-by-asking",
+        "reports": [
+          "GL Journal Upload"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Who changed what, when",
+        "prompts": [
+          "Who changed this supplier's bank account, and give me the audit window evidence.",
+          "Who changed profile options or responsibilities in production last week?",
+          "Which users logged in with the System Administrator responsibility this month?"
+        ],
+        "skills": [
+          "br-audit-trail"
+        ],
+        "slug": "who-changed-what-when",
+        "reports": [
+          "FND Audit Setup",
+          "FND User Login History",
+          "FND User Responsibilities"
+        ],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Compare two instances",
+        "prompts": [
+          "Did the upgrade change the numbers? Is TEST really a copy of PROD?",
+          "Compare the profile option values between TEST and PROD and list the differences.",
+          "Run the trial balance in both environments and show where they differ."
+        ],
+        "skills": [
+          "br-instance-diff"
+        ],
+        "slug": "compare-two-instances",
+        "reports": [],
+        "note": "",
+        "writes": false
+      }
+    ]
+  },
+  {
+    "theme": "Analyst Toolkit",
+    "slug": "analyst-toolkit",
+    "intro": "Reusable techniques that work on the output of any Blitz Report; the themed skills above compose them.",
+    "cases": [
+      {
+        "title": "Anomaly detection",
+        "prompts": [
+          "Check this AP invoice data for possible duplicates and unusual amounts.",
+          "Which transactions in this sheet look wrong?",
+          "Run a Benford's Law test on these journal amounts."
+        ],
+        "skills": [
+          "br-anomaly-detection"
+        ],
+        "slug": "anomaly-detection",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Segmentation",
+        "prompts": [
+          "Segment our customers by buying behaviour and name each group.",
+          "Group these suppliers by spend pattern.",
+          "Which items behave alike?"
+        ],
+        "skills": [
+          "br-clustering"
+        ],
+        "slug": "segmentation",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Forecasting",
+        "prompts": [
+          "Forecast next quarter's sales from this order history.",
+          "Project cash collections for the next eight weeks.",
+          "Forecast monthly demand for these items with a confidence range."
+        ],
+        "skills": [
+          "br-forecasting"
+        ],
+        "slug": "forecasting",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Customer and vendor value segments",
+        "prompts": [
+          "Who are our best customers, and who is at risk of lapsing?",
+          "Run an RFM analysis on this year's invoices.",
+          "Which customers should we target for win-back?"
+        ],
+        "skills": [
+          "br-rfm-analysis"
+        ],
+        "slug": "customer-and-vendor-value-segments",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Dashboards on any report",
+        "prompts": [
+          "Build a dashboard from this sheet with KPI cards and slicers.",
+          "Turn this report into an interactive summary for management."
+        ],
+        "skills": [
+          "br-data-dashboard"
+        ],
+        "slug": "dashboards-on-any-report",
+        "reports": [],
+        "note": "",
+        "writes": false
+      }
+    ]
+  },
+  {
+    "theme": "Blitz Report Development with Claude Code",
+    "slug": "blitz-report-development-with-claude-code",
+    "intro": "For developers: Claude Code builds, converts, tests and tunes Blitz Reports and Uploads with the Enginatics development skills.",
+    "cases": [
+      {
+        "title": "Create a report",
+        "prompts": [
+          "Create a Blitz Report listing open purchase orders with receipts and invoices per line.",
+          "Add a supplier site parameter to this report.",
+          "Turn this SQL into a Blitz Report with parameters and lists of values."
+        ],
+        "skills": [
+          "blitz-report-developer"
+        ],
+        "slug": "create-a-report",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Convert Oracle reports",
+        "prompts": [
+          "Convert our custom RDF invoice register to a Blitz Report and test it.",
+          "Convert this BI Publisher report to Blitz Report.",
+          "Analyse this Oracle report and list its queries and parameters."
+        ],
+        "skills": [
+          "convert-bip-and-rdf-reports-to-blitz",
+          "rdf-analyzer"
+        ],
+        "slug": "convert-oracle-reports",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Migrate custom reports and WebADI integrators",
+        "prompts": [
+          "Migrate the custom reports from this converter export to Blitz Reports.",
+          "Turn our WebADI journal integrator into a Blitz Upload.",
+          "Which of these custom reports are already covered by a standard Blitz Report?"
+        ],
+        "skills": [
+          "migrate-custom-reports",
+          "migrate-webadi"
+        ],
+        "slug": "migrate-custom-reports-and-webadi-integrators",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Test against the original",
+        "prompts": [
+          "Test the new Blitz Report against the standard Oracle report with last month as parameters.",
+          "Compare the output of both reports row by row and explain the differences."
+        ],
+        "skills": [
+          "report-tester"
+        ],
+        "slug": "test-against-the-original",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Tune a slow report",
+        "prompts": [
+          "This report takes 10 minutes. Find what makes it slow and tune the SQL.",
+          "Measure the buffer gets per row of this report and fix the expensive part."
+        ],
+        "skills": [
+          "tune-report-performance"
+        ],
+        "slug": "tune-a-slow-report",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Build and validate an upload",
+        "prompts": [
+          "Build an upload to update supplier site payment terms through the public API.",
+          "Analyse the Oracle form for this upload and list its validations.",
+          "Review this upload against the Oracle form and test it end to end."
+        ],
+        "skills": [
+          "upload-builder",
+          "oracle-forms-analyzer",
+          "upload-validator"
+        ],
+        "slug": "build-and-validate-an-upload",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Extend an upload with flexfields",
+        "prompts": [
+          "Add the invoice descriptive flexfield columns to this upload, with validation.",
+          "Make attribute5 of this upload validate against its value set."
+        ],
+        "skills": [
+          "add-dff-to-upload"
+        ],
+        "slug": "extend-an-upload-with-flexfields",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Fix a zip Oracle cannot read",
+        "prompts": [
+          "The upload of this zip fails in Oracle: repack it so the import reads it."
+        ],
+        "skills": [
+          "fix-zip-compatibility"
+        ],
+        "slug": "fix-a-zip-oracle-cannot-read",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
+        "title": "Set up the AI skills",
+        "prompts": [
+          "Install the Blitz Report skills in Excel.",
+          "Which Blitz Report skill fits reconciling AR to the general ledger?",
+          "Set up Claude Code for Blitz Report development on our instance."
+        ],
+        "skills": [
+          "excel-skills-setup",
+          "blitz-environment-setup"
+        ],
+        "slug": "set-up-the-ai-skills",
+        "reports": [],
+        "note": "",
+        "writes": false
+      }
+    ]
+  }
+]

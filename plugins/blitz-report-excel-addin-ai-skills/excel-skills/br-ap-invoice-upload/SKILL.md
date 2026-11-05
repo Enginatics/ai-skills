@@ -8,7 +8,7 @@ description: >
   invoices/bills/vouchers (PDF, image, Word, text, or typed out) and wants them entered into
   Oracle Payables via the Blitz Report add-in. NOT for the standalone Blitz Upload template file
   (UploadTemplate.xlsm with bu_* functions and a Parameters sheet) — that is the
-  bu-ap-invoice-upload skill's territory.
+  bu-ap-invoice-upload skill's territory. WRITES to Oracle EBS.
 ---
 
 # AP Invoice Upload from documents (br-ap-invoice-upload)
