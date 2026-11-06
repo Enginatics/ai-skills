@@ -33,4 +33,4 @@ After a plugin update (`/plugin marketplace update enginatics`), run this skill 
 
 ## First use
 
-Suggest starting with `br-run-reports` (run any Blitz Report into the workbook) or `br-report-finder` (find the report for a question), then a skill from the user's own area in `references/skills.md`. In Excel the user just asks in plain language, for example "analyse my AP holds" or "is GL ready to close for this period".
+Suggest starting with `br-run-reports` (run any Blitz Report into the workbook) or `br-report-finder` (find the report for a question), then a skill from the user's own area in `references/skills.md`. In Excel the user just asks in plain language, for example "analyse my AP holds" or "is GL ready to close for this period". A user who wants a skill of their own, or a shipped skill with other thresholds or their own reports, asks `br-skill-author` in Excel, which writes the SKILL.md for them.

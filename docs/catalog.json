@@ -530,6 +530,22 @@
     ]
   },
   {
+    "name": "br-skill-author",
+    "title": "Blitz Report Skill Author",
+    "type": "excel",
+    "category": "Getting Started",
+    "description": "Write a new Blitz Report Excel skill or extend one of the shipped br-* skills: interview the user for the business question, discover the exact report names, parameters and list values live from the connected Oracle EBS instance, write a complete SKILL.md in the shipped format into a worksheet, and give the steps to install it in Copilot in Excel or Claude in Excel. Use when the user asks for their own skill, wants to turn a prompt they repeat into a skill, wants other thresholds, their own reports or another output in an existing skill, or says 'make a skill for', 'customise the holds analysis', 'add our report to the skill'. Writes nothing to Oracle EBS.",
+    "writes": false,
+    "reports": [],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-skill-author.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-skill-author",
+    "prompts": [
+      "Make a skill that lists the invoices on hold entered in the last three months, ranked by amount.",
+      "Give me the holds analysis skill with our own thresholds and our custom AP report.",
+      "Turn what we just did into a skill my team can run."
+    ]
+  },
+  {
     "name": "excel-skills-setup",
     "title": "Excel Skills Setup",
     "type": "excel",

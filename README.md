@@ -180,6 +180,9 @@ Reports: FND Audit Setup, FND User Login History, FND User Responsibilities
 **Compare two instances**: "Did the upgrade change the numbers? Is TEST really a copy of PROD?" · "Compare the profile option values between TEST and PROD and list the differences." · "Run the trial balance in both environments and show where they differ."  
 Skills: `br-instance-diff`
 
+**Write your own skill**: "Make a skill that lists the invoices on hold entered in the last three months, ranked by amount." · "Give me the holds analysis skill with our own thresholds and our custom AP report." · "Turn what we just did into a skill my team can run."  
+Skills: `br-skill-author`
+
 ### Analyst Toolkit
 
 Reusable techniques that work on the output of any Blitz Report; the themed skills above compose them.

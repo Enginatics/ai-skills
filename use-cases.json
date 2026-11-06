@@ -584,6 +584,21 @@
         "reports": [],
         "note": "",
         "writes": false
+      },
+      {
+        "title": "Write your own skill",
+        "prompts": [
+          "Make a skill that lists the invoices on hold entered in the last three months, ranked by amount.",
+          "Give me the holds analysis skill with our own thresholds and our custom AP report.",
+          "Turn what we just did into a skill my team can run."
+        ],
+        "skills": [
+          "br-skill-author"
+        ],
+        "slug": "write-your-own-skill",
+        "reports": [],
+        "note": "",
+        "writes": false
       }
     ]
   },

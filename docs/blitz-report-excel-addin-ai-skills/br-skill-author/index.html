@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blitz Report Skill Author - Blitz Report Excel Add-in Skills</title><meta name="description" content="Write a new Blitz Report Excel skill or extend one of the shipped br-* skills: interview the user for the business question, discover the exact report names, parameters and list values live from the connected Oracle EBS instance, write a complete SKILL.md in the shipped format into a worksheet, and ">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-skill-author/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Blitz Report Skill Author - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Write a new Blitz Report Excel skill or extend one of the shipped br-* skills: interview the user for the business question, discover the exact report names, parameters and list values live from the connected Oracle EBS instance, write a complete SKILL.md in the shipped format into a worksheet, and "><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-skill-author/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-skill-author/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Getting Started</p><h1>Blitz Report Skill Author</h1><p class='name'>br-skill-author</p><p class='lead'>Write a new Blitz Report Excel skill or extend one of the shipped br-* skills: interview the user for the business question, discover the exact report names, parameters and list values live from the connected Oracle EBS instance, write a complete SKILL.md in the shipped format into a worksheet, and give the steps to install it in Copilot in Excel or Claude in Excel.</p><h2>When to use</h2><p>Use when the user asks for their own skill, wants to turn a prompt they repeat into a skill, wants other thresholds, their own reports or another output in an existing skill, or says &#x27;make a skill for&#x27;, &#x27;customise the holds analysis&#x27;, &#x27;add our report to the skill&#x27;. Writes nothing to Oracle EBS.</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-skill-author.zip'>Download br-skill-author.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-skill-author'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-skill-author'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-install-and-extend-md'>references/install-and-extend.md</a><a href='#file-references-skill-template-md'>references/skill-template.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Blitz Report Skill Author (br-skill-author)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+A skill is a folder named exactly as the `name` in its SKILL.md frontmatter; the frontmatter holds
+the `name` and a `description`, the body holds the instructions. Copilot in Excel reads the folder
+from the user&#x27;s OneDrive skills folder, Claude in Excel from an uploaded zip of it. The assistant
+picks a skill by its description, so the description decides whether the skill fires at all. You
+cannot write files: you write the file text into a worksheet and the user saves it.
+
+**Requires:** br-run-reports (discovery mechanics). Read `references/skill-template.md` before
+writing and `references/install-and-extend.md` before the hand-over.
+
+## Step 1 — Interview (one message, only what is missing)
+1. The question the skill answers, in the user&#x27;s words, with two or three example prompts (they go
+   into the description).
+2. Module and responsibility; the inputs every run needs (organization, operating unit, ledger,
+   period, date window) and which may default.
+3. What comes back: a ranked list, a red/amber/green scorecard, a dashboard, a count; and the
+   decision the user takes with it.
+4. Thresholds and rules (days overdue, amount floors, categories to exclude). A value the user does
+   not know becomes a labelled placeholder in CONFIG, never a silent guess.
+5. Whether the skill should also change Oracle EBS data (release, update, create). If yes it is an
+   action skill: it delegates every write to br-run-uploads and asks for confirmation twice.
+Do not write anything before the answers are in.
+
+## Step 2 — New skill, or extension of a shipped one
+- A shipped br-* skill already covers the question (holds, close readiness, collections, stock
+  levels, BOM, WIP, payments, duplicates) and the user wants other thresholds, their own reports,
+  another output or a narrower scope: extend it. Ask the user to paste that skill&#x27;s SKILL.md into a
+  sheet named `skill_source` (column A, one line per row; Copilot users open it from the OneDrive
+  skills folder, Claude users from the downloaded zip), or to describe the change. Keep the shipped
+  structure and change only what was asked.
+- Anything else: a new skill from the template.
+- Names: lower-case words joined by hyphens, with the customer&#x27;s own prefix instead of `br-`
+  (`acme-ap-holds-3-months`). An extension gets a new name too: a folder named `br-*` is replaced
+  when the shipped skills are updated, so edits inside it are lost. Folder name = frontmatter name.
+
+## Step 3 — Discover the reports live (helper sheet `blitz_`; never activate it; delete it at the end)
+Every report name, parameter name and fixed list value in the skill comes from the instance, never
+from memory. The user&#x27;s own reports sit in the same library and are found the same way.
+- `=br_report_list_external(&quot;&lt;words&gt;&quot;)` lists candidates (`Type = U` rows are uploads, used only by
+  the action section). Nothing found: match the full library as br-report-finder does.
+- `=br_report_params_external(&quot;&lt;Report Name&gt;&quot;)` gives the exact parameter spellings, `Must Set?`,
+  `Multiple` and `Has LOV`; the skill passes parameters with these spellings only.
+- `=br_param_values_external(&quot;&lt;Report Name&gt;&quot;,&quot;&lt;Parameter&gt;&quot;)` gives the exact spelling of any value
+  the skill hard-codes (a status, a period type, a hold type): write the `Value` column as shown.
+- `=br_report_templates_external(&quot;&lt;Report Name&gt;&quot;)` when the skill needs a particular column set.
+- `#BLITZ_NOT_CONNECTED`: ask the user to connect through the Blitz Report ribbon. `#SPILL!`: clear
+  space and retry.
+Do not run a report while authoring. Column names come from a short run only when the user asks
+for it, with the narrowest parameters that still return rows.
+
+## Step 4 — Write the SKILL.md
+Fill `references/skill-template.md`. The generated text keeps these rules:
+- Frontmatter `name` = folder name; `description` = what it does, the user&#x27;s own trigger phrases,
+  and `WRITES to Oracle EBS` only for an action skill.
+- The data banner and the delegation sentences (extraction by br-run-reports, writes by
+  br-run-uploads) verbatim from the template. The generated skill never calls the worksheet
+  functions itself except through those two skills.
+- A `Reports used` table with exact names and the parameters passed; the fallback search only on
+  `#BLITZ_REPORT_NOT_FOUND`.
+- CONFIG with every threshold and its status (confirmed by the user, or placeholder until confirmed);
+  the summary sheet the skill writes shows the assumptions.
+- A numbered pipeline, one workbook operation per step; analytics as Excel formulas (Copilot runs no
+  scripts); named output sheets in tab order; a Validation section with the tie-out; a &#x27;Talk in the
+  user&#x27;s language&#x27; section.
+- An analysis skill never writes to Oracle EBS. An action skill: proposal, confirmation 1, fill and
+  validate, confirmation 2, submit; never a write without both.
+- No double quote character anywhere in the text (Excel wraps such a cell in quotes when it is
+  copied, and the quotes land in the file): single quotes or backticks instead. No tab characters.
+- SKILL.md under about 10 KB; longer detail goes to `references/&lt;topic&gt;.md`, named in the SKILL.md.
+
+## Step 5 — Hand over
+Add a sheet named after the skill and write the file text into column A from A1, one line of the
+file per row, the column formatted as text, nothing else on the sheet. A second file (such as
+`references/thresholds.md`) goes on its own sheet named `&lt;skill-name&gt; references thresholds`. Then
+give the user the install steps from `references/install-and-extend.md` for their assistant, in
+their words, and the first prompt to try. Delete `blitz_`.
+
+## Validation (before the hand-over)
+- Every report, parameter and list value in the text appeared in a discovery spill of this session.
+- Folder name equals the frontmatter name; the description contains the user&#x27;s trigger phrases.
+- No double quote characters, no tabs, no worksheet function names outside the fixed banner.
+- No data from the instance in the text (the skill travels with the user&#x27;s OneDrive): names of
+  reports, parameters and settings only, never values from report rows.
+
+## Talk in the user&#x27;s language
+&#x27;I will write the skill as a text sheet that you save as SKILL.md&#x27;, &#x27;the skill runs the AP Invoice
+on Hold report and ranks the holds&#x27;. Never mention `blitz_`, the worksheet functions or the spill.</pre></section><section id='file-references-install-and-extend-md'><h3 class='fname'>references/install-and-extend.md</h3><pre class='md'># Installing, testing and extending a skill
+
+Give the user the part for their assistant, in their words.
+
+## From the worksheet to a file
+1. On the sheet named after the skill, select column A (click the column header), copy, paste into
+   Notepad or VS Code, and check the first and last lines: a line starting or ending with a stray
+   quote character means a double quote slipped into the text; remove it in the editor.
+2. Save as `SKILL.md` with UTF-8 encoding inside a new folder named exactly like the skill
+   (`acme-ap-holds-3-months`). A second file from a sheet named `&lt;skill-name&gt; references &lt;topic&gt;`
+   is saved as `references/&lt;topic&gt;.md` inside that folder.
+
+## Copilot in Excel
+1. Copilot pane &gt; Settings (the three dots) &gt; Manage plugins &amp; skills &gt; Custom skills &gt; Open skills
+   folder. This is `Documents/Copilot/Microsoft Excel/skills` in the OneDrive of the account that
+   licenses Office.
+2. Move the skill folder there and wait until OneDrive shows it synced.
+3. Select Refresh in the Custom skills dialog. The skill appears under its name; switch it on, or
+   name it in the prompt with `@&lt;skill-name&gt;`, which runs it even while it shows as off.
+4. Where the Copilot pane offers the `@skill-builder` skill, the text can also be handed to it with
+   &#x27;save this as a skill named &lt;skill-name&gt;&#x27; instead of steps 1 to 3.
+
+## Claude in Excel
+1. Right-click the skill folder &gt; Compress to ZIP file. The zip holds the folder itself at the top
+   level (`&lt;skill-name&gt;/SKILL.md`), not the loose files.
+2. Claude pane &gt; Customize &gt; Skills &gt; Create skill &gt; Upload the zip. `br-analytics-standards` and
+   `br-run-reports` must be uploaded too, once.
+
+## First run and what to fix
+Open a new workbook, connect the Blitz Report add-in to the environment with the responsibility the
+skill needs, and ask the first example prompt from the description.
+- The skill did not fire: name it (`@&lt;skill-name&gt; ...`), then sharpen the description with the words
+  the user actually used.
+- A report was not found: the name in the `Reports used` table differs from the library; copy the
+  exact name from the add-in&#x27;s report list.
+- A parameter was rejected: its spelling differs from the run screen; copy it from the parameter
+  list of the report.
+- Zero rows: the responsibility has no access to the organization, operating unit or ledger, or a
+  date parameter defaulted to today; set the input explicitly or switch responsibility.
+- The summary does not tie: a column header in a formula is not the header on the raw sheet.
+Every fix is an edit of SKILL.md followed by Refresh (Copilot) or a new upload (Claude).
+
+## Extending a shipped br-* skill
+1. Copy the shipped folder to a new name with the customer&#x27;s prefix and change `name` in the
+   frontmatter to match; the shipped folder stays as delivered and is replaced by later updates.
+2. Safe to change: `description` (add the user&#x27;s phrases), the `Reports used` table (the customer&#x27;s
+   own report in place of the shipped one, keeping the columns the pipeline reads, or named in the
+   pipeline where they differ), every value under `CONFIG`, output sheet names and order, the
+   narrative, the scope (a date window, an organization, a category).
+3. Keep as they are: the data banner, the division of responsibility, the delegation to
+   br-run-reports, and for action skills the two confirmations and the single column the skill
+   writes.
+4. The user&#x27;s own report must carry the parameters the pipeline passes and the columns it reads;
+   check both with the report&#x27;s parameter list and a short run before changing the table.
+
+## Sharing with colleagues
+Copilot reads each user&#x27;s own OneDrive skills folder: copy the folder to each colleague&#x27;s skills
+folder, or distribute it as the Microsoft 365 administrator does for the organization. For Claude
+in Excel each user uploads the zip once. Keep one copy of the folder as the master and send the
+whole folder, never a SKILL.md alone, when it has a `references` folder.</pre></section><section id='file-references-skill-template-md'><h3 class='fname'>references/skill-template.md</h3><pre class='md'># Template for a generated skill
+
+Copy this file text, replace every `&lt;...&gt;`, delete the lines that do not apply (marked *optional*
+or *action skills only*). Keep the fixed sentences unchanged: they are what makes the skill run the
+same way on Claude in Excel and Copilot in Excel. Use single quotes or backticks, never a double
+quote character, in the generated text.
+
+```
+---
+name: &lt;skill-name&gt;
+description: &gt;
+  &lt;What it does, in Oracle EBS terms, one sentence&gt;. Use when the user asks &#x27;&lt;prompt 1&gt;&#x27;,
+  &#x27;&lt;prompt 2&gt;&#x27;, or &lt;trigger phrases in their words&gt;. &lt;Writes nothing to Oracle EBS. |
+  WRITES to Oracle EBS after two confirmations.&gt;
+---
+
+# &lt;Title&gt; (&lt;skill-name&gt;)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &#x27;no Oracle EBS / Blitz connector is set up&#x27; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&#x27;br-run-reports&#x27;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. Every pipeline step
+&gt; follows those rules: one workbook operation per step, no mid-pipeline verification reads.
+
+&lt;One paragraph: what the skill produces and the decision it supports. Who does what: you own
+scoring and the verdict; br-run-reports does extraction&lt;; br-data-dashboard the build&gt;.&gt;
+
+**Requires:** br-run-reports&lt;, br-data-dashboard&gt;&lt;, br-run-uploads&gt;.
+
+## Division of responsibility — READ FIRST
+**You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports** (it owns
+connection, responsibility, the run and the completion check). Never call `br_*` functions, and
+never read or rename the result sheet until the extraction is confirmed complete.
+&lt;This skill is read-and-recommend only: it never changes Oracle EBS data. | This skill changes
+Oracle EBS data only through **br-run-uploads**, only on the confirmed rows, and only after the
+two confirmations below.&gt;
+
+## When to use
+&#x27;&lt;prompt 1&gt;&#x27;, &#x27;&lt;prompt 2&gt;&#x27;, &lt;trigger phrases&gt;. For &lt;a neighbouring need&gt; use &lt;other skill&gt; instead.
+
+## Inputs
+- **&lt;Input&gt;** (required) — ask if not supplied.
+- **&lt;Input&gt;** — default &lt;value&gt;; say so and let the user change it.
+- *Optional:* &lt;input&gt;, &lt;input&gt;.
+
+## Reports used (authoritative names — do NOT broad-search for them)
+Pass the documented name directly; search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+| Report (exact name) | Run with | Notes |
+|---|---|---|
+| `&lt;Report Name&gt;` | `&lt;Parameter&gt;=&lt;value&gt;; &lt;Parameter&gt;=&lt;value&gt;` | &lt;its role: the driver, the evidence, the cross-check&gt; |
+| `&lt;Report Name&gt;` *(optional)* | `&lt;Parameter&gt;=&lt;value&gt;` | &lt;when to run it&gt; |
+
+Dates are passed as `YYYY-MM-DD`; a parameter whose desired value is the default is omitted (a
+comma in a value splits it into several values).
+
+## CONFIG
+### Classes
+| Condition (report, column) | Class | Recommendation |
+|---|---|---|
+| &lt;condition&gt; | **&lt;Class&gt;** | &lt;what the user does about it&gt; |
+
+### Defaults (edit to the customer)
+- &lt;threshold&gt; = &lt;value&gt; (&lt;confirmed by the user | placeholder until the customer confirms&gt;).
+- &lt;threshold&gt; = &lt;value&gt; (...).
+The summary sheet shows these values under &#x27;Assumptions&#x27;.
+
+### Output sheets &amp; tab order (left to right)
+`&lt;Summary&gt;` (first), `&lt;Detail&gt;`, [`&lt;Optional&gt;`], raw report sheets last.
+
+## Pipeline
+1. **Extract — DELEGATE.** br-run-reports runs `&lt;Report Name&gt;` with &lt;parameters&gt; → sheet
+   `&lt;name&gt;`; then `&lt;Report Name&gt;` → `&lt;name&gt;`. Wait for each completion; do nothing mid-run.
+2. **Anchor.** Record &lt;row count and the total of &lt;amount column&gt;&gt; from the raw sheet.
+3. **Classify *(single workbook operation)*.** &lt;The formulas or logic, by column header name, never
+   by column position&gt;. Write `&lt;Detail&gt;` in one write: &lt;columns&gt;.
+4. **Summary *(single workbook operation)*.** On a new sheet at position 0: &lt;banner with the
+   verdict&gt;, &lt;KPI block&gt;, &lt;ranked list&gt;, &#x27;Assumptions&#x27; block from CONFIG. Charts in a second
+   operation at most.
+5. **Narrative.** At most five bullets: overall call, biggest item, recommended next action.
+6. **Validation read.** The one permitted re-read: the summary&#x27;s count and total equal the anchor.
+
+## Validation
+- `&lt;Summary&gt;` count and total tie to `&lt;Detail&gt;` and to the anchor.
+- &lt;Class&gt; only when &lt;condition&gt;; &lt;verdict colour&gt; only when &lt;condition&gt;.
+
+## Degradation rules
+- `&lt;Report Name&gt;` returns no rows → &lt;say so and stop | fall back to `&lt;Report Name&gt;` and say so&gt;.
+- A required input is missing → ask; never guess an organization, ledger or period.
+- The user declines an optional stage → the sheets so far are the deliverable; never nag.
+
+## Talk in the user&#x27;s language
+Say &#x27;&lt;the business action&gt;&#x27; and name reports by their names; never name worksheet functions, the
+helper sheet or trigger cells.
+
+## Action step (action skills only)
+7. **Propose → confirmation 1.** List the rows to change with count, amounts and &lt;key field&gt;;
+   ask &#x27;Fill the &lt;Upload Name&gt; grid for these &lt;n&gt; rows (&lt;amount&gt;)?&#x27;. Nothing is written yet.
+8. **Fill and validate.** br-run-uploads downloads `&lt;Upload Name&gt;` for &lt;scope&gt;, writes only
+   `&lt;column&gt;` on the confirmed rows, validates, and shows the validation results.
+9. **Confirmation 2 → submit.** Ask &#x27;Submit &lt;n&gt; validated rows (&lt;amount&gt;) to Oracle EBS now?&#x27;.
+   Only &#x27;yes&#x27; to this question submits. Report the per-row results afterwards.
+Untouched rows are inert. Never mix two uploads in one confirmation.
+```
+
+## Filling guidance
+- The description is the trigger: put the user&#x27;s own words in it. &#x27;Use when the user asks&#x27; followed
+  by two or three prompts beats a generic sentence.
+- One report per role: a driver (the rows to judge), evidence (why), a cross-check (ties the
+  total). More reports make the run slower, not better.
+- A CONFIG value the user gave is &#x27;confirmed by the user&#x27;; one you chose is a placeholder, named
+  as such in the skill and on the summary sheet.
+- Formulas, not code: Copilot in Excel runs no scripts, so classification is FILTER, SORTBY,
+  SUMIFS, XLOOKUP and LET over the raw sheet, written by column header name.
+- A sheet layout where cells sharing a format sit next to each other, one write per block.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>
