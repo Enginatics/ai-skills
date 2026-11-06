@@ -13,9 +13,10 @@
 
 A skill is a folder named exactly as the `name` in its SKILL.md frontmatter; the frontmatter holds
 the `name` and a `description`, the body holds the instructions. Copilot in Excel reads the folder
-from the user&#x27;s OneDrive skills folder, Claude in Excel from an uploaded zip of it. The assistant
-picks a skill by its description, so the description decides whether the skill fires at all. You
-cannot write files: you write the file text into a worksheet and the user saves it.
+from the user&#x27;s OneDrive skills folder, Claude in Excel from a zip of it uploaded to the user&#x27;s
+Claude account. The assistant picks a skill by its description, so the description decides whether
+the skill fires at all. You cannot write files: you write the file text into a worksheet and the
+user saves it.
 
 **Requires:** br-run-reports (discovery mechanics). Read `references/skill-template.md` before
 writing and `references/install-and-extend.md` before the hand-over.
@@ -85,7 +86,9 @@ Add a sheet named after the skill and write the file text into column A from A1,
 file per row, the column formatted as text, nothing else on the sheet. A second file (such as
 `references/thresholds.md`) goes on its own sheet named `&lt;skill-name&gt; references thresholds`. Then
 give the user the install steps from `references/install-and-extend.md` for their assistant, in
-their words, and the first prompt to try. Delete `blitz_`.
+their words, and the first prompt to try. Copilot in Excel may show a Save skill card for the text once
+it is complete: tell the user to save it there, which writes the folder into their skills folder and
+lists the skill under Custom skills at once. Delete `blitz_`.
 
 ## Validation (before the hand-over)
 - Every report, parameter and list value in the text appeared in a discovery spill of this session.
@@ -109,6 +112,9 @@ Give the user the part for their assistant, in their words.
    is saved as `references/&lt;topic&gt;.md` inside that folder.
 
 ## Copilot in Excel
+When the Copilot pane shows a Save skill card after the text is written, Save skill writes the folder
+into the skills folder and the skill appears under Custom skills at once; the steps below are the manual
+route.
 1. Copilot pane &gt; Settings (the three dots) &gt; Manage plugins &amp; skills &gt; Custom skills &gt; Open skills
    folder. This is `Documents/Copilot/Microsoft Excel/skills` in the OneDrive of the account that
    licenses Office.
@@ -119,16 +125,21 @@ Give the user the part for their assistant, in their words.
    &#x27;save this as a skill named &lt;skill-name&gt;&#x27; instead of steps 1 to 3.
 
 ## Claude in Excel
+Claude in Excel uses the skills of the user&#x27;s Claude account; the upload is done in Claude on the web,
+not in the Excel pane.
 1. Right-click the skill folder &gt; Compress to ZIP file. The zip holds the folder itself at the top
    level (`&lt;skill-name&gt;/SKILL.md`), not the loose files.
-2. Claude pane &gt; Customize &gt; Skills &gt; Create skill &gt; Upload the zip. `br-analytics-standards` and
-   `br-run-reports` must be uploaded too, once.
+2. claude.ai &gt; Customize &gt; Skills &gt; + &gt; Create skill &gt; Upload a skill, and choose the zip. Check that
+   its switch is on. `br-analytics-standards` and `br-run-reports` must be uploaded too, once.
+3. Skills need code execution: Settings &gt; Capabilities &gt; Code execution and file creation; on a Team
+   or Enterprise plan the owner turns it on for the organization.
+4. In the Claude pane in Excel, type / to see the skill, or ask the first example prompt.
 
 ## First run and what to fix
 Open a new workbook, connect the Blitz Report add-in to the environment with the responsibility the
 skill needs, and ask the first example prompt from the description.
-- The skill did not fire: name it (`@&lt;skill-name&gt; ...`), then sharpen the description with the words
-  the user actually used.
+- The skill did not fire: name it (`@&lt;skill-name&gt; ...` in Copilot, `/` in the Claude pane), then
+  sharpen the description with the words the user actually used.
 - A report was not found: the name in the `Reports used` table differs from the library; copy the
   exact name from the add-in&#x27;s report list.
 - A parameter was rejected: its spelling differs from the run screen; copy it from the parameter
@@ -136,7 +147,8 @@ skill needs, and ask the first example prompt from the description.
 - Zero rows: the responsibility has no access to the organization, operating unit or ledger, or a
   date parameter defaulted to today; set the input explicitly or switch responsibility.
 - The summary does not tie: a column header in a formula is not the header on the raw sheet.
-Every fix is an edit of SKILL.md followed by Refresh (Copilot) or a new upload (Claude).
+Every fix is an edit of SKILL.md followed by Refresh (Copilot), or for Claude by deleting the skill
+under Customize &gt; Skills (the ... menu next to its switch) and uploading the new zip.
 
 ## Extending a shipped br-* skill
 1. Copy the shipped folder to a new name with the customer&#x27;s prefix and change `name` in the
@@ -154,8 +166,10 @@ Every fix is an edit of SKILL.md followed by Refresh (Copilot) or a new upload (
 ## Sharing with colleagues
 Copilot reads each user&#x27;s own OneDrive skills folder: copy the folder to each colleague&#x27;s skills
 folder, or distribute it as the Microsoft 365 administrator does for the organization. For Claude
-in Excel each user uploads the zip once. Keep one copy of the folder as the master and send the
-whole folder, never a SKILL.md alone, when it has a `references` folder.</pre></section><section id='file-references-skill-template-md'><h3 class='fname'>references/skill-template.md</h3><pre class='md'># Template for a generated skill
+in Excel each user uploads the zip once, or the owner of a Team or Enterprise plan provisions it
+for everyone: Organization settings &gt; Plugins &amp; skills &gt; Add &gt; Upload a skill. Keep one copy of the
+folder as the master and send the whole folder, never a SKILL.md alone, when it has a `references`
+folder.</pre></section><section id='file-references-skill-template-md'><h3 class='fname'>references/skill-template.md</h3><pre class='md'># Template for a generated skill
 
 Copy this file text, replace every `&lt;...&gt;`, delete the lines that do not apply (marked *optional*
 or *action skills only*). Keep the fixed sentences unchanged: they are what makes the skill run the

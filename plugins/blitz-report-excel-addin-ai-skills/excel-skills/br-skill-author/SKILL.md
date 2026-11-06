@@ -17,9 +17,10 @@ description: >
 
 A skill is a folder named exactly as the `name` in its SKILL.md frontmatter; the frontmatter holds
 the `name` and a `description`, the body holds the instructions. Copilot in Excel reads the folder
-from the user's OneDrive skills folder, Claude in Excel from an uploaded zip of it. The assistant
-picks a skill by its description, so the description decides whether the skill fires at all. You
-cannot write files: you write the file text into a worksheet and the user saves it.
+from the user's OneDrive skills folder, Claude in Excel from a zip of it uploaded to the user's
+Claude account. The assistant picks a skill by its description, so the description decides whether
+the skill fires at all. You cannot write files: you write the file text into a worksheet and the
+user saves it.
 
 **Requires:** br-run-reports (discovery mechanics). Read `references/skill-template.md` before
 writing and `references/install-and-extend.md` before the hand-over.
@@ -89,7 +90,9 @@ Add a sheet named after the skill and write the file text into column A from A1,
 file per row, the column formatted as text, nothing else on the sheet. A second file (such as
 `references/thresholds.md`) goes on its own sheet named `<skill-name> references thresholds`. Then
 give the user the install steps from `references/install-and-extend.md` for their assistant, in
-their words, and the first prompt to try. Delete `blitz_`.
+their words, and the first prompt to try. Copilot in Excel may show a Save skill card for the text once
+it is complete: tell the user to save it there, which writes the folder into their skills folder and
+lists the skill under Custom skills at once. Delete `blitz_`.
 
 ## Validation (before the hand-over)
 - Every report, parameter and list value in the text appeared in a discovery spill of this session.
