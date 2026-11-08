@@ -491,6 +491,9 @@ class UploadLint:
             # Inventory locations / sub-inv
             'mtl_item_locations', 'mtl_item_locations_kfv', 'mtl_secondary_inventories',
         }
+        large_value_set_functions = (
+            'xxen_qp_upload.attribute_value_lov', 'xxen_qp_upload_11i.attribute_value_lov', 'xxen_util.kff_segment_lov', 'xxen_util.dff_attribute_lov',
+        )
         for cm in re.finditer(r'<UPLOAD_COLUMNS_ROW>(.*?)</UPLOAD_COLUMNS_ROW>', self.text, flags=re.S):
             block = cm.group(1)
             if '<FILTER_BEFORE_DISPLAY_DSP>Y</FILTER_BEFORE_DISPLAY_DSP>' not in block:
@@ -504,6 +507,9 @@ class UploadLint:
                 continue
             lov_lower = lov.lower()
             if any(t in lov_lower for t in large_ebs_tables):
+                continue
+            # rows from a pipelined function over a value set (items, customers, segment values) can be 100K+
+            if any(f in lov_lower for f in large_value_set_functions):
                 continue
             cn_m = re.search(r'<COLUMN_NAME>([^<]+)</COLUMN_NAME>', block)
             cn = cn_m.group(1) if cn_m else '?'
