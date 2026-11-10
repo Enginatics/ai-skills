@@ -750,6 +750,21 @@
         "writes": false
       },
       {
+        "title": "Review the performance of a whole EBS instance",
+        "prompts": [
+          "Review these DBA AWR and SGA extracts and correct the custom code behind the top SQL.",
+          "Which Blitz Reports do I run first for a server-wide performance review?",
+          "Check the memory and database parameters of this instance against the EBS requirements."
+        ],
+        "skills": [
+          "ebs-performance-review"
+        ],
+        "slug": "review-the-performance-of-a-whole-ebs-instance",
+        "reports": [],
+        "note": "",
+        "writes": false
+      },
+      {
         "title": "Tune a slow report",
         "prompts": [
           "This report takes 10 minutes. Find what makes it slow and tune the SQL.",

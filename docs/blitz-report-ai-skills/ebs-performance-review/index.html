@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EBS Performance Review - Blitz Report Development</title><meta name="description" content="Server-wide Oracle EBS performance review for a customer from Blitz Report DBA extracts. Covers memory and parameter configuration, the top AWR SQLs, and literal-SQL hard parsing, and delivers corrected package code plus a one-table HTML summary.">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/ebs-performance-review/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="EBS Performance Review - Blitz Report Development"><meta property="og:description" content="Server-wide Oracle EBS performance review for a customer from Blitz Report DBA extracts. Covers memory and parameter configuration, the top AWR SQLs, and literal-SQL hard parsing, and delivers corrected package code plus a one-table HTML summary."><meta property="og:url" content="https://www.enginatics.com/ai-skills/ebs-performance-review/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-ai-skills/skills/ebs-performance-review/'><p class='crumbs'><a href='../'>Blitz Report Development</a> / Performance Tuning</p><h1>EBS Performance Review</h1><p class='name'>ebs-performance-review</p><p class='lead'>Server-wide Oracle EBS performance review for a customer from Blitz Report DBA extracts. Covers memory and parameter configuration, the top AWR SQLs, and literal-SQL hard parsing, and delivers corrected package code plus a one-table HTML summary.</p><h2>When to use</h2><p>Use when a customer sends DBA AWR/SGA SQL Performance Summary, SGA+PGA Memory, Parameter Validation and Text Search extracts.</p><h2>Use</h2><pre><code>/plugin marketplace add enginatics/ai-skills
+/plugin install blitz-report-ai-skills@enginatics</code></pre><p>Then ask Claude for the task, or run:</p><pre><code>/blitz-report-ai-skills:ebs-performance-review</code></pre><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/blitz-report-custom-reports-converter/'>Blitz Report Custom Reports Converter</a></li><li><a href='https://www.enginatics.com/reports/blitz-reports/'>Blitz Reports</a></li><li><a href='https://www.enginatics.com/reports/dba-awr-active-session-history/'>DBA AWR Active Session History</a></li><li><a href='https://www.enginatics.com/reports/dba-awr-sql-execution-plan-history/'>DBA AWR SQL Execution Plan History</a></li><li><a href='https://www.enginatics.com/reports/dba-awr-sql-performance-summary/'>DBA AWR SQL Performance Summary</a></li><li><a href='https://www.enginatics.com/reports/dba-awr-settings/'>DBA AWR Settings</a></li><li><a href='https://www.enginatics.com/reports/dba-awr-system-metrics-summary/'>DBA AWR System Metrics Summary</a></li><li><a href='https://www.enginatics.com/reports/dba-awr-system-time-summary/'>DBA AWR System Time Summary</a></li><li><a href='https://www.enginatics.com/reports/dba-alert-log/'>DBA Alert Log</a></li><li><a href='https://www.enginatics.com/reports/dba-automated-maintenance-tasks/'>DBA Automated Maintenance Tasks</a></li><li><a href='https://www.enginatics.com/reports/dba-database-parameter-validation/'>DBA Database Parameter Validation</a></li><li><a href='https://www.enginatics.com/reports/dba-parameters/'>DBA Parameters</a></li><li><a href='https://www.enginatics.com/reports/dba-result-cache-objects-and-dependencies/'>DBA Result Cache Objects and Dependencies</a></li><li><a href='https://www.enginatics.com/reports/dba-result-cache-statistics/'>DBA Result Cache Statistics</a></li><li><a href='https://www.enginatics.com/reports/dba-sga-buffer-cache-object-usage/'>DBA SGA Buffer Cache Object Usage</a></li><li><a href='https://www.enginatics.com/reports/dba-sga-sql-performance-summary/'>DBA SGA SQL Performance Summary</a></li><li><a href='https://www.enginatics.com/reports/dba-sga-pga-memory-configuration/'>DBA SGA+PGA Memory Configuration</a></li><li><a href='https://www.enginatics.com/reports/dba-segments/'>DBA Segments</a></li><li><a href='https://www.enginatics.com/reports/dba-table-modifications/'>DBA Table Modifications</a></li><li><a href='https://www.enginatics.com/reports/dba-text-search/'>DBA Text Search</a></li><li><a href='https://www.enginatics.com/reports/fnd-concurrent-requests/'>FND Concurrent Requests</a></li><li><a href='https://www.enginatics.com/reports/fnd-profile-option-values/'>FND Profile Option Values</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-ai-skills/skills/ebs-performance-review'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-scripts-extract-xlsx-py'>scripts/extract_xlsx.py</a><a href='#file-scripts-gen-pairs-py'>scripts/gen_pairs.py</a><a href='#file-scripts-master-table-py'>scripts/master_table.py</a><a href='#file-scripts-verify-deliverables-py'>scripts/verify_deliverables.py</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># EBS performance review
+
+The deliverable is corrections, not a description of the load. Everything in the output must answer &quot;what do we change, and is the change supplied or only described&quot;.
+
+## Inputs to ask the customer for
+
+All are Blitz Reports. Ask for them in one go, as XLSX, into one folder.
+
+| Area | Report | Parameters |
+|---|---|---|
+| Memory | DBA SGA+PGA Memory Configuration | none. Also ask for `free -h` and `grep -i huge /proc/meminfo` from each node: the report&#x27;s Hugepages column is its own recommendation (SGA GB x 512 + 5), not the current setting |
+| Parameters | DBA Database Parameter Validation, DBA Parameters | none |
+| Maintenance tasks | DBA Automated Maintenance Tasks | none |
+| AWR settings | DBA AWR Settings | none |
+| System load | DBA AWR Wait Event Summary, DBA AWR System Time Summary, DBA AWR System Metrics Summary | the full AWR window |
+| Top SQL | DBA AWR SQL Performance Summary | the full AWR window (default retention is 8 days), top 200 by CPU |
+| Literals | DBA SGA SQL Performance Summary | Literals Dupl Count &gt;= 50 |
+| Source | DBA Text Search | one run per package list; the report exports `dba_source` line by line for the packages named in the AWR `Code` column and the SGA module column |
+| Waits, cache, result cache | DBA SGA Wait Event Summary (ASH), DBA SGA Buffer Cache Object Usage, DBA Result Cache Statistics, DBA Result Cache Objects and Dependencies, DBA Alert Log | none |
+| Follow-up as needed | DBA AWR SQL Execution Plan History (per sql_id, plan hash blank), DBA AWR Active Session History, FND Concurrent Requests (per program), DBA Segments, DBA Table Modifications | |
+
+On a multitenant database the AWR reports read the PDB only when `container_data` is `CURRENT` or `CURRENT_DICTIONARY`, and a PDB records no AWR data unless `awr_pdb_autoflush_enabled=true` is set in it. Tell the customer before the AWR runs: an empty or near-empty AWR extract means the parameter is off, and the data starts only from the next snapshot after it is set, so ask for it a few days ahead. With it, set the snapshot interval to 60 minutes (background in References, PDB AWR).
+
+```sql
+alter session set container=&lt;PDB&gt;;
+alter system set awr_pdb_autoflush_enabled=true;
+exec dbms_workload_repository.modify_snapshot_settings(interval=&gt;60);
+```
+
+Lists of values for a report parameter (package names, sql_ids, program short names) are given as one semicolon-separated line with no spaces, ready to paste: `XXA_PKG;XXB_PKG`. Never split the values of one run into several lists (by program type, priority or module); explain any grouping in a sentence after the single line.
+
+Do not ask the customer for anything you can answer from your own instances. Standard EBS index definitions, table types (global temporary or not), and column datatypes come from a 12.2 instance (see your environment file, `blitz-environment.md`), or from a local Vision instance. Standard `dba_source` for unwrapped Oracle packages likewise. The database parameters (`compatible`, `optimizer_features_enable`, every set parameter) are in the customer&#x27;s Blitz Report installation logs (`database_parameters.log`): read them there instead of asking.
+
+When the customer gives frontend access to a recent test clone, read source, view DDL, indexes, table statistics, data counts and the Blitz Report run history there yourself rather than asking for them: check its data dates first, since a clone refreshed recently answers the same questions as production. A clone restored from a production backup or a storage snapshot also keeps production&#x27;s DBID and AWR repository, so it serves the AWR plans and history too: check `dba_hist_snapshot` per DBID and instance, and read only snapshots before the clone&#x27;s `v$database.resetlogs_time`, since the clone keeps writing its own snapshots under the same DBID. Its `v$database.created` is production&#x27;s creation date, not the clone date.
+
+## Method
+
+### 1. Configuration
+
+- SGA: compare the SGA size row (the allocated SGA), `sga_max_size` and `pga_aggregate_target` to physical memory. In a pluggable database `sga_target` 0 means no limit of the PDB&#x27;s own, not that automatic shared memory management is off; the container&#x27;s value is the SGA size row. Most customers leave a third or more unallocated; the report&#x27;s memory-unused figure is `physical - SGA size - pga_aggregate_target`, not free RAM, so confirm with `free -h`. Recommend using the memory the customer has already paid for, sized by calculation: physical memory minus about 5 GB for the OS, minus the memory of everything else on the host (other databases such as ASCP, ASM, clusterware), minus the expected maximum PGA (the PGA high-water mark over a few months plus 50%). Example: 128 GB, no RAC, ASM, ASCP or other database, PGA high-water mark 10 GB: 128 - 5 - 15 = 108 GB, so an SGA of up to about 100 GB where I/O waits are high. Most customers are constrained by memory, so go close to that limit; only where memory is plentiful and the other consumers are not yet known, stay well below it (1 TB of 1.5 TB). The calculation is always confirmed with the `free -h` and `grep -i huge /proc/meminfo` output of each node, which also shows whether hugepages need correcting. Never size by `v$sga_target_advice` or the SGA advice columns: a small estimated gain costs nothing on paid hardware and may be an infrequent but important online query. Recommend the `sga_target` increase up to `sga_max_size` first (dynamic, no restart), then a hugepage-backed increase with a rolling restart. With `use_large_pages=ONLY` the instance will not start if hugepages are short, so hugepages are sized before the SGA is raised (step by step in References, hugepages).
+- PGA: never recommend a `pga_aggregate_limit`. EBS requires it at 0 (unlimited) so that no EBS process is terminated; raise `pga_aggregate_target` only.
+- System statistics: the memory report shows `sys.aux_stats$` (record date, CPUSPEEDNW, IOSEEKTIM, IOTFRSPEED, MBRC). CPUSPEEDNW at the default 4096 means never gathered, or storage too fast for the NOWORKLOAD method; a record date before the last hardware or storage move means stale. Recommend `exec dbms_stats.gather_system_stats(&#x27;noworkload&#x27;)`, `&#x27;EXADATA&#x27;` on Exadata, or setting IOSEEKTIM and IOTFRSPEED with `dbms_stats.set_system_stats` when gathering leaves the defaults.
+- System load: from the AWR wait event, time and metrics summaries over the full window. High `log file sync`/`log file parallel write` times mean redo on slow storage; high `db file sequential read`/`scattered read` time supports the SGA increase; very high logical reads against modest physical reads point back to the top SQL, low physical read throughput with high read waits to slow disks.
+- Parameters: check every set parameter against MOS KA1002 (formerly 396009.1, &quot;Database Initialization Parameters for Oracle E-Business Suite Release 12&quot;). Typical findings: `result_cache_max_size` 0 or too small, `_optim_peek_user_binds=FALSE` (never an EBS requirement; disables bind peeking database-wide and is behind most plan instability), parameters on the removal list still set, hidden parameters. Every parameter DBA Database Parameter Validation flags gets its statement in the configuration script and a row in a table in the review (parameter, current, required, action): set the mandatory ones, `alter system reset` every one on the removal list and every hidden parameter of section 3 (required value &quot;Do not set hidden parameters&quot;), with no &quot;keep it if an SR asked for it&quot; hedging, as the note and the analyzer say. `cursor_sharing=EXACT` is mandatory for EBS, so `FORCE` is never the fix for literals.
+- Automated maintenance tasks: from DBA Automated Maintenance Tasks, every client enabled in a maintenance window. EBS requires `_optimizer_autostats_job=false` and the `auto optimizer stats collection` client disabled, with statistics gathered only by the Gather Schema Statistics concurrent request (FND), never by a database scheduler job; name the concurrent request explicitly in the review so it cannot be read as the database job (KA1002); auto space advisor and sql tuning advisor add IO and CPU with no usable result on EBS. Recommend `dbms_auto_task_admin.disable` per client, and `_addm_auto_enable=false` where no DBA reads ADDM findings. Check the AWR top SQL for `ORA$AT_*` jobs and `DBMS_STATS`/`DBMS_SQLTUNE` modules to show what they cost.
+- Result cache: from the statistics report, invalidations per dependency object. A high count on `FND_PROFILE_OPTION_VALUES` or `FND_LOOKUP_VALUES` means something writes setup at runtime. Ask for `FND Profile Option Values` filtered on last update date in the last two days: Excel4apps stores each user&#x27;s option blob in `XXE4A_OPTIONS00_*` profile values and rewrites it every session, and each write invalidates every cached profile result. The recommendation is then to replace it with Blitz Report.
+- Editions: `select count(*) from dba_editions`. Online patching leaves one edition per cycle; above five, `SYS.OBJ$` grows by one row per editioned object per edition (33 editions gave 9.8 million rows against 432,000 on a one-edition instance) and every dictionary query the optimizer full-scans slows in proportion. Recommend `adop phase=prepare; actualize_all; finalize finalize_mode=full; cutover; cleanup cleanup_mode=full`, then `cleanup_mode=full` after every cycle.
+- Which patch delivered a file version: on a 12.2 instance join `ad_files`, `ad_file_versions`, `ad_patch_run_bug_actions`, `ad_patch_run_bugs`, `ad_bugs`, `ad_patch_runs`, `ad_patch_drivers`, `ad_applied_patches` on the file name. The odf that defines a standard index is under `$PROD_TOP/patch/115/odf/`. A customer on an older release update pack can create the index with Oracle&#x27;s own name and definition; the pack later finds it in place.
+
+### 2. Top SQL
+
+Work from the AWR extract&#x27;s `Percentage` column (share of total DB CPU). Rules for reading it:
+
+- One sql_id has one row per plan hash. Sum `Percentage` per sql_id; compute buffer gets per execution execution-weighted across plans, never as the worst plan&#x27;s figure.
+- AWR keeps only the top `topnsql` statements per category per snapshot (default 30 each by elapsed time, CPU, parse calls, sharable memory and version count; DBA AWR Settings shows it with the interval and retention). Frequent cheap statements can be missing; look for them in the SGA extract.
+- Rows with null `Executions` and plan hash 0 are real cost with unavailable per-execution metrics; say so, do not print zero.
+- `Blocks Exec` is buffer gets per execution; `Buffer IO` is MB (`db_block_size * buffer_gets / 1e6`).
+- The `Code` and `Code Line#` columns name the PL/SQL unit and line; use them to find the statement in the Text Search extract. The `Module` column can be misattributed (workflow and forms personalisations set it and do not restore it).
+- Verify every sql_id you cite exists in the extract. Transcription errors happen; one script over the final deliverables catches them.
+
+For each statement in the top 100, classify it before doing anything else:
+
+1. Custom PL/SQL with source supplied: correct the code. Read the whole procedure, not just the statement: the fix is often call volume (a lookup inside a per-row loop, a poll interval, a cursor that selects everything and rebuilds a table), not the statement&#x27;s shape.
+2. Custom PL/SQL without source: list the package for the next Text Search run. For every custom concurrent program whose source we lack, hand the customer ONE semicolon-separated list of concurrent program short names for the Blitz Report Custom Reports Converter in the same message as the other runs, rather than marking rows Needs input one by one; take the short names from the AWR `Module` (`e:&lt;app&gt;:cp:&lt;appl&gt;/&lt;SHORT_NAME&gt;`). Reports Builder runs show `rwrun@&lt;host&gt;` without the program: identify them with FND Concurrent Requests (Execution Method Oracle Reports, Started within Days = the AWR window, Running longer than x Minutes) and add their short names to the list. When the AWR `Module` is a concurrent program short name (`e:PO:cp:xxpo/XXPO_...`) rather than a package, the source comes through the Blitz Report Custom Reports Converter instead, which also gathers the report definitions, parameters and dependent objects. A program that is a report (Reports Builder, BI Publisher) is classified first. A data report (account analysis, revaluation, aging, any listing) always moves to a tuned Blitz Report: a library report where one covers it, else a conversion with the `migrate-custom-reports` skill, never a corrected rdf or data template. Only a printed document (pick and pack slip, commercial invoice, purchase order print) is corrected in place; a PL/SQL interface is treated as a package (for an `EXECUTION_METHOD_CODE=&#x27;I&#x27;` program the converter gathers the package named in the executable&#x27;s `EXECUTION_FILE_NAME`, whatever its prefix, plus its custom dependencies).
+3. Oracle code: never edit. A plan baseline, an index check, a purge, or an SR.
+4. External client (`.exe` modules): the SQL text is in AWR; supply the corrected predicate for the integration owner.
+5. Oracle Alerts and Forms personalisations: setup changes, no package.
+
+Patterns that recur:
+
+- `col = NVL(:bind, col)` plus `(… AND :bind IS NULL) OR :bind IS NOT NULL`: two queries in one cursor. Rewrite as `(:b IS NOT NULL AND col = :b) OR (:b IS NULL AND col IS NOT NULL AND &lt;range&gt;)`; verify equivalence by truth table under three-valued logic, keep the `IS NOT NULL` that reproduces the null rejection.
+- `DECODE(...)` on the inner side of an anti-join or a join: no index use. Split into one branch per case with a plain equality.
+- `UPPER(col) = UPPER(:b)` on a dictionary or indexed column: drop the function on the column side.
+- A self-join of `MTL_SUPPLY` on `SUPPLY_SOURCE_ID` alone: not unique without `SUPPLY_TYPE_CODE`.
+- Setup or dictionary lookups inside a per-row loop: cache per request in a package associative array, cleared when `fnd_global.conc_request_id` changes. Same statement, same plan, fewer executions.
+- `fnd_concurrent.wait_for_request` with `interval =&gt; 1`.
+- `DELETE ... WHERE NVL(group_id,0) &lt; 0` on `BOM_EXPLOSION_TEMP`: disables its indexes. It is a session-duration GTT: never recommend TRUNCATE.
+- Twenty-plus plans for one sql_id: pin the cheapest observed plan with `dbms_spm.load_plans_from_cursor_cache` as a holding action; drop the baseline when the text is corrected.
+- Copy-pasted statements: one sql_id with many source locations. Replace all copies; recommend one function as a follow-up.
+
+### 3. Literals
+
+From the SGA extract, `Literals Dupl Count` is `count(distinct sql_id)` per `force_matching_signature`: parent cursors, not child versions. Group families by owner (custom package, Oracle package, external client, form). For custom PL/SQL the fix is a bind in the `USING` clause; identifiers (table and column names) stay concatenated. Check the alert log for `too many parse errors` on the same families: a null id concatenated into text produces a statement that fails to parse on every call.
+
+## Deliverables
+
+Everything goes into one deliverables folder per review. Working files stay in a separate working folder.
+
+1. `&lt;Customer&gt;_Performance_Review_&lt;date&gt;.html`. Structure, in this order and nothing else before it:
+   - Section 1, one table: sql_id(s) colour-coded by status, % DB CPU, where, the defect (one to three sentences), the change (one to three sentences, file name if supplied), status. Statuses: Corrected (file supplied), Recommended (described, no file: DBA, setup, external), Needs input (say which run), Not analysed (source not supplied). Rows ordered by cost.
+   - Section 2, how to deploy: files, order, what to test for each.
+   - Section 3, what we still need: the runs, why, ranked. Never ask for what your own instances can answer.
+   - Then one section per row: heading with sql_ids and %, one line on where it lives, `Defect`, `Solution`. Code excerpts single-spaced, in the customer&#x27;s own formatting.
+   - No load statistics sections, no module or theme rankings, no &quot;what not to do&quot; boxes, nothing about settings or code that stay as they are (a parameter left unlimited, a job that stays off), no &quot;how to measure afterwards&quot;, no MOS citations in the body, no second numbering scheme (no &quot;Finding N&quot; alongside section numbers).
+2. `package_code/`: for every corrected package, `&lt;PKG&gt;.pkb` (verbatim from the Text Search extract) and `&lt;PKG&gt;_corrected.pkb`, never a `.diff` (the reader compares with their own tool). CRLF, no BOM. Generate with `scripts/gen_pairs.py`; edits are line-range replacements so the original is provably untouched elsewhere. Match the customer&#x27;s code style, not your own. Comments state why the code is shaped as it is, never what changed.
+3. `notes_and_scripts/`: only what the DBA applies: the parameter changes, the index DDL, corrected statements for external clients. No check scripts, verification or test queries, and nothing that asks for what is already known (current parameters come from the installation log and DBA SGA+PGA Memory Configuration); what is genuinely missing is asked for as a Blitz Report run in section 3.
+4. `&lt;Customer&gt;_SQL_Findings_&lt;date&gt;.xlsx`: every statement with full metrics, for the customer to filter.
+5. `blitz_reports/`: the import XML of every custom report rebuilt as a Blitz Report, with a note (`notes_and_scripts/NN`) listing per report what changed, the parameter mapping and the row comparison against the original SQL on your test instance.
+
+The zip handed to the customer holds only what they deploy or run: the review html, the corrected files each next to its original, and the scripts. Its root is the folder level of the html and the subfolders, with no wrapping folder; no diffs, no README, no working files.
+
+The covering email opens with the CPU the customer saves, summed by script from the section 1 rows: &quot;In short, the corrections and recommendations in it address the statements behind **X% of the database&#x27;s total CPU time** (Y% with corrected code supplied, Z% with the fix described); applying them should remove most of that load.&quot; Y is the Corrected rows, Z the Recommended rows, X their sum; the points that follow quote the same figures.
+
+Before publishing, run the checks in `scripts/verify_deliverables.py`: every cited sql_id exists in the extracts, no control characters, no BOM, CRLF on `.pkb`, no `.diff` file, every section reference resolves, no banned words.
+
+## Verification without a database
+
+The customer&#x27;s instance is not reachable. Compensate:
+
+- Bracket balance and BEGIN/END counts on every corrected body.
+- Truth tables for predicate rewrites, under Oracle three-valued logic, over every combination of bind and column nullness.
+- Standard index and table definitions from your own 12.2 instance.
+- Every numeric claim recomputed from the extract by script, not typed.
+- Adversarial review of any rewrite: a second pass whose only job is to refute it.
+- Match the SQL syntax to the customer&#x27;s `compatible` setting from the installation log: EBS 12.2 sites on 19c often run `compatible=12.1.0`, which rejects `validate_conversion`, `default ... on conversion error`, `listagg(distinct ...)` and `listagg ... on overflow` with `ORA-00907`. Corrected code, check scripts and test queries must use 12.1 syntax there (`regexp_like` tests, `case when regexp_like(x,&#x27;^[0-9]+$&#x27;) then to_number(x) end`).
+
+## Scripts
+
+`scripts/extract_xlsx.py` turns the Blitz XLSX extracts into JSON. `scripts/gen_pairs.py` is the original/corrected generator with the line-range edit model. `scripts/master_table.py` builds the section-1 table from a row list and the AWR JSON. `scripts/verify_deliverables.py` is the pre-publish check. Copy them into the working folder and adapt the paths and row lists.
+
+## References
+
+Blog posts to send the customer with the recommendation they support.
+
+- Hugepages: https://www.enginatics.com/blog/how-to-configure-hugepages-for-oracle-ebs/ — sizing, `sysctl` and memlock settings, `use_large_pages=ONLY`, CDB and PDB SGA parameters, and large pages on non-Linux platforms.
+- PDB AWR: https://www.enginatics.com/blog/updated-dba-awr-blitz-reports-now-work-with-plugglable-databases/ — `awr_pdb_autoflush_enabled`, snapshot interval, `container_data` and the reports&#x27; container parameter.</pre></section><section id='file-scripts-extract-xlsx-py'><h3 class='fname'>scripts/extract_xlsx.py</h3><details><summary>Show scripts/extract_xlsx.py</summary><pre><code class='language-python'>&quot;&quot;&quot;Turn the Blitz Report DBA extracts into JSON for analysis.
+
+usage: python extract_xlsx.py &lt;folder-with-xlsx&gt; &lt;output-folder&gt;
+
+Produces awr.json, sga.json (one dict per row, keyed by column header) and
+src_&lt;n&gt;.json for every DBA Text Search export ({&quot;OWNER|TYPE|NAME&quot;: {line: text}}).
+File names are matched on their Blitz Report name prefix, so the timestamp suffix
+does not matter.
+&quot;&quot;&quot;
+import glob
+import json
+import os
+import sys
+
+import openpyxl
+
+
+def read_sheet(path):
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    rows = list(wb.worksheets[0].iter_rows(values_only=True))
+    wb.close()
+    hdr = [str(h).strip() if h is not None else &quot;&quot; for h in rows[0]]
+    return [{h: r[i] if i &lt; len(r) else None for i, h in enumerate(hdr) if h} for r in rows[1:]]
+
+
+def read_source(path):
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    src = {}
+    for n, r in enumerate(wb.worksheets[0].iter_rows(values_only=True)):
+        if n == 0 or r[2] is None:
+            continue
+        owner, typ, name, line, text = r[:5]
+        src.setdefault(f&quot;{owner}|{typ}|{name}&quot;, {})[int(line)] = (text or &quot;&quot;).rstrip(&quot;\n&quot;)
+    wb.close()
+    return src
+
+
+if __name__ == &quot;__main__&quot;:
+    base, out = sys.argv[1], sys.argv[2]
+    os.makedirs(out, exist_ok=True)
+    for prefix, target in ((&quot;DBA AWR SQL Performance Summary&quot;, &quot;awr.json&quot;),
+                           (&quot;DBA SGA SQL Performance Summary&quot;, &quot;sga.json&quot;)):
+        for p in glob.glob(os.path.join(base, prefix + &quot;*.xlsx&quot;)):
+            rows = read_sheet(p)
+            json.dump(rows, open(os.path.join(out, target), &quot;w&quot;, encoding=&quot;utf-8&quot;), default=str, indent=1)
+            print(target, len(rows), &quot;rows from&quot;, os.path.basename(p))
+    for n, p in enumerate(sorted(glob.glob(os.path.join(base, &quot;DBA Text Search*.xlsx&quot;))), 1):
+        src = read_source(p)
+        json.dump(src, open(os.path.join(out, f&quot;src_{n}.json&quot;), &quot;w&quot;, encoding=&quot;utf-8&quot;), indent=0)
+        print(f&quot;src_{n}.json&quot;, len(src), &quot;objects from&quot;, os.path.basename(p))</code></pre></details></section><section id='file-scripts-gen-pairs-py'><h3 class='fname'>scripts/gen_pairs.py</h3><details><summary>Show scripts/gen_pairs.py</summary><pre><code class='language-python'>&quot;&quot;&quot;Generate &lt;PKG&gt;.pkb (verbatim) and &lt;PKG&gt;_corrected.pkb for every
+package in EDITS, from the DBA Text Search JSON produced by extract_xlsx.py.
+
+Edits are line-range replacements against the ORIGINAL line numbers, so every
+line outside a range is provably untouched. Each entry is
+(first_line, last_line, replacement_lines); last_line &lt; first_line inserts
+before first_line. Deleting is an empty replacement list.
+
+Match the customer&#x27;s code style in replacements. Comments say why the code is
+shaped as it is, never what changed.
+&quot;&quot;&quot;
+import difflib
+import glob
+import json
+import os
+
+WORK = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(WORK, &quot;pairs&quot;)
+
+SRC = {}
+for f in glob.glob(os.path.join(WORK, &quot;src_*.json&quot;)):
+    for k, v in json.load(open(f, encoding=&quot;utf-8&quot;)).items():
+        owner, typ, name = k.split(&quot;|&quot;)
+        if typ == &quot;PACKAGE BODY&quot;:
+            SRC.setdefault(name, {int(a): b for a, b in v.items()})
+
+EDITS = {
+    # &quot;XX_SOME_PKG&quot;: [
+    #     (84, 85, [&quot;      delete bom_explosion_temp where group_id = wbill_sequence_id;&quot;]),
+    #     (122, 121, [&quot;&quot;, &quot;   -- inserted before line 122&quot;]),
+    # ],
+}
+
+
+def body(name):
+    d = SRC[name]
+    return [d[i] for i in range(1, max(d) + 1)]
+
+
+def apply_edits(lines, edits):
+    out = list(lines)
+    for first, last, repl in sorted(edits, key=lambda e: -e[0]):
+        if last &lt; first:
+            out[first - 1:first - 1] = repl
+        else:
+            out[first - 1:last] = repl
+    return out
+
+
+def write(path, lines):
+    text = &quot;CREATE OR REPLACE &quot; + lines[0] + &quot;\n&quot; + &quot;\n&quot;.join(lines[1:]) + &quot;\n/\n&quot;
+    with open(path, &quot;w&quot;, encoding=&quot;utf-8&quot;, newline=&quot;\r\n&quot;) as fh:
+        fh.write(text)
+
+
+if __name__ == &quot;__main__&quot;:
+    os.makedirs(OUT, exist_ok=True)
+    for name, edits in EDITS.items():
+        orig = body(name)
+        corr = apply_edits(orig, edits)
+        write(os.path.join(OUT, f&quot;{name}.pkb&quot;), orig)
+        write(os.path.join(OUT, f&quot;{name}_corrected.pkb&quot;), corr)
+        diff = list(difflib.unified_diff(orig, corr, lineterm=&quot;&quot;, n=3))
+        hunks = sum(1 for l in diff if l.startswith(&quot;@@&quot;))
+        print(f&quot;  {name:&lt;32} {len(orig):&gt;6} -&gt; {len(corr):&lt;6} {hunks} hunks&quot;)</code></pre></details></section><section id='file-scripts-master-table-py'><h3 class='fname'>scripts/master_table.py</h3><details><summary>Show scripts/master_table.py</summary><pre><code class='language-python'>&quot;&quot;&quot;Build the section-1 table of the review: one row per problem, ordered by cost.
+
+Percentages come from awr.json (sum of Percentage per sql_id, each sql_id counted
+once). Fill ROWS with the analyst&#x27;s judgement. Output is frag_master.html, to be
+included in the report where &lt;!--MASTER_TABLE--&gt; stands.
+
+Status must say whether code is supplied:
+  done   Corrected     a corrected package body is in package_code/
+  rec    Recommended   described only: DBA action, setup, or code outside the database
+  input  Needs input   the fix needs a run from the customer; say which in section 3
+  none   Not analysed  source not supplied
+&quot;&quot;&quot;
+import collections
+import html
+import json
+
+ST = {
+    &quot;done&quot;: (&quot;Corrected&quot;, &quot;st-done&quot;, &quot;A corrected package body is supplied. Compile and test it.&quot;),
+    &quot;rec&quot;: (&quot;Recommended&quot;, &quot;st-rec&quot;, &quot;Described only: a DBA action, a setup change, or code outside the database.&quot;),
+    &quot;input&quot;: (&quot;Needs input&quot;, &quot;st-input&quot;, &quot;The fix needs a run from you. Section 3 says which.&quot;),
+    &quot;none&quot;: (&quot;Not analysed&quot;, &quot;st-none&quot;, &quot;The source was not in the extracts supplied.&quot;),
+}
+
+CSS = &quot;&quot;&quot;.st-done{background:#1e8449}.st-rec{background:#2471a3}.st-input{background:#b9770e}.st-none{background:#c0392b}
+.sid{display:inline-block;font-family:Consolas,monospace;font-size:11px;padding:1px 5px;border-radius:3px;color:#fff;margin-bottom:2px}
+.tag{display:inline-block;font-size:11px;font-weight:bold;padding:1px 6px;border-radius:3px;color:#fff;white-space:nowrap}
+table.master td{vertical-align:top;font-size:12.5px}table.master th{font-size:12px}&quot;&quot;&quot;
+
+# (sql_ids, where, defect, change, status, file)
+ROWS = [
+    # ([&quot;cyz8xf1a7mwqh&quot;], &quot;XX_PKG&quot;, &quot;what is wrong, 1-3 sentences&quot;, &quot;what changes, 1-3 sentences&quot;, &quot;done&quot;, &quot;XX_PKG_corrected.pkb&quot;),
+]
+
+
+def build(awr=&quot;awr.json&quot;):
+    pct = collections.defaultdict(float)
+    for r in json.load(open(awr, encoding=&quot;utf-8&quot;)):
+        if r.get(&quot;Sql Id&quot;):
+            pct[r[&quot;Sql Id&quot;]] += float(r.get(&quot;Percentage&quot;) or 0)
+    counted, items = set(), []
+    for ids, where, defect, change, st, f in ROWS:
+        share = sum(pct.get(s, 0.0) for s in ids if s not in counted)
+        counted.update(ids)
+        items.append([share, ids, where, defect, change, st, f])
+    top40 = {s for s, _ in sorted(pct.items(), key=lambda kv: -kv[1])[:40]}
+    for it in items:
+        if it[5] == &quot;none&quot;:
+            it[0] = sum(pct[s] for s in top40 - counted)
+    items.sort(key=lambda x: -x[0])
+
+    band, cnt = collections.defaultdict(float), collections.Counter()
+    for share, _i, _w, _d, _c, st, _f in items:
+        band[st] += share
+        cnt[st] += 1
+    out = [&#x27;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Status&lt;/th&gt;&lt;th&gt;% DB CPU&lt;/th&gt;&lt;th&gt;Rows&lt;/th&gt;&lt;th&gt;Meaning&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&#x27;]
+    for st in (&quot;done&quot;, &quot;rec&quot;, &quot;input&quot;, &quot;none&quot;):
+        label, cls, meaning = ST[st]
+        out.append(f&#x27;&lt;tr&gt;&lt;td&gt;&lt;span class=&quot;tag {cls}&quot;&gt;{label}&lt;/span&gt;&lt;/td&gt;&lt;td class=&quot;n&quot;&gt;{band[st]:.2f}&lt;/td&gt;&#x27;
+                   f&#x27;&lt;td class=&quot;n&quot;&gt;{cnt[st]}&lt;/td&gt;&lt;td&gt;{meaning}&lt;/td&gt;&lt;/tr&gt;&#x27;)
+    out.append(&#x27;&lt;/tbody&gt;&lt;/table&gt;\n&lt;table class=&quot;master&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;sql_id&lt;/th&gt;&lt;th&gt;% DB CPU&lt;/th&gt;&lt;th&gt;Where&lt;/th&gt;&#x27;
+               &#x27;&lt;th&gt;The defect&lt;/th&gt;&lt;th&gt;The change&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&#x27;)
+    for share, ids, where, defect, change, st, f in items:
+        label, cls, _ = ST[st]
+        sids = &quot;&lt;br&gt;&quot;.join(f&#x27;&lt;span class=&quot;sid {cls}&quot;&gt;{i}&lt;/span&gt;&#x27; for i in ids) or &#x27;&lt;span class=&quot;small&quot;&gt;several&lt;/span&gt;&#x27;
+        fileline = f&#x27;&lt;br&gt;&lt;span class=&quot;small&quot;&gt;File: &lt;code&gt;{html.escape(f)}&lt;/code&gt;&lt;/span&gt;&#x27; if f else &quot;&quot;
+        out.append(f&#x27;&lt;tr&gt;&lt;td&gt;{sids}&lt;/td&gt;&lt;td class=&quot;n&quot;&gt;{share:.2f}&lt;/td&gt;&lt;td class=&quot;small&quot;&gt;{html.escape(where)}&lt;/td&gt;&#x27;
+                   f&#x27;&lt;td&gt;{html.escape(defect)}&lt;/td&gt;&lt;td&gt;{html.escape(change)}{fileline}&lt;/td&gt;&#x27;
+                   f&#x27;&lt;td&gt;&lt;span class=&quot;tag {cls}&quot;&gt;{label}&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;&#x27;)
+    out.append(&#x27;&lt;/tbody&gt;&lt;/table&gt;&#x27;)
+    return &quot;\n&quot;.join(out)
+
+
+if __name__ == &quot;__main__&quot;:
+    open(&quot;frag_master.html&quot;, &quot;w&quot;, encoding=&quot;utf-8&quot;, newline=&quot;\n&quot;).write(build())
+    print(&quot;frag_master.html written; add this CSS to the report head:\n&quot; + CSS)</code></pre></details></section><section id='file-scripts-verify-deliverables-py'><h3 class='fname'>scripts/verify_deliverables.py</h3><details><summary>Show scripts/verify_deliverables.py</summary><pre><code class='language-python'>&quot;&quot;&quot;Pre-publish checks for a performance review. Run from the working folder:
+
+    python verify_deliverables.py &lt;report.html&gt; [more files or folders...]
+
+Fails loudly on: a sql_id cited in the review html that is not in awr.json or sga.json,
+control characters, a UTF-8 BOM, LF-only .pkb, a .diff file, a section reference that
+does not resolve, a second numbering scheme (&quot;Finding N&quot;), and words an expert
+reader should not have to look up.
+&quot;&quot;&quot;
+import glob
+import html
+import json
+import os
+import re
+import sys
+
+BANNED = [&quot;memois&quot;, &quot;orthogonal&quot;, &quot;leverag&quot;, &quot;utilis&quot;, &quot;holistic&quot;, &quot;paradigm&quot;, &quot;wannabe&quot;,
+          &quot;belt-and-braces&quot;, &quot;in order to&quot;, &quot;it is worth noting&quot;, &quot;needless to say&quot;]
+
+ids = set()
+for f in (&quot;awr.json&quot;, &quot;sga.json&quot;):
+    if os.path.exists(f):
+        for r in json.load(open(f, encoding=&quot;utf-8&quot;)):
+            if r.get(&quot;Sql Id&quot;):
+                ids.add(r[&quot;Sql Id&quot;])
+
+# sql_ids that come from other extracts (plan history, ASH) rather than the two summaries
+if os.path.exists(&quot;known_ids.txt&quot;):
+    ids.update(l.strip() for l in open(&quot;known_ids.txt&quot;, encoding=&quot;utf-8&quot;) if l.strip())
+
+SQLID = re.compile(r&quot;(?&lt;![0-9a-z])(?=[a-z0-9]{13}(?![0-9a-z]))(?=[a-z0-9]*[0-9])(?=[a-z0-9]*[a-z])[a-z0-9]{13}&quot;)
+
+files = []
+for a in sys.argv[1:]:
+    files += [a] if os.path.isfile(a) else glob.glob(os.path.join(a, &quot;**&quot;, &quot;*&quot;), recursive=True)
+
+problems = 0
+for p in files:
+    if os.path.isdir(p) or p.endswith((&quot;.xlsx&quot;, &quot;.json&quot;, &quot;.py&quot;)):
+        continue
+    b = open(p, &quot;rb&quot;).read()
+    name = os.path.basename(p)
+    if b.startswith(b&quot;\xef\xbb\xbf&quot;):
+        print(&quot;BOM         &quot;, name); problems += 1
+    if [c for c in set(b) if c &lt; 9 or 11 &lt;= c &lt;= 12 or 14 &lt;= c &lt;= 31]:
+        print(&quot;control char&quot;, name); problems += 1
+    if name.endswith(&quot;.diff&quot;):
+        print(&quot;diff file   &quot;, name); problems += 1
+    if name.endswith(&quot;.pkb&quot;) and b.count(b&quot;\r\n&quot;) * 2 &lt; b.count(b&quot;\n&quot;):
+        print(&quot;LF only     &quot;, name); problems += 1
+    text = b.decode(&quot;utf-8&quot;, &quot;replace&quot;)
+    plain = html.unescape(re.sub(&quot;&lt;[^&gt;]+&gt;&quot;, &quot; &quot;, text))
+    for m in SQLID.finditer(plain) if name.endswith(&quot;.html&quot;) else ():
+        t = m.group(0)
+        if ids and t not in ids and not t.isalpha():
+            print(&quot;unknown id  &quot;, name, t); problems += 1
+    for w in BANNED:
+        if w in plain.lower():
+            print(&quot;banned word &quot;, name, repr(w)); problems += 1
+    if name.endswith(&quot;.html&quot;):
+        secs = {int(m.group(1)) for m in re.finditer(r&quot;&lt;h2[^&gt;]*&gt;(\d+)\.&quot;, text)}
+        body = re.sub(r&quot;&lt;h2[^&gt;]*&gt;.*?&lt;/h2&gt;&quot;, &quot;&quot;, text, flags=re.S)
+        for m in re.finditer(r&quot;\b[Ss]ections? (\d+)\b&quot;, html.unescape(re.sub(&quot;&lt;[^&gt;]+&gt;&quot;, &quot; &quot;, body))):
+            if int(m.group(1)) not in secs:
+                print(&quot;dangling ref&quot;, name, m.group(0)); problems += 1
+        if re.search(r&quot;\b[Ff]inding \d+&quot;, plain):
+            print(&quot;second numbering scheme (Finding N)&quot;, name); problems += 1
+        if re.search(r&quot;&lt;pre&gt;[^&lt;]*\n\s*\n&quot;, text):
+            print(&quot;blank lines inside &lt;pre&gt;&quot;, name); problems += 1
+
+print(&quot;OK&quot; if not problems else f&quot;{problems} problems&quot;)
+sys.exit(1 if problems else 0)</code></pre></details></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

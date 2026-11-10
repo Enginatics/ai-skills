@@ -218,6 +218,9 @@ Skills: `migrate-custom-reports`, `migrate-webadi`
 **Test against the original**: "Test the new Blitz Report against the standard Oracle report with last month as parameters." · "Compare the output of both reports row by row and explain the differences."  
 Skills: `report-tester`
 
+**Review the performance of a whole EBS instance**: "Review these DBA AWR and SGA extracts and correct the custom code behind the top SQL." · "Which Blitz Reports do I run first for a server-wide performance review?" · "Check the memory and database parameters of this instance against the EBS requirements."  
+Skills: `ebs-performance-review`
+
 **Tune a slow report**: "This report takes 10 minutes. Find what makes it slow and tune the SQL." · "Measure the buffer gets per row of this report and fix the expensive part."  
 Skills: `tune-report-performance`
 

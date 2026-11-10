@@ -216,6 +216,7 @@ e.g. `mil.inventory_location_type=to_number(xxen_util.lookup_code(:locator_type,
 - Only works with `1=1` or `&lexical` anchors, not `:bind` anchors
 - Do NOT use `xxen_util.contains` in SQL_TEXT — that pattern has the column wrapped in a function on the right side, which defeats auto-detection
 - `xxen_util.contains` is for LOV_QUERY_DSP dependent filtering only (`:$flex$.param` syntax)
+- A multi-select parameter that chooses output columns without filtering rows takes two sub-rows. The displayed row carries the LOV and `x.column_name=:display_columns` on a lexical anchor placed in a comment of the main SQL (`/*&display_columns_list*/`): that row is what makes the run screen offer multiple values, and the in-clause it generates lands inside the comment, where its `:run_id` is not bound. The second row, on a select-list lexical (`&display_columns`), is a `select` returning one `<expression> <alias>,` line per chosen column from an inline list of names and expressions, filtered by `xxen_util.contains(:display_columns,x.column_name)='Y'` (a dynamic lexical sees the raw `<multiple_values>A;B` value). A blank parameter removes both anchors, so the optional columns are then absent; declare both anchors in `<ANCHORS>`.
 
 **Reference:** [Blitz Report Developer Guide - Multiple Values](https://www.enginatics.com/blitz-report-developer-guide/#multiple_values)
 

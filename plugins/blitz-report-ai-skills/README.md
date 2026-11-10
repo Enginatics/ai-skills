@@ -25,6 +25,10 @@ Then run `/blitz-report-ai-skills:blitz-environment-setup` once to describe your
 - [Oracle Report Analyzer](https://www.enginatics.com/ai-skills/rdf-analyzer/) (`rdf-analyzer`): Analyze Oracle EBS standard reports (.rdf and XML Publisher data templates) to extract SQL queries, parameters, output structure, and PL/SQL logic.
 - [WebADI Migration Rules](https://www.enginatics.com/ai-skills/webadi-migration/) (`webadi-migration`): Converting Oracle WebADI integrators gathered by the Blitz Report Custom Reports Converter into Blitz Uploads.
 
+## Performance Tuning
+
+- [EBS Performance Review](https://www.enginatics.com/ai-skills/ebs-performance-review/) (`ebs-performance-review`): Server-wide Oracle EBS performance review for a customer from Blitz Report DBA extracts. Covers memory and parameter configuration, the top AWR SQLs, and literal-SQL hard parsing, and delivers corrected package code plus a one-table HTML summary.
+
 ## Report Development
 
 - [Blitz Report Developer](https://www.enginatics.com/ai-skills/blitz-report-developer/) (`blitz-report-developer`): Create and update Blitz Reports and uploads for Oracle EBS.

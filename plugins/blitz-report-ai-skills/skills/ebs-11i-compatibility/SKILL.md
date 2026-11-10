@@ -177,6 +177,10 @@ The Nth row is `argumentN`. The argument list is a real 11i-vs-r12 difference, s
 
 The parse ends the connection (the client sees `DPY-4011` / `ORA-03113`, no ORA error), while 19c parses and runs it. Restructure so that the `connect by` block is referenced once instead of hinting it. Parse every rewritten report on an R12.1.3 instance on an 11.2 database and an 11i instance before shipping; a 19c run proves nothing here.
 
+### An XMLTABLE over an xmltype column of another XMLTABLE kills the session on 11.2.0.4
+
+`xmltable('.../Sheet' passing x.xml columns name ..., item xmltype path 'View') s, xmltable('View/...' passing s.item ...) j` (two `XPATH EVALUATION` steps under nested loops in the plan) ends the connection on 11.2.0.4 with `ORA-03113` at the client and `ORA-07445 [evaopn3]` in the alert log, at the first fetch and whatever the data; 19c runs it. Write one XMLTABLE whose path selects the parent through a passing variable: `xmltable('.../Sheet[@Name=$n]/View/...' passing x.xml, t.sheet_name as "n" columns ...)`.
+
 ### `standard_hash` needs 12.1 — derive deterministic GUIDs from seeded `ora_hash`
 
 `standard_hash` does not exist before database 12.1, so shipped code using it fails to compile on 11.2. A deterministic 16-byte GUID available on every release is four `to_char(ora_hash(p_text,4294967295,<seed 0..3>),'fm0XXXXXXX')` concatenated. Hash a VARCHAR2: `unistr()` returns NVARCHAR2, which hashes in the national character set and gives a different value per instance; VARCHAR2 text hashes identically on AL32UTF8 and UTF8 databases.

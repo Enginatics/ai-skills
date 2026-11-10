@@ -79,6 +79,43 @@
     ]
   },
   {
+    "name": "ebs-performance-review",
+    "title": "EBS Performance Review",
+    "type": "development",
+    "category": "Performance Tuning",
+    "description": "Server-wide Oracle EBS performance review for a customer from Blitz Report DBA extracts. Covers memory and parameter configuration, the top AWR SQLs, and literal-SQL hard parsing, and delivers corrected package code plus a one-table HTML summary. Use when a customer sends DBA AWR/SGA SQL Performance Summary, SGA+PGA Memory, Parameter Validation and Text Search extracts.",
+    "reports": [
+      "Blitz Report Custom Reports Converter",
+      "Blitz Reports",
+      "DBA AWR Active Session History",
+      "DBA AWR SQL Execution Plan History",
+      "DBA AWR SQL Performance Summary",
+      "DBA AWR Settings",
+      "DBA AWR System Metrics Summary",
+      "DBA AWR System Time Summary",
+      "DBA Alert Log",
+      "DBA Automated Maintenance Tasks",
+      "DBA Database Parameter Validation",
+      "DBA Parameters",
+      "DBA Result Cache Objects and Dependencies",
+      "DBA Result Cache Statistics",
+      "DBA SGA Buffer Cache Object Usage",
+      "DBA SGA SQL Performance Summary",
+      "DBA SGA+PGA Memory Configuration",
+      "DBA Segments",
+      "DBA Table Modifications",
+      "DBA Text Search",
+      "FND Concurrent Requests",
+      "FND Profile Option Values"
+    ],
+    "path": "plugins/blitz-report-ai-skills/skills/ebs-performance-review",
+    "prompts": [
+      "Review these DBA AWR and SGA extracts and correct the custom code behind the top SQL.",
+      "Which Blitz Reports do I run first for a server-wide performance review?",
+      "Check the memory and database parameters of this instance against the EBS requirements."
+    ]
+  },
+  {
     "name": "blitz-report-developer",
     "title": "Blitz Report Developer",
     "type": "development",
