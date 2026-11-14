@@ -26,11 +26,15 @@ def read_sheet(path):
 def read_source(path):
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     src = {}
-    for n, r in enumerate(wb.worksheets[0].iter_rows(values_only=True)):
-        if n == 0 or r[2] is None:
+    # an export over the Excel row limit continues on further sheets (<name>_2, ...)
+    for ws in wb.worksheets:
+        if ws.title == "Parameters":
             continue
-        owner, typ, name, line, text = r[:5]
-        src.setdefault(f"{owner}|{typ}|{name}", {})[int(line)] = (text or "").rstrip("\n")
+        for n, r in enumerate(ws.iter_rows(values_only=True)):
+            if n == 0 or r[2] is None:
+                continue
+            owner, typ, name, line, text = r[:5]
+            src.setdefault(f"{owner}|{typ}|{name}", {})[int(line)] = (text or "").rstrip("\n")
     wb.close()
     return src
 

@@ -584,6 +584,10 @@ class UploadLint:
             if not m:
                 continue
             col = m.group(2).lower()
+            # a code compared with an id that is itself a code (`flvv.lookup_code id`) is the id comparison
+            id_m = re.search(r'([\w.()]+)\s+id\s*[,\n]', lov)
+            if col.endswith('_code') and id_m and re.search(r'_code\)*$', id_m.group(1).lower()):
+                continue
             if re.search(r'_(code|name|number|description|segments)$', col):
                 pname_m = re.search(r'<PARAMETER_NAME>([^<]+)</PARAMETER_NAME>', block)
                 pname = pname_m.group(1).strip() if pname_m else '?'

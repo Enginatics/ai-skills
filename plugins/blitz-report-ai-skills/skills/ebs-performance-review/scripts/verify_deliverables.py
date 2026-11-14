@@ -54,7 +54,8 @@ for p in files:
         t = m.group(0)
         if ids and t not in ids and not t.isalpha():
             print("unknown id  ", name, t); problems += 1
-    for w in BANNED:
+    # banned words apply to our prose, not to the customer's own code
+    for w in BANNED if not name.endswith((".pkb", ".pks", ".sql")) else ():
         if w in plain.lower():
             print("banned word ", name, repr(w)); problems += 1
     if name.endswith(".html"):

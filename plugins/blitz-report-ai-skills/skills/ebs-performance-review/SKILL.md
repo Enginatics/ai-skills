@@ -70,7 +70,7 @@ For each statement in the top 100, classify it before doing anything else:
 
 1. Custom PL/SQL with source supplied: correct the code. Read the whole procedure, not just the statement: the fix is often call volume (a lookup inside a per-row loop, a poll interval, a cursor that selects everything and rebuilds a table), not the statement's shape.
 2. Custom PL/SQL without source: list the package for the next Text Search run. For every custom concurrent program whose source we lack, hand the customer ONE semicolon-separated list of concurrent program short names for the Blitz Report Custom Reports Converter in the same message as the other runs, rather than marking rows Needs input one by one; take the short names from the AWR `Module` (`e:<app>:cp:<appl>/<SHORT_NAME>`). Reports Builder runs show `rwrun@<host>` without the program: identify them with FND Concurrent Requests (Execution Method Oracle Reports, Started within Days = the AWR window, Running longer than x Minutes) and add their short names to the list. When the AWR `Module` is a concurrent program short name (`e:PO:cp:xxpo/XXPO_...`) rather than a package, the source comes through the Blitz Report Custom Reports Converter instead, which also gathers the report definitions, parameters and dependent objects. A program that is a report (Reports Builder, BI Publisher) is classified first. A data report (account analysis, revaluation, aging, any listing) always moves to a tuned Blitz Report: a library report where one covers it, else a conversion with the `migrate-custom-reports` skill, never a corrected rdf or data template. Only a printed document (pick and pack slip, commercial invoice, purchase order print) is corrected in place; a PL/SQL interface is treated as a package (for an `EXECUTION_METHOD_CODE='I'` program the converter gathers the package named in the executable's `EXECUTION_FILE_NAME`, whatever its prefix, plus its custom dependencies).
-3. Oracle code: never edit. A plan baseline, an index check, a purge, or an SR.
+3. Oracle code: never edit. Search My Oracle Support for an existing fix first (patch, bug, note) by the program, package and file version, the table names and the distinctive text of the statement; recommend the patch when one exists. Only without a fix: an index check, a purge, or an SR. A plan baseline is never the recommendation for Oracle code.
 4. External client (`.exe` modules): the SQL text is in AWR; supply the corrected predicate for the integration owner.
 5. Oracle Alerts and Forms personalisations: setup changes, no package.
 
@@ -83,7 +83,7 @@ Patterns that recur:
 - Setup or dictionary lookups inside a per-row loop: cache per request in a package associative array, cleared when `fnd_global.conc_request_id` changes. Same statement, same plan, fewer executions.
 - `fnd_concurrent.wait_for_request` with `interval => 1`.
 - `DELETE ... WHERE NVL(group_id,0) < 0` on `BOM_EXPLOSION_TEMP`: disables its indexes. It is a session-duration GTT: never recommend TRUNCATE.
-- Twenty-plus plans for one sql_id: pin the cheapest observed plan with `dbms_spm.load_plans_from_cursor_cache` as a holding action; drop the baseline when the text is corrected.
+- Twenty-plus plans for one custom sql_id: pin the cheapest observed plan with `dbms_spm.load_plans_from_cursor_cache` as a holding action; drop the baseline when the text is corrected.
 - Copy-pasted statements: one sql_id with many source locations. Replace all copies; recommend one function as a follow-up.
 
 ### 3. Literals
@@ -92,7 +92,7 @@ From the SGA extract, `Literals Dupl Count` is `count(distinct sql_id)` per `for
 
 ## Deliverables
 
-Everything goes into one deliverables folder per review. Working files stay in a separate working folder.
+Everything goes into one deliverables folder per review, created as a subfolder of the folder that holds the customer's extracts (on the shared drive), never only under a local temp folder. Working files stay in a separate working folder.
 
 1. `<Customer>_Performance_Review_<date>.html`. Structure, in this order and nothing else before it:
    - Section 1, one table: sql_id(s) colour-coded by status, % DB CPU, where, the defect (one to three sentences), the change (one to three sentences, file name if supplied), status. Statuses: Corrected (file supplied), Recommended (described, no file: DBA, setup, external), Needs input (say which run), Not analysed (source not supplied). Rows ordered by cost.

@@ -18,6 +18,7 @@ user-invocable: false
 - Treat stable core EBS behaviour as an invariant, not a failure mode to defend against. A missing `mtl_system_items_tl` row for an installed language, a missing seeded lookup, a base table the release is documented to have: if any of these were broken the customer would have far larger problems than one upload or report, so code and diagnose on the assumption they hold. Do not add guards, outer joins or fallbacks for them, and do not offer them as candidate root causes. Same family as coding-standards #50.
 - Deploy, import and build through the documented command path, not a convenient equivalent assembled on the spot. A self-made variant fails in ways that belong to the variant, and those failures get reported as product defects.
 - Never run an expensive or exploratory query on a shared database (unbounded `connect by` CLOB splitting, per-row regexp over large sets, scans of `all_source`/`dba_objects`/APEX tables to find text).
+- Confirm every fact about Oracle's code or data that a design relies on (an api's arguments or behaviour, a package's logic, a table's columns, how seeded data is set up) on the 12.2 instance as well as on the development instance before reporting it: they run different patch levels of the same packages.
 
 ## Standard Workflow for Modifying an Existing Report or Upload (MANDATORY)
 
