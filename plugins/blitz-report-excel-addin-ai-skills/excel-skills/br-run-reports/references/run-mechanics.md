@@ -37,13 +37,17 @@ Every discovery/run function below takes an optional trailing **`environment`** 
 - When the user names an environment/responsibility, pass the SAME values to the parameter-inspection
   AND the run, so the parameters/LOVs you see match where the report will actually run.
 
-## Keep the workbook tidy — use a throwaway helper sheet
+## Keep the workbook tidy — use a hidden helper sheet
 Do all discovery (`br_report_list_external`, `br_report_params_external`), the run trigger, the
 status check, and any intermediate/helper formulas on a dedicated helper sheet named
-**`blitz_`** (create it if it doesn't exist). Read the values you need from it, then
-**delete `blitz_` when you're done** so the user's workbook stays clean.
-- You must read a spill **while the sheet is visible** — so clean up *afterwards*, not before. (A
-  permanently hidden sheet can't be read, which is why we delete rather than hide.)
+**`blitz_`**. Create it if it doesn't exist; if an earlier run left it hidden, make it visible again
+first (set its visibility — never activate it). Read the values you need from it, then
+**clear `blitz_` and hide it when you're done**: cleared, so no helper formula runs again later;
+hidden, so the user's workbook stays clean.
+- **Never delete a worksheet — not `blitz_`, not any other.** A sheet deleted by an AI assistant can
+  crash Excel and lose the user's unsaved work; clearing and hiding is safe.
+- You must read a spill **while the sheet is visible** — so hide it *afterwards*, not before. (A
+  hidden sheet can't be read, which is why a reused `blitz_` is made visible first.)
 - **Talk to the user in their language, never in function names.** The `br_*` functions, `blitz_`
   and `_blitz_run_status` are your plumbing — say "I'm running the AR Aging report for you", not
   "I'll call `br_run_report_external()` and poll `_blitz_run_status`". Report and column names are

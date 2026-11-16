@@ -139,7 +139,9 @@ not after you discover the symptom.
    creation each failed once this way in the same run). Always:
    `const ws = ctx.workbook.worksheets.getItemOrNullObject(&quot;X&quot;); ws.load(&quot;isNullObject&quot;); await ctx.sync();`
    then `const sheet = ws.isNullObject ? ctx.workbook.worksheets.add(&quot;X&quot;) : ws;` (clear `sheet` if it
-   was reused). Same rule for any get-or-create of a chart / name / table: use the `*OrNullObject`
+   was reused). **Never delete a sheet**, not even to rebuild it: a deletion by the assistant can crash
+   Excel, so a sheet that is no longer wanted is cleared and hidden. Same rule for any get-or-create
+   of a chart / name / table: use the `*OrNullObject`
    variant + `load(&quot;isNullObject&quot;)`, never a try/catch around the throwing getter. (Generic office-js
    discipline the same runs also slipped on, FYI: **assign a range to a variable, `load()` it, `await
    ctx.sync()`, then read from that SAME variable — never re-call `sheet.getRange(&quot;A1&quot;)` for the read.

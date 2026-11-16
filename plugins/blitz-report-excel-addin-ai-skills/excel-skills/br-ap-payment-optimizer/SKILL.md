@@ -236,7 +236,7 @@ re-running the report."
 
 ### Step 8 — Arrange tabs + final validation  *(single `execute_office_js` call + one read)*
 Reorder tabs to `AP_Pay_Run`, `Pay_Schedule`, `Deferred`, `AP_Cash_Req` (+ `Cash_Outflow` if built);
-delete the `blitz_` helper sheet; activate `AP_Pay_Run`.
+clear and hide the `blitz_` helper sheet (never delete a sheet); activate `AP_Pay_Run`.
 **Then the one permitted verification read:** confirm **Selected $ + Deferred $ + Excluded $ = total
 due** (Step-1b anchor), that **Selected $ ≤ cash cap** when a cap was given, and that captured
 discount $ ties to the schedule. This is the only explicit re-read outside Step 1b.

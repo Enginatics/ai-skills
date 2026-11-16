@@ -49,8 +49,10 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
   goes into a Text-format cell, or Excel turns it into a date; a FORMULA never goes into a
   Text-format cell.
 - Ask before writing over cells the user already has; build into empty cells or a new sheet.
-- Keep `blitz_` for helper formulas, never activate it, delete it when done. The statement and
-  drill sheets are the user's deliverables.
+- Keep `blitz_` for helper formulas and never activate it. If an earlier run left it hidden, make
+  it visible again before you read from it; when done, clear it and hide it. Never delete a sheet:
+  a deletion by the assistant can crash Excel. The statement and drill sheets are the user's
+  deliverables.
 - Talk about ledgers, periods, accounts, balances and journals in the user's terms - never name
   the add-in's functions, `blitz_` or the status name.
 - Read-only: this skill never posts or changes anything in Oracle EBS.

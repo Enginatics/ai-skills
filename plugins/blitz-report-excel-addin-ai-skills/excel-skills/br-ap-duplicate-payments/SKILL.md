@@ -369,8 +369,8 @@ no re-extract of the universe — e.g. "Want the check numbers and payment dates
 recoverable pairs as claim evidence? I can add that on this data."
 
 ### Step 8 — Arrange tabs + final validation  *(single `execute_office_js` call + one read)*
-Reorder tabs to `AP_Dup_Recovery`, `Dup_Candidates`, `AP_Invoices`, [`AP_Payments`]; delete the
-`blitz_` helper sheet; activate `AP_Dup_Recovery`.
+Reorder tabs to `AP_Dup_Recovery`, `Dup_Candidates`, `AP_Invoices`, [`AP_Payments`]; clear and hide
+the `blitz_` helper sheet (never delete a sheet); activate `AP_Dup_Recovery`.
 **Then the one permitted verification read:** confirm the dashboard's total candidate $ and pair
 count equal the `Dup_Candidates` totals, and that recoverable + preventable + already-resolved =
 all candidates. This is the only explicit re-read outside Step 1b.

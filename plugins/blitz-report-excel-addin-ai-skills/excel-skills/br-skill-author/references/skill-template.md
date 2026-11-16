@@ -30,6 +30,9 @@ scoring and the verdict; br-run-reports does extraction<; br-data-dashboard the 
 **You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports** (it owns
 connection, responsibility, the run and the completion check). Never call `br_*` functions, and
 never read or rename the result sheet until the extraction is confirmed complete.
+**Never delete a worksheet**: a deletion by the assistant can crash Excel. Clear and hide a scratch
+sheet when you are done with it; on a re-run, rename the sheets it replaces with the suffix `_old`
+and hide them.
 <This skill is read-and-recommend only: it never changes Oracle EBS data. | This skill changes
 Oracle EBS data only through **br-run-uploads**, only on the confirmed rows, and only after the
 two confirmations below.>

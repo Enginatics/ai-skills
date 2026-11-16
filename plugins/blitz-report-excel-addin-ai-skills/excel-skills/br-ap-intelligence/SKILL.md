@@ -30,7 +30,7 @@ values yourself and never write computed arrays. The only text you author is the
 | 2 | replace that cell with plain text, read the status |
 | 3 | status poll — repeat only while it still says `RUNNING` |
 | 4 | rename to `AP_Raw`, add 3 formula columns, autofilter |
-| 5 | create `AP_Detail` (five drill-down blocks) and `AP_Intelligence` (summary, KPI table, tables, chart), delete `blitz_`, activate `AP_Intelligence`, read the KPI block and the top detail rows |
+| 5 | create `AP_Detail` (five drill-down blocks) and `AP_Intelligence` (summary, KPI table, tables, chart), clear and hide `blitz_`, activate `AP_Intelligence`, read the KPI block and the top detail rows |
 | 6 | write the AI commentary cells |
 | — | reply with the ranked actions and the offers |
 
@@ -45,7 +45,8 @@ ANY value, Yes or No, applies the exclusion), no `Pay Through Date`, no `Templat
 every unpaid invoice.
 
 ## Op 1–3 — Extract
-1. Get-or-create `blitz_` (never activate it). In `blitz_!A1` write
+1. Get-or-create `blitz_` (never activate it; make it visible if an earlier run left it hidden). In
+   `blitz_!A1` write
    `=br_run_report_external("AP Cash Requirement","Operating Unit=<OU>")` and read it back — expect
    `BLITZ_RUNNING: ...`. Only on `#BLITZ_REPORT_NOT_FOUND` search with
    `=br_report_list_external("cash requirement")` and re-run with the exact name.
@@ -143,7 +144,7 @@ Fixed layout so the commentary and the reply can reference the cells. `fmt(x)` b
   `B11:B20`, on `B24:B29`, on `B33:B42`, on `D33:D42`; `#,##0` on `C11:C20`, on `C24:C29`, on
   `C33:C42`; `0.0%` on `D24:D29`; wrap text on `E11:E20`. Bold rows 4, 10, 23, 32; column widths A 60,
   B 18, C 12, D 55, E 90. One clustered column chart on `A23:B29` titled `Outstanding by due bucket`,
-  placed right of the tables. Delete `blitz_`. Activate `AP_Intelligence`.
+  placed right of the tables. Clear `blitz_` and hide it. Activate `AP_Intelligence`.
 - End the operation by **reading** `AP_Intelligence!A5:C15` and the top three rows of each detail block
   (`AP_Detail!A3:H5`, `A32:H34`, `A61:H63`, `A90:H92`, `A119:H121`) — the material for Op 6 and the reply.
 
@@ -189,9 +190,9 @@ supplier master data → `AP Suppliers`. Say which report you are running and wh
   validation until the invoice is corrected. If the user asks to release one, say so and point to the
   fix — correct the lines or distributions in the Invoice Workbench and revalidate — instead of
   attempting a release.
-- **Refresh / update the numbers** → read `A16:E20` (the follow-up cards) first, delete `AP_Raw`,
-  `AP_Detail` and `AP_Intelligence`, run Ops 1–6 again and re-create the follow-up cards from the
-  questions you read.
+- **Refresh / update the numbers** → read `A16:E20` (the follow-up cards) first, rename `AP_Raw`,
+  `AP_Detail` and `AP_Intelligence` with the suffix `_old` (plus a number when that name is taken) and
+  hide them, run Ops 1–6 again and re-create the follow-up cards from the questions you read.
 - **A different Operating Unit** → the same, with the new value; never merge two runs into one sheet.
 
 ## Rules
@@ -199,7 +200,8 @@ supplier master data → `AP Suppliers`. Say which report you are running and wh
   array so `8-15`-style text cannot turn into a date.
 - Get-or-create sheets (Claude: `getItemOrNullObject` + `load("isNullObject")`, never `getItem` in
   try/catch; load a range, sync, read that same variable). Copilot: one edit action per Op.
-- Never activate `blitz_`; delete it in Op 5. Never re-run a report that produced a data sheet.
+- Never activate `blitz_`; clear and hide it in Op 5. Never delete a sheet: a deletion by the assistant
+  can crash Excel. Never re-run a report that produced a data sheet.
 - **Every range address is ONE contiguous block.** A comma-separated multi-area address (`B11,B24`) is
   rejected outright and the cell-by-cell recovery that follows is what turns a fast run into a slow one.
   Issue one call per block; several blocks in the same operation are free.

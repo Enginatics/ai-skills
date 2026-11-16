@@ -36,9 +36,11 @@ simply isn&#x27;t loaded — ask the user to load/connect it. Never retry the ot
 work around a `#NAME?`.
 
 ## Keep the workbook tidy
-Do discovery on a throwaway helper sheet named **`blitz_`** (create it, delete it when done), exactly
-as in br-run-reports. The **upload grid itself lands on its own new sheet** created by
-`br_run_upload_external` — that is the working deliverable the user edits; leave it visible.
+Do discovery on a helper sheet named **`blitz_`** (create it, or make it visible again if an earlier
+run left it hidden; clear it and hide it when done), exactly as in br-run-reports. **Never delete a
+sheet** - a deletion by the assistant can crash Excel. The **upload grid itself lands on its own
+new sheet** created by `br_run_upload_external` — that is the working deliverable the user edits;
+leave it visible.
 
 **🚨 NEVER activate the `blitz_` sheet.** You can write formulas to it and read their results
 without it being the active sheet — so just don&#x27;t call `activate()` on it. Activating it (a) puts
@@ -271,7 +273,8 @@ lines to Oracle?&quot;), never about the mechanism.
 - **Leave the upload sheet clean.** It is the user&#x27;s deliverable. Keep every lookup on `blitz_`
   (pass the upload sheet name as the `sheet` argument), put the two trigger formulas well to the
   right of the grid, never write marker text such as `process_triggered`, and clear any scratch you
-  did put on the sheet before you report the outcome. Delete `blitz_` when you are finished.
+  did put on the sheet before you report the outcome. Clear and hide `blitz_` when you are
+  finished; never delete it.
 - **Do not write placeholder/sample data into an upload sheet.** If you lack the real values, fill
   what you know, look up the LOV columns, and ask the user for the rest — a grid seeded with invented
   accounts and amounts looks ready to submit and is one `br_process_upload_external()` away from

@@ -45,8 +45,9 @@ reference. This file is only the summary.
 ## Core rules (full list in the reference)
 
 - Use report and parameter names EXACTLY as the discovery functions return them.
-- Keep every helper formula on `blitz_`; never activate that sheet; delete it when finished. The
-  report data lands on its own new sheet - that is the user's deliverable, leave it visible.
+- Keep every helper formula on `blitz_`; never activate that sheet; when finished clear it and hide
+  it. Never delete a sheet: a deletion by the assistant can crash Excel. The report data lands on
+  its own new sheet - that is the user's deliverable, leave it visible.
 - Once a report has produced a data sheet, do not run it again (a second run creates a duplicate
   sheet). `ERROR:` while a populated sheet exists means the data is good and only
   post-processing complained - use the data and note the warning. The same applies when an

@@ -55,7 +55,7 @@ tbl.style = &quot;TableStyleMedium2&quot;;
 **Done when:** the table exists and is named.
 
 ### Step 4 — Create Dashboard sheet
-Add a new sheet named `Dashboard`. If one exists, delete and recreate. Do NOT set `position` via the property (it errors); use `Excel.WorksheetPositionType` if needed, or leave at end.
+Add a new sheet named `Dashboard`. If one exists, first rename it to `Dashboard_old` (plus a number when that name is taken) and hide it; never delete a sheet, a deletion by the assistant can crash Excel. Do NOT set `position` via the property (it errors); use `Excel.WorksheetPositionType` if needed, or leave at end.
 
 **Done when:** Dashboard sheet exists and is active.
 

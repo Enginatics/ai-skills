@@ -24,7 +24,8 @@ auditor must be able to see the reason, not just a black-box score.
 ## Shared conventions (the br_ analytics house style)
 1. **Source** = an existing Blitz Report sheet; row 1 is headers. **Never add, rename, or delete
    source columns** — read only.
-2. **Scratch work** on a helper sheet `br_calc_`; delete it when done.
+2. **Scratch work** on a helper sheet `br_calc_` (make it visible if an earlier run left it hidden);
+   clear and hide it when done, never delete a sheet.
 3. **Outputs (all four):** a results sheet `br_anomaly_results` (key + metric(s) + score + `Flag` +
    `Reason`); a chart; a dashboard (reuse `br-data-dashboard` via `read_skill("br-data-dashboard")`
    for its KPI/slicer layout; add a slicer on `Flag`); a plain-English chat summary with

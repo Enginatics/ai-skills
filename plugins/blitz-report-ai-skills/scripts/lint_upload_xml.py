@@ -63,7 +63,7 @@ SHARED_LOV_FINGERPRINTS = [
      'EAM Asset Number', '8E2FF36EDEEB79D2E0530100007F1FF2'),
     (r'.*DEPARTMENT', r'\bbom_departments\b',
      'BOM Department (org code dependent)', 'E7CCB27F39531272E0530100007F62B4'),
-    (r'.*CATEGORY|.*ITEM_CATEGORY', r'mtl_categories|mtl_item_categories',
+    (r'.*CATEGORY$', r'mtl_categories|mtl_item_categories',
      'INV Category (org id dependent)', '8E2FF36EDEFF79D2E0530100007F1FF2'),
     (r'.*WIP.*ACCOUNTING.*|.*ACCOUNTING.*CLASS.*', r'wip_accounting_classes',
      'WIP Class Code (org dependent)', 'E7CCB27F39561272E0530100007F62B4'),

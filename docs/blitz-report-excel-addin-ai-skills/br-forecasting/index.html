@@ -28,7 +28,8 @@ and stays live if the source refreshes. No external compute needed.
 
 ## Shared conventions (the br_ analytics house style)
 1. **Source** = an existing Blitz Report sheet; row 1 is headers. **Never modify source columns.**
-2. **Scratch work** on `br_calc_`; delete when done.
+2. **Scratch work** on `br_calc_` (make it visible if an earlier run left it hidden); clear and hide
+   it when done, never delete a sheet.
 3. **Outputs (all four):** a results sheet `br_forecast_results` (`Period | Actual | Forecast |
    Lower | Upper`); a chart; a dashboard (reuse `br-data-dashboard` for KPI layout); a
    plain-English chat summary with the accuracy read-out and caveats.

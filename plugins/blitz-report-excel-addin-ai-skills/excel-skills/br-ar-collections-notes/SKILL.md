@@ -109,7 +109,7 @@ Annotate `Worklist` with a `Logged <date>` column so the next worklist run shows
 ## Validation (before declaring done)
 - One note per customer; every one individually visible (or pattern-approved) at Step 2.
 - No excluded customer logged; no transaction-level rows unless the user asked.
-- Reported count = Success rows. Upload sheet clean; `blitz_` deleted.
+- Reported count = Success rows. Upload sheet clean; `blitz_` cleared and hidden, never deleted.
 
 ## Re-run / refresh
 "Log the next tier too" → same grid, append rows, repeat Steps 4–6 (untouched rows already

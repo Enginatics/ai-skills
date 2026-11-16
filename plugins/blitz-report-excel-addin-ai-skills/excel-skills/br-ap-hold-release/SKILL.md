@@ -39,7 +39,7 @@ Release only: never write `Hold Name` / `Hold Reason` (that places a hold).
 | 7 | prepare trigger |
 | 8 | poll + read validation results → **confirmation 2** |
 | 9 | process trigger |
-| 10 | poll + read per-row results, delete `blitz_` → reply |
+| 10 | poll + read per-row results, clear and hide `blitz_` → reply |
 
 No discovery calls (`br_report_list_external`, `br_report_params_external`, `br_report_templates_external`,
 `br_upload_columns_external`) — everything they would say is below. Ops 5+6 may be one operation where
@@ -84,7 +84,7 @@ otherwise show the list and ask:
 - everything else → `Validated`
 
 ## Ops 1–3 — Download
-1. Get-or-create `blitz_`; `blitz_!A1` = `=br_run_upload_external("AP Invoice Hold Upload","Operating Unit=<OU>")`;
+1. Get-or-create `blitz_` (make it visible if an earlier run left it hidden); `blitz_!A1` = `=br_run_upload_external("AP Invoice Hold Upload","Operating Unit=<OU>")`;
    read it back (`BLITZ_RUNNING: ...`; `#BLITZ_NOT_CONNECTED` → ask the user to connect on the ribbon).
 2. Overwrite `blitz_!A1` with `download triggered`; `blitz_!A3` = `=_blitz_run_status`; read it.
 3. One quiet read per turn while `RUNNING`, nothing else touches the workbook. Stop at
@@ -135,7 +135,8 @@ the grid's hold groups (count, $, suppliers) as a multi-select with nothing pre-
 ## Ops 9–10 — Release and report
 9. Trigger cell = `=br_process_upload_external()`.
 10. Poll until `DONE: <n> succeeded, <n> errored (request <id>)`, write
-    `=br_validation_results_external(TRUE, "<Upload Sheet Name>")` on `blitz_`, read it, delete `blitz_`.
+    `=br_validation_results_external(TRUE, "<Upload Sheet Name>")` on `blitz_`, read it, then clear and
+    hide `blitz_` (never delete a sheet: a deletion by the assistant can crash Excel).
 Reply in the user's language: holds released (hold name, invoice, supplier, $), failures with their
 message, the request id. Never claim success without those per-row results. **If 0 holds released, say
 exactly that in the first sentence** — a validation count ("26 valid, 0 flagged") is not a release, and

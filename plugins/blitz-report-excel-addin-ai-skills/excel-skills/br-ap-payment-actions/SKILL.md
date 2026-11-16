@@ -86,7 +86,7 @@ Never write `Release Name`/`Release Reason` or any other column.
 ## Validation (before declaring done)
 - Nothing past due, discounted, or critical was deferred; every held row was user-confirmed.
 - Pay-run sheet totals tie to the optimizer's own figures.
-- Reported held count = Success rows. Upload sheet clean; `blitz_` deleted.
+- Reported held count = Success rows. Upload sheet clean; `blitz_` cleared and hidden, never deleted.
 
 ## Re-run / refresh
 A later optimizer run must see the defer-holds as already-actioned (they will appear in its

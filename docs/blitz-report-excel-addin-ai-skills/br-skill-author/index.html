@@ -46,7 +46,7 @@ Do not write anything before the answers are in.
   (`acme-ap-holds-3-months`). An extension gets a new name too: a folder named `br-*` is replaced
   when the shipped skills are updated, so edits inside it are lost. Folder name = frontmatter name.
 
-## Step 3 — Discover the reports live (helper sheet `blitz_`; never activate it; delete it at the end)
+## Step 3 — Discover the reports live (helper sheet `blitz_`; never activate it; clear and hide it at the end)
 Every report name, parameter name and fixed list value in the skill comes from the instance, never
 from memory. The user&#x27;s own reports sit in the same library and are found the same way.
 - `=br_report_list_external(&quot;&lt;words&gt;&quot;)` lists candidates (`Type = U` rows are uploads, used only by
@@ -75,6 +75,10 @@ Fill `references/skill-template.md`. The generated text keeps these rules:
 - A numbered pipeline, one workbook operation per step; analytics as Excel formulas (Copilot runs no
   scripts); named output sheets in tab order; a Validation section with the tie-out; a &#x27;Talk in the
   user&#x27;s language&#x27; section.
+- No step deletes a worksheet, in a new skill or in an extension of a shipped one: a deletion by the
+  assistant can crash Excel. A scratch sheet is cleared and hidden at the end, and a sheet that a
+  re-run replaces is renamed with the suffix `_old` and hidden. The template&#x27;s sentence on this stays
+  verbatim.
 - An analysis skill never writes to Oracle EBS. An action skill: proposal, confirmation 1, fill and
   validate, confirmation 2, submit; never a write without both.
 - No double quote character anywhere in the text (Excel wraps such a cell in quotes when it is
@@ -88,12 +92,13 @@ file per row, the column formatted as text, nothing else on the sheet. A second 
 give the user the install steps from `references/install-and-extend.md` for their assistant, in
 their words, and the first prompt to try. Copilot in Excel may show a Save skill card for the text once
 it is complete: tell the user to save it there, which writes the folder into their skills folder and
-lists the skill under Custom skills at once. Delete `blitz_`.
+lists the skill under Custom skills at once. Clear and hide `blitz_`; never delete a sheet.
 
 ## Validation (before the hand-over)
 - Every report, parameter and list value in the text appeared in a discovery spill of this session.
 - Folder name equals the frontmatter name; the description contains the user&#x27;s trigger phrases.
 - No double quote characters, no tabs, no worksheet function names outside the fixed banner.
+- No step of the text deletes a worksheet.
 - No data from the instance in the text (the skill travels with the user&#x27;s OneDrive): names of
   reports, parameters and settings only, never values from report rows.
 
@@ -201,6 +206,9 @@ scoring and the verdict; br-run-reports does extraction&lt;; br-data-dashboard t
 **You do NOT run Blitz reports yourself.** All extraction is done by **br-run-reports** (it owns
 connection, responsibility, the run and the completion check). Never call `br_*` functions, and
 never read or rename the result sheet until the extraction is confirmed complete.
+**Never delete a worksheet**: a deletion by the assistant can crash Excel. Clear and hide a scratch
+sheet when you are done with it; on a re-run, rename the sheets it replaces with the suffix `_old`
+and hide them.
 &lt;This skill is read-and-recommend only: it never changes Oracle EBS data. | This skill changes
 Oracle EBS data only through **br-run-uploads**, only on the confirmed rows, and only after the
 two confirmations below.&gt;

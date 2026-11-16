@@ -27,7 +27,7 @@ written as **Excel formulas** — you never compute values yourself and never wr
 | 2 | replace that cell with plain text, read the status |
 | 3 | status poll — repeat only while it still says `RUNNING` |
 | 4 | rename to `Holds_Raw`, add 9 formula columns, autofilter, create `Anomalies` |
-| 5 | create `Holds_Dashboard` (labels + formulas + one chart), delete `blitz_`, activate it |
+| 5 | create `Holds_Dashboard` (labels + formulas + one chart), clear and hide `blitz_`, activate `Holds_Dashboard` |
 | — | reply with the numbers and the release offer |
 
 No question before the reply (only exception: Operating Unit missing); no verification reads (the
@@ -39,7 +39,8 @@ analysis on the existing `Holds_Raw` without re-extracting.
 **Operating Unit** (required — ask only if not given). Leave supplier and dates blank.
 
 ## Op 1–3 — Extract
-1. Get-or-create `blitz_` (never activate it). In `blitz_!A1` write
+1. Get-or-create `blitz_` (never activate it; make it visible if an earlier run left it hidden). In
+   `blitz_!A1` write
    `=br_run_report_external("AP Invoice on Hold","Operating Unit=<OU>")` and read it back — expect
    `BLITZ_RUNNING: ...`. Only on `#BLITZ_REPORT_NOT_FOUND` search with
    `=br_report_list_external("invoice hold")` and re-run with the exact name.
@@ -124,7 +125,7 @@ Create it as the FIRST sheet. Fixed layout so the findings can reference the tab
   `D16:D23` and on `I16:I19`. Bold the header rows, widen the columns so nothing shows `######`. These
   are property assignments inside the SAME operation, so seven of them cost no more round trips than
   one. One clustered column chart on `A15:B23` titled `Held $ by Hold Category`, placed right of the
-  tables. Delete `blitz_`. Activate `Holds_Dashboard`.
+  tables. Clear `blitz_` and hide it. Activate `Holds_Dashboard`.
 
 ## Reply
 Read `A5:E5`, `A16` and `A28` once (or take them from the operation result) and answer in four or
@@ -144,7 +145,8 @@ supplier RFM, backlog projection) are available on request on the same data.
   literal value (Excel turns it into a date).
 - Get-or-create sheets (Claude: `getItemOrNullObject` + `load("isNullObject")`, never `getItem` in
   try/catch; load a range, sync, read that same variable). Copilot: one edit action per Op.
-- Never activate `blitz_`; delete it in Op 5. Never re-run a report that produced a data sheet.
+- Never activate `blitz_`; clear and hide it in Op 5. Never delete a sheet: a deletion by the assistant
+  can crash Excel. Never re-run a report that produced a data sheet.
 - **Every range address is ONE contiguous block.** A comma-separated multi-area address (`A5,C5,E5`) is
   rejected outright — the range API takes a single block — and the recovery that follows is exactly what
   turns a fast run into a slow one. Lay the sheet out so the cells that share a format sit together, and

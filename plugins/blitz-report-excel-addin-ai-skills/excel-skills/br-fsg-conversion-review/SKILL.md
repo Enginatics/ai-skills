@@ -67,9 +67,10 @@ Write a `Status` heading in D1 of `Conversion Log` and, in one block write down 
 
 ## Op 6 — Reply
 What was changed (cell by cell), what still needs the user (with the question), and an offer to
-calculate the balances now. On yes: in an empty cell of a new helper sheet `blitz_` write
+calculate the balances now. On yes: in an empty cell of the helper sheet `blitz_` (create it, or
+make it visible if an earlier run left it hidden) write
 `=br_fsg_refresh_external()` and read its return in the same operation, replace that cell with plain
 text, then read `=_blitz_run_status` once per turn until it reads `DONE: ...` or `ERROR: ...` (a value
-read before your write is stale). Report the cells it names as still without an answer, then delete
-`blitz_`. The user can also refresh from the ribbon (Blitz Report > Refresh > Other > Workbook). If the user answered an Ask
+read before your write is stale). Report the cells it names as still without an answer, then clear
+and hide `blitz_` (never delete a sheet). The user can also refresh from the ribbon (Blitz Report > Refresh > Other > Workbook). If the user answered an Ask
 question, apply it in a further Op 4 + Op 5 round.

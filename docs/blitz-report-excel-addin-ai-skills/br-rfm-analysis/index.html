@@ -26,7 +26,8 @@ stays transparent and refreshable. No ML black box: every score is explainable.
 
 ## Shared conventions (the br_ analytics house style)
 1. **Source** = an existing Blitz Report sheet; row 1 is headers. **Never modify source columns.**
-2. **Scratch work** on `br_calc_`; delete when done.
+2. **Scratch work** on `br_calc_` (make it visible if an earlier run left it hidden); clear and hide
+   it when done, never delete a sheet.
 3. **Outputs (all four):** a results sheet `br_rfm_results` (`Customer | Recency | Frequency |
    Monetary | R | F | M | RFM | Segment`); a chart; a dashboard (reuse `br-data-dashboard` for
    KPI/slicer layout; slicer on `Segment`); a plain-English chat summary with per-segment actions.

@@ -25,8 +25,9 @@ the Office.js script handles the maths inside the workbook so no data leaves the
 These apply to every `br_` analytics skill:
 1. **Source** = an existing Blitz Report data sheet. Row 1 is headers. **Never add, rename, or
    delete the source columns** — read only.
-2. **Scratch work** goes on a helper sheet named `br_calc_`; delete it when finished so the
-   workbook stays clean.
+2. **Scratch work** goes on a helper sheet named `br_calc_` (make it visible if an earlier run left
+   it hidden); clear it and hide it when finished so the workbook stays clean. Never delete a sheet:
+   a deletion by the assistant can crash Excel.
 3. **Outputs (all four):**
    - a results sheet `br_clustering_results` (key column(s) + the computed label, joined back),
    - a chart on that sheet,

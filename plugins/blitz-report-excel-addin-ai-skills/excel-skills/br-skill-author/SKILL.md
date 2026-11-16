@@ -50,7 +50,7 @@ Do not write anything before the answers are in.
   (`acme-ap-holds-3-months`). An extension gets a new name too: a folder named `br-*` is replaced
   when the shipped skills are updated, so edits inside it are lost. Folder name = frontmatter name.
 
-## Step 3 — Discover the reports live (helper sheet `blitz_`; never activate it; delete it at the end)
+## Step 3 — Discover the reports live (helper sheet `blitz_`; never activate it; clear and hide it at the end)
 Every report name, parameter name and fixed list value in the skill comes from the instance, never
 from memory. The user's own reports sit in the same library and are found the same way.
 - `=br_report_list_external("<words>")` lists candidates (`Type = U` rows are uploads, used only by
@@ -79,6 +79,10 @@ Fill `references/skill-template.md`. The generated text keeps these rules:
 - A numbered pipeline, one workbook operation per step; analytics as Excel formulas (Copilot runs no
   scripts); named output sheets in tab order; a Validation section with the tie-out; a 'Talk in the
   user's language' section.
+- No step deletes a worksheet, in a new skill or in an extension of a shipped one: a deletion by the
+  assistant can crash Excel. A scratch sheet is cleared and hidden at the end, and a sheet that a
+  re-run replaces is renamed with the suffix `_old` and hidden. The template's sentence on this stays
+  verbatim.
 - An analysis skill never writes to Oracle EBS. An action skill: proposal, confirmation 1, fill and
   validate, confirmation 2, submit; never a write without both.
 - No double quote character anywhere in the text (Excel wraps such a cell in quotes when it is
@@ -92,12 +96,13 @@ file per row, the column formatted as text, nothing else on the sheet. A second 
 give the user the install steps from `references/install-and-extend.md` for their assistant, in
 their words, and the first prompt to try. Copilot in Excel may show a Save skill card for the text once
 it is complete: tell the user to save it there, which writes the folder into their skills folder and
-lists the skill under Custom skills at once. Delete `blitz_`.
+lists the skill under Custom skills at once. Clear and hide `blitz_`; never delete a sheet.
 
 ## Validation (before the hand-over)
 - Every report, parameter and list value in the text appeared in a discovery spill of this session.
 - Folder name equals the frontmatter name; the description contains the user's trigger phrases.
 - No double quote characters, no tabs, no worksheet function names outside the fixed banner.
+- No step of the text deletes a worksheet.
 - No data from the instance in the text (the skill travels with the user's OneDrive): names of
   reports, parameters and settings only, never values from report rows.
 

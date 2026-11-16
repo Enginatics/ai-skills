@@ -42,10 +42,10 @@ def build(awr="awr.json"):
         share = sum(pct.get(s, 0.0) for s in ids if s not in counted)
         counted.update(ids)
         items.append([share, ids, where, defect, change, st, f])
-    top40 = {s for s, _ in sorted(pct.items(), key=lambda kv: -kv[1])[:40]}
+    top100 = {s for s, _ in sorted(pct.items(), key=lambda kv: -kv[1])[:100]}
     for it in items:
         if it[5] == "none":
-            it[0] = sum(pct[s] for s in top40 - counted)
+            it[0] = sum(pct[s] for s in top100 - counted)
     items.sort(key=lambda x: -x[0])
 
     band, cnt = collections.defaultdict(float), collections.Counter()

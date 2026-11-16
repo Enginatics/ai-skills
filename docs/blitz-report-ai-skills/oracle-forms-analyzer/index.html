@@ -95,17 +95,17 @@ find $AU_TOP/forms/US -name &quot;FORMNAME.fmb&quot; 2&gt;/dev/null
 **Preferred method**: Use Oracle&#x27;s `frmf2xml.sh` (Forms2XML) tool:
 
 ```bash
-# Copy .fmb to /tmp (always work in /tmp to keep the server clean)
+# Copy .fmb to /tmp (always work in /tmp to keep the server clean): the XML is written next to the .fmb
 cp $AU_TOP/forms/US/FORMNAME.fmb /tmp/
 cd /tmp
+export FORMS_API_TK_BYPASS=true
+export FORMS_PATH=$AU_TOP/forms/US:$FORMS_PATH
 
-# Convert to XML (outputs FORMNAME.xml in current directory)
-frmf2xml.sh FORMNAME.fmb
+# Convert to XML (outputs FORMNAME_fmb.xml)
+frmf2xml.sh OVERWRITE=YES FORMNAME.fmb
 ```
 
-**Known issue**: `frmf2xml.sh` may fail with `&quot;Error initialising the Forms Jdapi: _jni_initialize: Failed to create new forms context&quot;` if the server has no X11 display. Workarounds:
-1. Run with Xvfb if installed: `Xvfb :99 &amp; export DISPLAY=:99 &amp;&amp; frmf2xml.sh FORMNAME.fmb`
-2. Run from a machine with Oracle Forms Builder installed (Windows/GUI)
+Without `FORMS_API_TK_BYPASS=true` it fails with `Error initialising the Forms Jdapi: _jni_initialize: Failed to create new forms context`, also with a display set.
 
 **Fallback method**: If `frmf2xml.sh` fails, use `strings` to extract readable content from the binary:
 
