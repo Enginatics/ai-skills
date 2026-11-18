@@ -20,6 +20,7 @@
     "reports": [
       "AP Period Close Exceptions",
       "Blitz Reports",
+      "CST Inventory Value Report - by Subinventory (Item Cost)",
       "DBA SGA SQL Execution Plan History",
       "DBA SGA SQL Performance Summary"
     ],

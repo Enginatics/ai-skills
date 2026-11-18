@@ -323,6 +323,8 @@ The `XDO_APPLICATION_SHORT_NAME` and `XDO_DATA_SOURCE_CODE` XML elements link a 
 **Keep BIP Code when:**
 - The Blitz SQL **depends on** the Oracle before-report trigger to initialize package variables, populate GTTs, or perform setup
 
+**Except** a trigger that values inventory through `CST_Inventory_PUB.Calculate_InventoryValue` (the inventory, intransit and receiving value reports): the API appends to `cst_inv_qty_temp`/`cst_inv_cost_temp`, which keep their rows for the session, so every later run in a pooled Excel add-in session adds the quantities again. Set `<DB_PACKAGE>XXEN_INV_VALUE</DB_PACKAGE>` instead, with a hidden `:p_api_mode` parameter (`Onhand`, `Intransit`, `Receiving`, `Onhand and Intransit`, `All`) and the original's parameters on the package variable anchors (`:p_org_id`, `:p_as_of_date`, `:p_category_set`, ...): it runs the API in an autonomous transaction that clears the tables first and resets its input variables after each run. Intransit mode takes `:p_receipt`, `:p_shipment` and `:p_own` from the report (1 when absent) and needs a hidden `:p_detail` of 1 for one row per shipment line. References: `CST Intransit Value`, `CST Inventory Value Report - by Subinventory (Item Cost)`.
+
 **Remove BIP Code when:**
 - The Blitz SQL is **fully self-contained** — all joins, subqueries, and parameters are in the BR itself
 - All data template logic has been inlined into the SQL during conversion

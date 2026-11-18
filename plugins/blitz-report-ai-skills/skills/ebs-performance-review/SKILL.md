@@ -12,7 +12,7 @@ The deliverable is corrections, not a description of the load. Everything in the
 
 ## Inputs to ask the customer for
 
-All are Blitz Reports. Ask for them in one go, as XLSX, into one folder.
+All are Blitz Reports. Ask for them in one go, as XLSX, into one folder. For a repeat review, check the customer's earlier extracts first and ask only for what changes over time (the AWR and SGA SQL reports, AWR Wait Event Summary) plus anything never extracted; configuration already on file (memory, `free -h`, parameters) is not asked for again. Source that is readable on a clone we have access to is never asked for.
 
 | Area | Report | Parameters |
 |---|---|---|
@@ -20,8 +20,8 @@ All are Blitz Reports. Ask for them in one go, as XLSX, into one folder.
 | Parameters | DBA Database Parameter Validation, DBA Parameters | none |
 | Maintenance tasks | DBA Automated Maintenance Tasks | none |
 | AWR settings | DBA AWR Settings | none |
-| System load | DBA AWR Wait Event Summary, DBA AWR System Time Summary, DBA AWR System Metrics Summary | the full AWR window |
-| Top SQL | DBA AWR SQL Performance Summary | the full AWR window (default retention is 8 days), top 200 by CPU |
+| System load | DBA AWR Wait Event Summary, DBA AWR System Time Summary, DBA AWR System Metrics Summary | default (the past week) |
+| Top SQL | DBA AWR SQL Performance Summary | default (the past week), top 200 by CPU |
 | Literals | DBA SGA SQL Performance Summary | Literals Dupl Count >= 50 |
 | Source | DBA Text Search | one run per package list; the report exports `dba_source` line by line for the packages named in the AWR `Code` column and the SGA module column |
 | Waits, cache, result cache | DBA SGA Wait Event Summary (ASH), DBA SGA Buffer Cache Object Usage, DBA Result Cache Statistics, DBA Result Cache Objects and Dependencies, DBA Alert Log | none |
@@ -72,7 +72,7 @@ For each statement in the top 100, classify it before doing anything else:
 2. Custom PL/SQL without source: list the package for the next Text Search run. For every custom concurrent program whose source we lack, hand the customer ONE semicolon-separated list of concurrent program short names for the Blitz Report Custom Reports Converter in the same message as the other runs, rather than marking rows Needs input one by one; take the short names from the AWR `Module` (`e:<app>:cp:<appl>/<SHORT_NAME>`). Reports Builder runs show `rwrun@<host>` without the program: identify them with FND Concurrent Requests (Execution Method Oracle Reports, Started within Days = the AWR window, Running longer than x Minutes) and add their short names to the list. When the AWR `Module` is a concurrent program short name (`e:PO:cp:xxpo/XXPO_...`) rather than a package, the source comes through the Blitz Report Custom Reports Converter instead, which also gathers the report definitions, parameters and dependent objects. A program that is a report (Reports Builder, BI Publisher) is classified first. A data report (account analysis, revaluation, aging, any listing) always moves to a tuned Blitz Report: a library report where one covers it, else a conversion with the `migrate-custom-reports` skill, never a corrected rdf or data template. Only a printed document (pick and pack slip, commercial invoice, purchase order print) is corrected in place; a PL/SQL interface is treated as a package (for an `EXECUTION_METHOD_CODE='I'` program the converter gathers the package named in the executable's `EXECUTION_FILE_NAME`, whatever its prefix, plus its custom dependencies).
 3. Oracle code: never edit. Search My Oracle Support for an existing fix first (patch, bug, note) by the program, package and file version, the table names and the distinctive text of the statement; recommend the patch when one exists. Only without a fix: an index check, a purge, or an SR. A plan baseline is never the recommendation for Oracle code.
 4. External client (`.exe` modules): the SQL text is in AWR; supply the corrected predicate for the integration owner.
-5. Oracle Alerts and Forms personalisations: setup changes, no package.
+5. Oracle Alerts and Forms personalisations: setup changes, no package. For a form (AWR `Module` `e:<app>:frm:<FORM>`), get its personalisations with the Blitz Report Custom Reports Converter (Include Forms Personalizations), which returns `<FORM>_personalization.ldt`, correct the SQL in the conditions and action arguments, and return the whole file. Its upload (`FNDLOAD apps/$APPS_PWD 0 Y UPLOAD $FND_TOP/patch/115/import/affrmcus.lct <FORM>_personalization.ldt`) first deletes every customer rule of each form (form level rules) and each function (function level rules) the file contains, then loads the file: a rule left out of the file is deleted, and a rule changed in the form since the gather is reverted, so the customer downloads the form again just before the upload and compares it with the gathered file. A function whose rules are all removed from the file keeps them; delete those in the Personalization form.
 
 Patterns that recur:
 

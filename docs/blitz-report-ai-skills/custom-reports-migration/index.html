@@ -25,6 +25,7 @@ A converter run produces `CONV_&lt;ABBR&gt;_&lt;reqid&gt;_&lt;timestamp&gt;/` co
 | `&lt;PROG&gt;_&lt;lang&gt;_&lt;PROG&gt;.rtf` | BIP layout template — `&lt;?FIELD?&gt;` codes = the columns the customer&#x27;s layout actually outputs | BIP reports only |
 | `_xdo_metadata.txt` | BIP template→layout mapping | BIP reports only |
 | `&lt;OWNER&gt;.&lt;NAME&gt;.&lt;type&gt;.sql` | Custom dependency DDL (table/view/package/function/index) | present **only when the report has custom DB objects** — a key Outcome-3 signal |
+| `&lt;FORM&gt;_personalization.ldt` | Forms Personalizations of the form (`affrmcus.lct` download by `FORM_NAME`): every customer rule at form and function level; Oracle-delivered rules, which carry a rule key, are left out | program type Forms Personalization (Include Forms Personalizations); the folder is named after the form |
 
 ## Classification
 
