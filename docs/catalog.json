@@ -100,6 +100,7 @@
       "DBA Parameters",
       "DBA Result Cache Objects and Dependencies",
       "DBA Result Cache Statistics",
+      "DBA SGA Active Session History",
       "DBA SGA Buffer Cache Object Usage",
       "DBA SGA SQL Performance Summary",
       "DBA SGA+PGA Memory Configuration",

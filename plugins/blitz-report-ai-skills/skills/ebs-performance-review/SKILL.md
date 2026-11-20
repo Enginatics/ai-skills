@@ -81,7 +81,7 @@ Patterns that recur:
 - `UPPER(col) = UPPER(:b)` on a dictionary or indexed column: drop the function on the column side.
 - A self-join of `MTL_SUPPLY` on `SUPPLY_SOURCE_ID` alone: not unique without `SUPPLY_TYPE_CODE`.
 - Setup or dictionary lookups inside a per-row loop: cache per request in a package associative array, cleared when `fnd_global.conc_request_id` changes. Same statement, same plan, fewer executions.
-- `fnd_concurrent.wait_for_request` with `interval => 1`.
+- `fnd_concurrent.wait_for_request` with `interval => 1`, or a wait loop that spins (interval 0, or no exit when the call returns FALSE): the signature is `FND_CONCURRENT` statements (`get_request_status`, sql_id 1mr4u2r99v9vc) with hundreds of millions of executions. The `Module` and `Code` columns of the AWR and SGA summaries show only the session that first parsed the cursor, so find the real callers with DBA AWR Active Session History (or DBA SGA Active Session History) filtered on that sql_id, which shows module, action and the top-level PL/SQL entry per sample, and with the DBA Text Search template "Zero fnd_concurrent.wait_for_request interval".
 - `DELETE ... WHERE NVL(group_id,0) < 0` on `BOM_EXPLOSION_TEMP`: disables its indexes. It is a session-duration GTT: never recommend TRUNCATE.
 - Twenty-plus plans for one custom sql_id: pin the cheapest observed plan with `dbms_spm.load_plans_from_cursor_cache` as a holding action; drop the baseline when the text is corrected.
 - Copy-pasted statements: one sql_id with many source locations. Replace all copies; recommend one function as a follow-up.
@@ -107,7 +107,7 @@ Everything goes into one deliverables folder per review, created as a subfolder 
 
 The zip handed to the customer holds only what they deploy or run: the review html, the corrected files each next to its original, and the scripts. Its root is the folder level of the html and the subfolders, with no wrapping folder; no diffs, no README, no working files.
 
-The covering email opens with the CPU the customer saves, summed by script from the section 1 rows: "In short, the corrections and recommendations in it address the statements behind **X% of the database's total CPU time** (Y% with corrected code supplied, Z% with the fix described); applying them should remove most of that load." Y is the Corrected rows, Z the Recommended rows, X their sum; the points that follow quote the same figures.
+The covering email opens with the CPU the customer saves, summed by script from the section 1 rows: "In short, the corrections and recommendations in it address the statements behind **X% of the database's total CPU time** (Y% with corrected code supplied, Z% with the fix described); applying them should remove most of that load." Y is the Corrected rows, Z the Recommended rows, X their sum; only X is bold, and the points that follow quote the same figures. Use this sentence in every covering email of a review, the first delivery and each update, before any list of findings.
 
 Before publishing, run the checks in `scripts/verify_deliverables.py`: every cited sql_id exists in the extracts, no control characters, no BOM, CRLF on `.pkb`, no `.diff` file, every section reference resolves, no banned words.
 
