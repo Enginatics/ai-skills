@@ -3,8 +3,8 @@
 ## Drill levels
 
 `=br_fsg_drill_external("<cells>","<level>","<sheet>")` writes the lines behind the cells onto a NEW
-sheet of this workbook and reports `DONE: <n> rows on sheet '<name>'`. Run it like any action
-(write and read in one operation, replace the cell with text, poll the status).
+sheet of this workbook and reports `DONE: <n> rows on sheet '<name>'`. Run it like any action, in
+two operations (write and read; then replace the cell with text and read the status together).
 
 | Drilled from | Level | You get |
 |---|---|---|
@@ -28,7 +28,8 @@ at the balance cells or the drill sheet's data rows instead.
   headings, data from row 4, and a total row (SUBTOTAL) after the data - leave it out of your own
   sums and counts.
 - Find columns by their heading text, never by letter: the columns follow the chart of accounts and
-  the site's drilldown setup.
+  the site's drilldown setup. Drill sheets of the same level in one workbook share their columns,
+  so read the heading row of the first one only.
 - Journal lines carry, among others: Effective Date, Batch Name, Journal Name, Source Name, Category
   Name, Period, Currency, Line Number, entered and accounted debit/credit, Concatenated Segments,
   Line Description, and a drilldown link per row.

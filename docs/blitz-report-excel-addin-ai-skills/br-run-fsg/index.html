@@ -29,14 +29,16 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
    the ready balance formula pattern. Segment values: `=br_fsg_values_external(&quot;&lt;Ledger&gt;&quot;,&quot;&lt;Segment&gt;&quot;,&quot;&lt;search&gt;&quot;)`.
 3. **Statement sheet.** `=br_fsg_new_statement_external(&quot;&lt;Ledger&gt;&quot;,&quot;&lt;Sheet name&gt;&quot;)` - a new sheet,
    or the user&#x27;s own sheet claimed as it is. Write the formula and read its return in the SAME
-   operation, then replace that cell with plain text. Wait for `=_blitz_run_status` to read
-   `DONE: sheet &#x27;&lt;name&gt;&#x27; ...`. A workbook that already holds the user&#x27;s statement needs no new sheet.
-4. **Write the statement** on that sheet: criteria cells (period, amount type, currency...), one
-   row per account or parent value, balance formulas from the pattern referencing those cells,
-   descriptions, totals - per the recipes. Nothing is calculated yet: cells show `(pending)`.
-5. **Refresh.** `=br_fsg_refresh_external(&quot;&lt;Sheet name&gt;&quot;)` (same write-read-replace), then poll
-   `_blitz_run_status` for `DONE: &lt;n&gt; value(s) refreshed` - it names any cell still without an
-   answer; fix those cells and refresh again.
+   operation; in the next one replace that cell with plain text and read `=_blitz_run_status`
+   together - it normally reads `DONE: sheet &#x27;&lt;name&gt;&#x27; ...` by then. A workbook that already holds
+   the user&#x27;s statement needs no new sheet.
+4. **Write the statement** on that sheet, in as few operations as you can: criteria cells (period
+   with its list of values, amount type, currency...), one row per account or parent value, balance
+   formulas from the pattern referencing those cells, descriptions, totals - per the recipes.
+   Nothing is calculated yet: cells show `(pending)`.
+5. **Refresh.** `=br_fsg_refresh_external(&quot;&lt;Sheet name&gt;&quot;)` (the same two operations): the status
+   reads `DONE: &lt;n&gt; value(s) refreshed` and names any cell still without an answer; fix those cells
+   and refresh again.
 6. **Read and answer** from the cells. Never compute a balance yourself or invent one.
 7. **Explain a number** on request: `=br_fsg_drill_external(&quot;&lt;cell&gt;&quot;,&quot;Journals&quot;,&quot;&lt;Sheet name&gt;&quot;)`
    puts the journal lines behind it on a new sheet; drill on to the subledger and run a detailed
@@ -45,8 +47,9 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
 ## Core rules
 
 - One action at a time (statement, refresh, drill): wait for `DONE:` or `ERROR:` before the next.
-  Poll only `_blitz_run_status`, one check per turn; never re-enter an action formula to check on it.
-  A status read before your own trigger is stale - ignore it.
+  Read `_blitz_run_status` in the operation that replaces the action formula with text - an action
+  takes seconds - and again, one check per turn, only while it reads `RUNNING:`; never re-enter an
+  action formula to check on it. A status read before your own trigger is stale - ignore it.
 - Every argument of a balance, period or description formula is a quoted literal or a plain cell
   reference - never an expression. Segment values are text: quote them (`&quot;01&quot;`, never `01`) and
   give a cell holding one the Text format before writing it. A literal period such as `Dec-12`
@@ -64,8 +67,8 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
 ## Drill levels
 
 `=br_fsg_drill_external(&quot;&lt;cells&gt;&quot;,&quot;&lt;level&gt;&quot;,&quot;&lt;sheet&gt;&quot;)` writes the lines behind the cells onto a NEW
-sheet of this workbook and reports `DONE: &lt;n&gt; rows on sheet &#x27;&lt;name&gt;&#x27;`. Run it like any action
-(write and read in one operation, replace the cell with text, poll the status).
+sheet of this workbook and reports `DONE: &lt;n&gt; rows on sheet &#x27;&lt;name&gt;&#x27;`. Run it like any action, in
+two operations (write and read; then replace the cell with text and read the status together).
 
 | Drilled from | Level | You get |
 |---|---|---|
@@ -89,7 +92,8 @@ at the balance cells or the drill sheet&#x27;s data rows instead.
   headings, data from row 4, and a total row (SUBTOTAL) after the data - leave it out of your own
   sums and counts.
 - Find columns by their heading text, never by letter: the columns follow the chart of accounts and
-  the site&#x27;s drilldown setup.
+  the site&#x27;s drilldown setup. Drill sheets of the same level in one workbook share their columns,
+  so read the heading row of the first one only.
 - Journal lines carry, among others: Effective Date, Batch Name, Journal Name, Source Name, Category
   Name, Period, Currency, Line Number, entered and accounted debit/credit, Concatenated Segments,
   Line Description, and a drilldown link per row.
@@ -164,7 +168,9 @@ are Excel worksheet functions of the Blitz Report add-in, not tools or connector
 `list_name`: a segment as the ledger profile names it (`Account (3)` or just `Account`), or one of
 `Period`, `Amount Type`, `Balance Type`, `Currency`, `Currency Type`, `Budget`, `Encumbrance Type`,
 `Journal Source`, `Journal Category`, `Conversion Type`, `Movement`. `search` keeps values whose value
-or description contains it - use it on large segments (a list stops after 2000 values and says so).
+or description contains it - use it on large segments and on `Period`, which holds every period of
+the ledger&#x27;s calendar: check the period the user named with it, never list them all (a list stops
+after 2000 values and says so).
 `parent_value` lists the members of that parent value of a segment.
 
 The three lookups and the statement function take an optional environment as their last argument,
@@ -186,14 +192,22 @@ refreshed and drilled by the environment and responsibility it was made in.
 
 ## Running an action and waiting
 
-Same discipline as running a report:
-1. Write the action formula and read the cell&#x27;s return in the SAME operation, then in your next
-   operation replace that cell with plain text. A second read of a still-present action formula
-   can start the action twice.
-2. Read `=_blitz_run_status` once per turn, generously spaced; never re-enter the action formula
-   to check on it. A value read before your own trigger is stale - it belongs to an earlier action.
-3. While an action runs, pause other workbook edits: the add-in is writing the sheet.
-4. `ERROR: ...` is the add-in&#x27;s reason - report it, fix what it names, and try once more at most.
+An action takes two operations, not three:
+1. Write the action formula and read the cell&#x27;s return in the SAME operation. A second read of a
+   still-present action formula can start the action twice.
+2. In your NEXT operation replace that cell with plain text and read `=_blitz_run_status` (keep it
+   in one cell of `blitz_`) together. A statement, refresh or drill takes seconds, so this read
+   normally shows its `DONE:` already - go straight on.
+3. Only when it still reads `RUNNING:` read it again, once per turn; never re-enter the action
+   formula to check on it. A value read before your own trigger is stale - it belongs to an earlier
+   action; a text identical to the outcome of your previous action may be that one, so read once
+   more and take what you then read.
+4. While an action runs, pause other workbook edits: the add-in is writing the sheet.
+5. `ERROR: ...` is the add-in&#x27;s reason - report it, fix what it names, and try once more at most.
+
+Write in blocks: everything a step needs (a column of formulas, its headings, its totals) goes into
+the sheet in one operation, and one refresh then answers all of it - period cells first, then the
+balances that read them. Never refresh between two writes that the same refresh can answer.
 
 ## The balance formula
 
@@ -259,8 +273,10 @@ the statement uses.
 ## Refresh
 
 - `br_fsg_refresh_external(&quot;&lt;Sheet&gt;&quot;)` calculates the values still pending (new or changed formulas).
-  `force` TRUE fetches every value again - use it for current balances after new postings. A blank
-  sheet name refreshes every statement of the workbook, always forced.
+  `force` TRUE fetches every value again - use it for current balances after new postings, and for
+  the first refresh of a statement you did not build in this conversation, whose own cells may be
+  waiting for an answer as well. A blank sheet name refreshes every statement of the workbook,
+  always forced.
 - `&lt;n&gt; value(s) refreshed` counts server answers, not cells - cells with the same arguments share one.
 - `still without an answer: &lt;cells&gt;` lists cells showing `(pending)`, an error, or the add-in&#x27;s own
   answer: `Error (Period)` / `(Amount Type)` / `(Currency)` / `(Currency Type)` / `(Balance Type)` -
@@ -286,6 +302,12 @@ Set B1:B5 to Text, then write:
 
 Every balance formula then takes `$B$1,$B$2,$B$3,$B$4,$B$5` as its first five arguments, so the
 user changes the period in one cell and refreshes. Leave one empty row under the block.
+
+Give the Period cell its list of values in the same operation: a data validation of type List whose
+source is the one text `PERIOD_NAME` (no `=`), with the in-cell dropdown on and the error alert off.
+The entry is a marker, not a restriction: when the user picks it from the dropdown or double-clicks
+the cell, the add-in opens the ledger&#x27;s period list and writes the chosen period into the cell. A
+period cell that holds a formula gets none. Tell the user the list is there.
 
 ## One balance (&quot;what was cash at the end of December?&quot;)
 

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer TDS Adjustments - Blitz Report Excel Add-in Skills</title><meta name="description" content="Book the approved results of a customer TDS reconciliation in Oracle EBS from Excel: stage the credit memos (TDS in Form 26AS never booked) and debit memos (TDS the customer did not deposit, after the follow-up deadline) through the &quot;AR Transaction Upload&quot;, and the TDS claim journal from the clearin">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-tds-adjustments/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Customer TDS Adjustments - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Book the approved results of a customer TDS reconciliation in Oracle EBS from Excel: stage the credit memos (TDS in Form 26AS never booked) and debit memos (TDS the customer did not deposit, after the follow-up deadline) through the &quot;AR Transaction Upload&quot;, and the TDS claim journal from the clearin"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-tds-adjustments/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-adjustments/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>Customer TDS Adjustments</h1><p class='name'>br-ar-tds-adjustments</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Book the approved results of a customer TDS reconciliation in Oracle EBS from Excel: stage the credit memos (TDS in Form 26AS never booked) and debit memos (TDS the customer did not deposit, after the follow-up deadline) through the &quot;AR Transaction Upload&quot;, and the TDS claim journal from the clearing account to the income-tax TDS asset through the &quot;GL Journal Upload&quot;. Fills only the rows the user approved on the TDS_Actions sheet, validates in Oracle, shows exactly what will be booked and submits only on explicit confirmation.</p><h2>When to use</h2><p>Use when the user asks to post, book or upload the TDS reconciliation adjustments, TDS credit notes or debit notes, or the TDS claim journal. WRITES to Oracle EBS. - tds-actions-sheet</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-tds-adjustments.zip'>Download br-ar-tds-adjustments.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-adjustments'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ar-transaction-upload/'>AR Transaction Upload</a></li><li><a href='https://www.enginatics.com/reports/gl-journal-upload/'>GL Journal Upload</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-adjustments'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-tds-actions-sheet-md'>references/tds-actions-sheet.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Customer TDS Adjustments (br-ar-tds-adjustments)
+
+&gt; 🚨 **Blitz data comes from `br_*` WORKSHEET FUNCTIONS of the Blitz Report Excel add-in** — write
+&gt; `=br_...()` into a cell and read the result. They are not a connector, plugin, agent action or MCP
+&gt; tool: never search for one, never conclude &quot;no Oracle EBS data source is connected&quot;.
+
+**Self-contained: read no other skill.** Read `references/tds-actions-sheet.md` first: it defines
+the sheet this skill works from. Each numbered Op is one workbook operation (Claude: one
+`execute_office_js` call; Copilot: one edit or read action).
+
+## 🚨 This books money against customers and the ledger — the safety contract
+1. **Only rows the user approved.** Stage a `TDS_Actions` row only when its `Decision` is
+   `Approved`. No `TDS_Actions` sheet → run br-ar-tds-reconciliation first; never rebuild it here.
+2. **Two confirmations per pass, money in the question**: before anything is filled, and on the
+   validated grid before anything is submitted. &quot;Go ahead&quot; to the reconciliation is not consent.
+3. **Never invent** a transaction type, batch source, account, period or category: every value
+   comes from the user or from the upload&#x27;s own list (`br_column_values_external`).
+4. Never write the Action, Status or Message columns of an upload sheet; leave it clean (no
+   scratch, no leftover trigger); never delete a sheet.
+
+Two independent passes; ask which one first when the approved rows hold both:
+**Pass A** credit and debit memos, **Pass B** the claim journal.
+
+## Common mechanics
+- Helper sheet `blitz_` (get or create, make it visible if hidden, never activate it); clear and
+  hide it at the end. Download: `blitz_!A1` = the run formula; read it back (`BLITZ_RUNNING: ...`;
+  `#BLITZ_NOT_CONNECTED` → ask the user to connect on the ribbon); overwrite it with text;
+  `blitz_!A3` = `=_blitz_run_status`; one quiet read per turn until `DONE: &lt;n&gt; rows on sheet
+  &#x27;&lt;name&gt;&#x27;`.
+- Column letters: `=br_upload_columns_external(FALSE, &quot;&lt;Upload Sheet Name&gt;&quot;)` on `blitz_` → write
+  every cell by its `Sheet Column` letter, never by counting (hidden columns exist).
+- Lists: `=br_column_values_external(&quot;&lt;Column&gt;&quot;, &lt;row&gt;, &quot;&lt;search&gt;&quot;, &quot;&lt;Upload Sheet Name&gt;&quot;)` on
+  `blitz_`, each in its own clear area (`#SPILL!` = it did not land, move it). Fill a row&#x27;s parent
+  columns before looking up a dependent one.
+- Write the rows as one contiguous block per column group (a comma-separated multi-area address is
+  rejected; one call per row is slow).
+- Triggers `=br_prepare_upload_external()` and `=br_process_upload_external()` go on the upload
+  sheet, row 1, at least ten columns right of the last used column (hidden ones included); the
+  add-in clears them. `_blitz_run_status` keeps the previous value until a step ends: a `DONE`
+  matching the last step is stale.
+- After processing write the outcome into `Result` of each `TDS_Actions` row you staged:
+  `Uploaded - &lt;transaction number or journal name&gt;` or the row&#x27;s error message.
+
+## Pass A — credit and debit memos (`AR Transaction Upload`, template `Default`) — 11 operations
+1. **Read** the approved `Credit memo` and `Debit memo` rows. Look up the batch sources:
+   `=br_param_values_external(&quot;AR Transaction Upload&quot;,&quot;Source&quot;,&quot;Operating Unit=&lt;OU&gt;&quot;)`. Ask, in one
+   question with the money named: *&quot;Book &lt;n&gt; credit memos for &lt;total&gt; and &lt;m&gt; debit memos for
+   &lt;total&gt; against &lt;k&gt; customers in &lt;operating unit&gt;? Choose the batch source, the credit memo
+   and debit memo transaction types, and the transaction and GL date.&quot;* → **confirmation 1**.
+   Rows without an `Account Number` (a party with several accounts): ask which account in the same
+   question.
+2. **Download**: `=br_run_upload_external(&quot;AR Transaction Upload&quot;,&quot;Operating Unit=&lt;OU&gt;; Source=&lt;source&gt;; Default Transaction Date=&lt;YYYY-MM-DD&gt;; Default GL Date=&lt;YYYY-MM-DD&gt;&quot;,&quot;Default&quot;)`.
+   The upload has no Upload Mode: the grid comes empty, for new transactions.
+3. Replace the formula with text; read the status. 4. Poll until `DONE`.
+5. Read the column contract.
+6. **Write the identity block** for one grid row per approved row (row 3 onward): `Upload Trx
+   Identifier` (`TDS-&lt;FY&gt;-&lt;Party Number&gt;-CM` or `-DM`; unique in this upload), `Bill To Customer
+   Number` (= `Account Number`), `Line Number` 1, `Line Description` (= `Reason`), `Quantity` 1,
+   `Unit Price` = the `Amount`, **negative on a credit memo**, positive on a debit memo (credit
+   memo types carry a negative creation sign), `Distribution Account` = `Clearing Account`.
+7. **Lookup** on `blitz_` the `Trx Type` list of row 3 with each chosen type name as search; a name
+   not in the list → show the list and ask.
+8. **Write** `Trx Type` per row (one block), then the prepare trigger. Preparing fills `Line Type`
+   (`Line`) and `Bill To Site` (the account&#x27;s primary bill-to site).
+9. **Validate**: poll until `DONE: prepared &lt;n&gt; row(s) - &lt;n&gt; valid, &lt;n&gt; flagged`; read
+   `=br_validation_results_external(FALSE, &quot;&lt;Upload Sheet Name&gt;&quot;)`. A blank `Bill To Site` (no
+   primary site): look up its list for that row, ask which site, write it, prepare again. Fix other
+   flagged rows from their message (a tax line added by the type means the type calculates tax —
+   ask for a type without it); stop after three unproductive rounds and show the messages. Then:
+   *&quot;&lt;n&gt; credit memos (&lt;total&gt;) and &lt;m&gt; debit memos (&lt;total&gt;) validated in Oracle. Submit?&quot;* →
+   **confirmation 2**.
+10. Process trigger; poll until `DONE: &lt;n&gt; succeeded, &lt;n&gt; errored (request &lt;id&gt;)`.
+11. Read `=br_validation_results_external(TRUE, &quot;&lt;Upload Sheet Name&gt;&quot;)`, write `Result` on
+    `TDS_Actions`, clear and hide `blitz_`, report.
+
+## Pass B — claim journal (`GL Journal Upload`, template `Functional Actuals`) — 10 operations
+1. **Read** the approved `Claim journal` rows; group by `Financial Year`. Ask, in one question:
+   *&quot;Post a TDS claim journal of &lt;total&gt; for &lt;FY&gt; (&lt;n&gt; customers): debit &lt;TDS asset account for
+   that year&gt;, credit the clearing account per customer? Choose the ledger, journal source,
+   category, accounting date and period.&quot;* → **confirmation 1**. The TDS asset account of each year
+   is the user&#x27;s; never derive it.
+2. **Download**: `=br_run_upload_external(&quot;GL Journal Upload&quot;,&quot;&quot;,&quot;Functional Actuals&quot;)` (no
+   parameters: the defaults leave the journal unposted and unapproved).
+3. Replace the formula with text; read the status. 4. Poll until `DONE`.
+5. Read the column contract.
+6. **Write** one journal per financial year: per approved row a line `Credit` = `Amount` on its
+   `Clearing Account` with `Line Description` = `Reason`, and one line `Debit` = the year&#x27;s total on
+   the TDS asset account; on every line `Ledger Name`, `Source`, `Category`, `Currency` (the
+   ledger currency), `Accounting Date`, `Period`, `Journal Name` (`TDS claim &lt;FY&gt;`) and
+   `Batch Name` (`TDS claim &lt;date&gt;`); the account in `Concatenated Segments`.
+7. **Lookups** for every list value once (`Ledger Name`, `Source`, `Category`, `Period`,
+   `Concatenated Segments` with the account as search); a value not in its list → show the list and
+   ask. Then the prepare trigger.
+8. **Validate** as in Pass A step 9; confirm the journal balances per year. *&quot;Journal(s) for
+   &lt;years&gt; with &lt;n&gt; lines, debit &lt;total&gt; = credit &lt;total&gt;, validated. Submit?&quot;* → **confirmation 2**.
+9. Process trigger; poll until `DONE`.
+10. Read the per-row results, write `Result` on `TDS_Actions`, clear and hide `blitz_`, report;
+    say the journal still goes through the ledger&#x27;s own approval and posting.
+
+## Reporting
+Lead with what was booked: memos created (customer, transaction number, amount) or the journal per
+year, then failures with their exact message, the request id. **If nothing was booked, say so in
+the first sentence**: a validation count is not a booking. A partial success books the rows that
+succeeded; fix and re-process only the failed rows. Tell the user the reconciliation is stale
+until it is run again.
+
+## Talk in the user&#x27;s language
+Customers, memos, journals, accounts and amounts — never functions, `blitz_` or status names.</pre></section><section id='file-references-tds-actions-sheet-md'><h3 class='fname'>references/tds-actions-sheet.md</h3><pre class='md'># The TDS_Actions sheet (contract between br-ar-tds-reconciliation and br-ar-tds-adjustments)
+
+`br-ar-tds-reconciliation` writes it and never changes Oracle. `br-ar-tds-adjustments` reads it and
+stages only the rows whose `Decision` is `Approved`. Row 1 holds the headers, data starts in row 2,
+one row per customer and financial year and action. Find columns by their row-1 header text.
+
+| Column | Content |
+|---|---|
+| Action | `Claim journal`, `Credit memo`, `Follow up` or `Debit memo` |
+| Decision | `Proposed` when written; the user sets `Approved` (or `Rejected`). A `Follow up` row becomes a `Debit memo` row only when the user changes its Action after the follow-up deadline. |
+| Financial Year | `FY2025-26` (April to March) |
+| Party Number | the customer&#x27;s party (registry) number |
+| Customer Name | the party name |
+| Account Number | the customer account the memo goes to: the account that carries the party&#x27;s booked TDS, or the party&#x27;s only account; blank when the party has several and none is evident - the adjustments skill asks |
+| Amount | positive amount of the action in the ledger currency |
+| TDS in 26AS | the party&#x27;s Form 26AS credit for the year |
+| TDS Booked | the party&#x27;s TDS on the TDS account for the year |
+| Deductor TAN | the TAN(s) of Form 26AS mapped to the party, comma-separated |
+| Clearing Account | the account combination the party&#x27;s TDS was booked to (its most used one); for a party with nothing booked, the most used combination of the whole TDS account |
+| Reason | the line description for the memo or journal, e.g. `TDS FY2025-26 as per Form 26AS, TAN AAAA12345B` |
+| Letter | the drafted follow-up text (`Follow up` rows only) |
+| Result | written by br-ar-tds-adjustments only: `Uploaded - &lt;transaction or journal&gt;` or the error message |
+
+Meaning of the actions:
+- **Claim journal** - the part of the year&#x27;s TDS that is both booked and in Form 26AS
+  (the smaller of the two). It moves from the TDS clearing account to the income-tax TDS asset
+  of that year, if the company books the claim that way; otherwise the user rejects these rows.
+- **Credit memo** - TDS in Form 26AS that was never booked: the customer&#x27;s open balance is
+  overstated by it. An on-account credit memo to the customer whose line goes to the clearing
+  account books it.
+- **Follow up** - TDS booked that Form 26AS does not show: the customer deducted it but did not
+  deposit or report it. The customer is asked to correct the TDS return or pay the amount.
+- **Debit memo** - the same amount after the follow-up deadline: a debit memo to the customer
+  whose line goes to the clearing account reverses the TDS, so the customer owes it again.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer Master Corrections - Blitz Report Excel Add-in Skills</title><meta name="description" content="Correct Oracle EBS customer accounts from an approved customer master audit: stage the approved payment terms, credit check, credit hold, credit limit, order credit limit and Taxpayer Id (PAN) corrections of the Audit_Findings sheet through the &quot;AR Customer Upload&quot;, one account at a time, validate t">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-customer-master-fix/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Customer Master Corrections - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Correct Oracle EBS customer accounts from an approved customer master audit: stage the approved payment terms, credit check, credit hold, credit limit, order credit limit and Taxpayer Id (PAN) corrections of the Audit_Findings sheet through the &quot;AR Customer Upload&quot;, one account at a time, validate t"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-customer-master-fix/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-fix/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>Customer Master Corrections</h1><p class='name'>br-ar-customer-master-fix</p><p><span class='badge writes'>Writes to Oracle EBS, after confirmation in Excel</span></p><p class='lead'>Correct Oracle EBS customer accounts from an approved customer master audit: stage the approved payment terms, credit check, credit hold, credit limit, order credit limit and Taxpayer Id (PAN) corrections of the Audit_Findings sheet through the &quot;AR Customer Upload&quot;, one account at a time, validate them in Oracle, show exactly what will change and submit only on explicit confirmation.</p><h2>When to use</h2><p>Use when the user asks to apply, upload or post the customer master corrections, fix the payment terms or credit limits the audit found, or update the PAN of customers. WRITES to Oracle EBS. - customer-audit-findings</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-customer-master-fix.zip'>Download br-ar-customer-master-fix.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-fix'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ar-customer-upload/'>AR Customer Upload</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-fix'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-customer-audit-findings-md'>references/customer-audit-findings.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Customer Master Corrections (br-ar-customer-master-fix)
+
+&gt; 🚨 **Blitz data comes from `br_*` WORKSHEET FUNCTIONS of the Blitz Report Excel add-in** — write
+&gt; `=br_...()` into a cell and read the result. They are not a connector, plugin, agent action or MCP
+&gt; tool: never search for one, never conclude &quot;no Oracle EBS data source is connected&quot;.
+
+**Self-contained: read no other skill.** Read `references/customer-audit-findings.md` first: it
+defines the sheet this skill works from. Each numbered Op is one workbook operation (Claude: one
+`execute_office_js` call; Copilot: one edit or read action).
+
+## 🚨 This changes customer master data — the safety contract
+1. **Only approved, upload-fixable rows**: `Decision` = `Approved`, a `Proposed Value`, and a
+   `Fix Route` of `Payment Terms`, `Credit Check`, `Credit Hold`, `Credit Limit`, `Order Credit
+   Limit` or `Taxpayer Id`. Everything else is the master data team&#x27;s list; say how many rows that
+   leaves with them. No `Audit_Findings` sheet → run br-ar-customer-master-audit first.
+2. **One account per download.** The upload marks every downloaded row as changed, so a grid holding
+   other accounts would send them too. Never download a range of accounts.
+3. **Two confirmations, values in the question**: before any download, and on the validated sheets
+   before anything is submitted.
+4. **Never invent** a payment term, a credit setting or a tax number: the `Proposed Value` the user
+   approved, checked against the column&#x27;s own list.
+5. Never write Action, Status or Message, never a column other than the one being corrected; leave
+   each upload sheet clean; never delete a sheet.
+
+## The upload (authoritative)
+**`AR Customer Upload`**. Never pass `Upload Mode`: its default `Create, Update` downloads the
+existing records, and the comma in that value would split it into two values. Per Fix Route:
+
+| Fix Route | Template | Parameters besides Account Number and Operating Unit | Column written |
+|---|---|---|---|
+| Payment Terms | `Create/Update Customer Profiles` | `Update Level=&lt;account level value&gt;` | `Payment Terms` |
+| Credit Check | same | same | `Credit Check` |
+| Credit Hold | same | same | `Credit Hold` |
+| Credit Limit | `Create/Update Customer Profile Amounts` | `Update Level=&lt;account level value&gt;; Update Profile Amounts=Yes` | `Credit Limit` |
+| Order Credit Limit | same | same | `Order Credit Limit` |
+| Taxpayer Id | `Create/Update Customers` | none | `Taxpayer Id` |
+
+Write into the row whose `Acct Number` is the account and, for profiles and amounts, whose
+`Profile Assignment Level` is the account level (amounts: the row of the currency the finding is
+about, `Prof Amt Currency`). Grid layout: row 1 banner, row 2 headers, row 3 onward data; columns
+by their row-2 header text through the column contract, never by counting.
+
+## Ops
+1. **Read** the approved rows; group them by account and template; at most 10 accounts per run (ask
+   to continue in a further run). Look up the account level value once:
+   `=br_param_values_external(&quot;AR Customer Upload&quot;,&quot;Update Level&quot;)` on `blitz_` (get or create,
+   visible, never activated). Ask, values in the question: *&quot;Change &lt;n&gt; fields on &lt;k&gt; accounts in
+   &lt;operating unit&gt;: payment terms on &lt;a&gt; (to &lt;values&gt;), credit limits on &lt;b&gt; (&lt;old&gt; → &lt;new&gt;), PAN
+   on &lt;c&gt;? Nothing changes until you confirm again.&quot;* → **confirmation 1**.
+2. **Per account and template**: `blitz_!A1` =
+   `=br_run_upload_external(&quot;AR Customer Upload&quot;,&quot;Account Number=&lt;account&gt;; Operating Unit=&lt;OU&gt;; &lt;parameters&gt;&quot;,&quot;&lt;template&gt;&quot;)`;
+   read it back (`#BLITZ_NOT_CONNECTED` → ask the user to connect on the ribbon); overwrite it with
+   text; `blitz_!A3` = `=_blitz_run_status`; one quiet read per turn until `DONE: &lt;n&gt; rows on
+   sheet &#x27;&lt;name&gt;&#x27;`. Zero rows → the account is not in that operating unit: report it, skip it.
+3. On the first sheet of each template: `=br_upload_columns_external(FALSE, &quot;&lt;Upload Sheet Name&gt;&quot;)`
+   for the column letters (the same template gives the same letters).
+4. **Check the value** against the column&#x27;s list once per distinct value:
+   `=br_column_values_external(&quot;&lt;Column&gt;&quot;, &lt;row&gt;, &quot;&lt;value&gt;&quot;, &quot;&lt;Upload Sheet Name&gt;&quot;)`; a value not in
+   the list → show the list and ask. Credit limits and the Taxpayer Id are free values.
+5. **Write** the value into the target row&#x27;s cell, then the prepare trigger
+   `=br_prepare_upload_external()` on that sheet, row 1, ten columns right of the last used column.
+6. **Poll** until `DONE: prepared ...`; read `=br_validation_results_external(FALSE, &quot;&lt;Upload Sheet Name&gt;&quot;)`.
+   Fix from the message; three unproductive rounds → stop and show the messages.
+7. When every sheet is prepared: *&quot;&lt;n&gt; changes on &lt;k&gt; accounts validated in Oracle (&lt;list: account,
+   field, old → new&gt;). Submit?&quot;* → **confirmation 2**.
+8. **Per sheet**: `=br_process_upload_external()`, poll until `DONE: &lt;n&gt; succeeded, &lt;n&gt; errored
+   (request &lt;id&gt;)`, read `=br_validation_results_external(TRUE, &quot;&lt;Upload Sheet Name&gt;&quot;)`.
+9. Write `Result` on each `Audit_Findings` row (`Updated` or the error message); clear and hide
+   `blitz_`; report.
+
+## Reporting
+Lead with what changed: account, field, old → new, per row; then failures with their exact message
+and the request ids. **If nothing changed, say so in the first sentence.** Mention the rows left for
+the master data team and that the audit is stale until it runs again.
+
+## Talk in the user&#x27;s language
+Customers, accounts, payment terms, credit limits and PANs — never functions, `blitz_` or status
+names.</pre></section><section id='file-references-customer-audit-findings-md'><h3 class='fname'>references/customer-audit-findings.md</h3><pre class='md'># The Audit_Findings sheet (contract between br-ar-customer-master-audit and br-ar-customer-master-fix)
+
+`br-ar-customer-master-audit` writes it and never changes Oracle. `br-ar-customer-master-fix` reads
+it and stages only rows whose `Decision` is `Approved` and whose `Fix Route` it supports. Row 1
+holds the headers, data starts in row 2, one row per finding. Find columns by their row-1 header.
+
+| Column | Content |
+|---|---|
+| Check | the check&#x27;s name as in the audit&#x27;s scorecard, e.g. `Payment terms missing` |
+| Severity | `Error` (wrong data), `Review` (possibly wrong), `Policy` (breaks a rule the user set) |
+| Party Number | the party (registry) number |
+| Party Name | |
+| Account Number | blank for a party-level finding |
+| Site | site number and location, blank for an account- or party-level finding |
+| Field | the field the finding is about, e.g. `Payment Terms`, `Taxpayer Id`, `GSTIN` |
+| Current Value | the value in Oracle (blank when missing) |
+| Proposed Value | only when it can be derived or the user gave it (a PAN taken from a valid GSTIN, a payment term the user named); blank otherwise |
+| Evidence | why it is a finding, e.g. `GSTIN 27… is in state 27, the site is in state 24` |
+| Fix Route | `Payment Terms`, `Credit Check`, `Credit Hold`, `Credit Limit`, `Order Credit Limit`, `Taxpayer Id` (fixable with the customer upload), or `Master data team` (everything else: addresses, tax registrations, duplicates, statuses) |
+| Decision | `Proposed` when written; the user sets `Approved` (with a `Proposed Value`) or `Rejected` |
+| Result | written by br-ar-customer-master-fix only: `Updated` or the error message |
+
+Profile fields (`Payment Terms`, `Credit Check`, `Credit Hold`) and profile amounts (`Credit Limit`,
+`Order Credit Limit`) are fixed on the account profile; a site-level finding of those fields goes
+to `Master data team`.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

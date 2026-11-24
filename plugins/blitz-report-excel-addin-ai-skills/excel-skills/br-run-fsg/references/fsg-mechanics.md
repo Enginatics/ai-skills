@@ -18,7 +18,9 @@ are Excel worksheet functions of the Blitz Report add-in, not tools or connector
 `list_name`: a segment as the ledger profile names it (`Account (3)` or just `Account`), or one of
 `Period`, `Amount Type`, `Balance Type`, `Currency`, `Currency Type`, `Budget`, `Encumbrance Type`,
 `Journal Source`, `Journal Category`, `Conversion Type`, `Movement`. `search` keeps values whose value
-or description contains it - use it on large segments (a list stops after 2000 values and says so).
+or description contains it - use it on large segments and on `Period`, which holds every period of
+the ledger's calendar: check the period the user named with it, never list them all (a list stops
+after 2000 values and says so).
 `parent_value` lists the members of that parent value of a segment.
 
 The three lookups and the statement function take an optional environment as their last argument,
@@ -40,14 +42,22 @@ refreshed and drilled by the environment and responsibility it was made in.
 
 ## Running an action and waiting
 
-Same discipline as running a report:
-1. Write the action formula and read the cell's return in the SAME operation, then in your next
-   operation replace that cell with plain text. A second read of a still-present action formula
-   can start the action twice.
-2. Read `=_blitz_run_status` once per turn, generously spaced; never re-enter the action formula
-   to check on it. A value read before your own trigger is stale - it belongs to an earlier action.
-3. While an action runs, pause other workbook edits: the add-in is writing the sheet.
-4. `ERROR: ...` is the add-in's reason - report it, fix what it names, and try once more at most.
+An action takes two operations, not three:
+1. Write the action formula and read the cell's return in the SAME operation. A second read of a
+   still-present action formula can start the action twice.
+2. In your NEXT operation replace that cell with plain text and read `=_blitz_run_status` (keep it
+   in one cell of `blitz_`) together. A statement, refresh or drill takes seconds, so this read
+   normally shows its `DONE:` already - go straight on.
+3. Only when it still reads `RUNNING:` read it again, once per turn; never re-enter the action
+   formula to check on it. A value read before your own trigger is stale - it belongs to an earlier
+   action; a text identical to the outcome of your previous action may be that one, so read once
+   more and take what you then read.
+4. While an action runs, pause other workbook edits: the add-in is writing the sheet.
+5. `ERROR: ...` is the add-in's reason - report it, fix what it names, and try once more at most.
+
+Write in blocks: everything a step needs (a column of formulas, its headings, its totals) goes into
+the sheet in one operation, and one refresh then answers all of it - period cells first, then the
+balances that read them. Never refresh between two writes that the same refresh can answer.
 
 ## The balance formula
 
@@ -113,8 +123,10 @@ the statement uses.
 ## Refresh
 
 - `br_fsg_refresh_external("<Sheet>")` calculates the values still pending (new or changed formulas).
-  `force` TRUE fetches every value again - use it for current balances after new postings. A blank
-  sheet name refreshes every statement of the workbook, always forced.
+  `force` TRUE fetches every value again - use it for current balances after new postings, and for
+  the first refresh of a statement you did not build in this conversation, whose own cells may be
+  waiting for an answer as well. A blank sheet name refreshes every statement of the workbook,
+  always forced.
 - `<n> value(s) refreshed` counts server answers, not cells - cells with the same arguments share one.
 - `still without an answer: <cells>` lists cells showing `(pending)`, an error, or the add-in's own
   answer: `Error (Period)` / `(Amount Type)` / `(Currency)` / `(Currency Type)` / `(Balance Type)` -

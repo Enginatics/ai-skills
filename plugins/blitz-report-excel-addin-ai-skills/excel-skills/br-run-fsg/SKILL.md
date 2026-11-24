@@ -25,14 +25,16 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
    the ready balance formula pattern. Segment values: `=br_fsg_values_external("<Ledger>","<Segment>","<search>")`.
 3. **Statement sheet.** `=br_fsg_new_statement_external("<Ledger>","<Sheet name>")` - a new sheet,
    or the user's own sheet claimed as it is. Write the formula and read its return in the SAME
-   operation, then replace that cell with plain text. Wait for `=_blitz_run_status` to read
-   `DONE: sheet '<name>' ...`. A workbook that already holds the user's statement needs no new sheet.
-4. **Write the statement** on that sheet: criteria cells (period, amount type, currency...), one
-   row per account or parent value, balance formulas from the pattern referencing those cells,
-   descriptions, totals - per the recipes. Nothing is calculated yet: cells show `(pending)`.
-5. **Refresh.** `=br_fsg_refresh_external("<Sheet name>")` (same write-read-replace), then poll
-   `_blitz_run_status` for `DONE: <n> value(s) refreshed` - it names any cell still without an
-   answer; fix those cells and refresh again.
+   operation; in the next one replace that cell with plain text and read `=_blitz_run_status`
+   together - it normally reads `DONE: sheet '<name>' ...` by then. A workbook that already holds
+   the user's statement needs no new sheet.
+4. **Write the statement** on that sheet, in as few operations as you can: criteria cells (period
+   with its list of values, amount type, currency...), one row per account or parent value, balance
+   formulas from the pattern referencing those cells, descriptions, totals - per the recipes.
+   Nothing is calculated yet: cells show `(pending)`.
+5. **Refresh.** `=br_fsg_refresh_external("<Sheet name>")` (the same two operations): the status
+   reads `DONE: <n> value(s) refreshed` and names any cell still without an answer; fix those cells
+   and refresh again.
 6. **Read and answer** from the cells. Never compute a balance yourself or invent one.
 7. **Explain a number** on request: `=br_fsg_drill_external("<cell>","Journals","<Sheet name>")`
    puts the journal lines behind it on a new sheet; drill on to the subledger and run a detailed
@@ -41,8 +43,9 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
 ## Core rules
 
 - One action at a time (statement, refresh, drill): wait for `DONE:` or `ERROR:` before the next.
-  Poll only `_blitz_run_status`, one check per turn; never re-enter an action formula to check on it.
-  A status read before your own trigger is stale - ignore it.
+  Read `_blitz_run_status` in the operation that replaces the action formula with text - an action
+  takes seconds - and again, one check per turn, only while it reads `RUNNING:`; never re-enter an
+  action formula to check on it. A status read before your own trigger is stale - ignore it.
 - Every argument of a balance, period or description formula is a quoted literal or a plain cell
   reference - never an expression. Segment values are text: quote them (`"01"`, never `01`) and
   give a cell holding one the Text format before writing it. A literal period such as `Dec-12`

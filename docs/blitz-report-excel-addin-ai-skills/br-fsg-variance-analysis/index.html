@@ -14,7 +14,11 @@ Read `br-analytics-standards` first. Every statement, refresh and drill step run
 Numbers come only from cells the add-in calculated; commentary says only what the lines show.
 
 ## Op 0 — One question message, up front
-Ask, with a suggested default for each, in ONE message:
+Skip this when the request already says what to compare and against what: take the defaults below
+for whatever it leaves open and name them in the reply. A statement that already carries the
+comparison, variance and flag columns is not rebuilt - go to the Op the request asks for (a ranking,
+or Op 3 for &quot;explain the largest variances&quot;). Otherwise ask, with a suggested default for each, in
+ONE message:
 - **What to compare**: an existing statement sheet (name it), or the accounts / lines the user
   cares about on a ledger.
 - **Against what**: prior period (default), same period last year, or a budget (name it - the
@@ -28,7 +32,9 @@ Ask, with a suggested default for each, in ONE message:
   should the comparison go on a copy?
 
 ## Op 1 — The comparison columns
-Beside the current balance column (or on a new statement built with br-run-fsg):
+Beside the current balance column (or on a new statement built with br-run-fsg), written in ONE
+operation - every comparison asked for, its heading cells, the thresholds and the rank of Op 2 -
+and answered by ONE refresh (`force` TRUE on a statement you did not build in this conversation):
 - **Comparison**: the same balance formula with the comparison period
   (`br_period_offset(&lt;period&gt;,-1)` or `(...,-12,,&quot;Exclude&quot;)` in a heading cell) or with balance type
   `B` and the budget name.
@@ -43,12 +49,14 @@ Refresh through br-run-fsg; continue only on `DONE` with no cell left without an
 
 ## Op 2 — Rank
 Flagged lines by absolute variance, largest first (a dynamic-array formula on the analysis sheet,
-blanks as 0). Depth (a): go to Op 5.
+blanks as 0), written with Op 1. Depth (a): go to Op 5.
 
 ## Op 3 — Explain the top lines from their journals
 For each of the top 5 flagged lines (ask before more than 10 drills): drill the CURRENT balance cell
 to `Journals`; for a period comparison also drill the COMPARISON cell (budget has no journals - drill
-actual only). One drill at a time. Then on an analysis sheet, per line:
+actual only). One drill at a time, two operations each, and no analysis in between: read the drill
+sheets&#x27; heading row once, then write the analysis of ALL lines in ONE operation after the last
+drill. On that analysis sheet, per line:
 - tie out each drill to its balance (br-run-fsg `drill-and-detail.md`) - report any gap;
 - total each drill by Source Name, then Category Name, then Journal Name;
 - the change per group between the two drills is the driver list - keep groups that exist in only

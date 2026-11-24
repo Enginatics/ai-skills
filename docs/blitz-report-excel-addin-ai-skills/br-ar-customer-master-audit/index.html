@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer Master Audit - Blitz Report Excel Add-in Skills</title><meta name="description" content="Audit the Oracle EBS customer master in Excel: duplicate customers (same tax id or same normalised name on different parties), missing payment terms, bill-to sites or address data, credit settings that contradict each other (a credit limit on advance-payment terms, credit check without a limit), ina">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-customer-master-audit/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Customer Master Audit - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Audit the Oracle EBS customer master in Excel: duplicate customers (same tax id or same normalised name on different parties), missing payment terms, bill-to sites or address data, credit settings that contradict each other (a credit limit on advance-payment terms, credit check without a limit), ina"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-customer-master-audit/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-audit/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>Customer Master Audit</h1><p class='name'>br-ar-customer-master-audit</p><p class='lead'>Audit the Oracle EBS customer master in Excel: duplicate customers (same tax id or same normalised name on different parties), missing payment terms, bill-to sites or address data, credit settings that contradict each other (a credit limit on advance-payment terms, credit check without a limit), inactive parties with active accounts, and, for India, GSTIN and PAN checks (length, format, check digit, state code against the site&#x27;s state, PAN inside the GSTIN). Lists every finding with its evidence and the proposed correction on an Audit_Findings sheet; changes nothing in Oracle.</p><h2>When to use</h2><p>Use when the user asks for a customer master audit, customer data quality, duplicate customers, GST number or PAN validation, or a correction list for the master data team. - customer-audit-findings - party-name-normalisation</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-customer-master-audit.zip'>Download br-ar-customer-master-audit.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-audit'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ar-customers-and-sites/'>AR Customers and Sites</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-audit'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-checks-md'>references/checks.md</a><a href='#file-references-customer-audit-findings-md'>references/customer-audit-findings.md</a><a href='#file-references-party-name-normalisation-md'>references/party-name-normalisation.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Customer Master Audit (br-ar-customer-master-audit)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. Read
+&gt; `references/checks.md` before scoring and `references/customer-audit-findings.md` before writing
+&gt; the findings.
+
+Find the customer records that will cause trouble downstream — wrong invoices, tax returns that do
+not reconcile, orders released without credit control — and hand over one correction list. You own
+orchestration, the checks and the findings; br-run-reports does extraction. **Read-only:** the
+corrections the customer upload can make are staged by **br-ar-customer-master-fix** after the user
+approves them; everything else goes to the master data team as the list.
+
+## When to use
+&quot;Audit the customer master&quot;, &quot;find duplicate customers&quot;, &quot;check the GST numbers&quot;, &quot;customers
+without payment terms&quot;, monthly master data review, before a migration or a go-live.
+
+## Inputs (ask once, up front, in one question)
+- **Operating unit(s)** (required).
+- **Checks**: default all generic checks of `references/checks.md`; the India checks when the
+  customers are in India or the user asks for them.
+- **Policy lists**, only for the checks that need them: the payment terms that mean payment in
+  advance (offer the terms found in the data as a list; never guess them from their names), and
+  whether every active account must have a collector or a default warehouse.
+- **Where GSTIN and PAN are held** when the India checks run: by default the GSTIN in the site&#x27;s or
+  party&#x27;s tax registration number and the PAN in Taxpayer Id; ask when the data shows otherwise.
+
+## Reports used (authoritative names — do NOT broad-search for them)
+| Report (exact name) | Run with | Role |
+|---|---|---|
+| `AR Customers and Sites` | Operating Unit, Level=Site Use, Show Profile Amounts=Yes, Show Tax Registrations=Yes | one row per site use (and tax registration and profile amount): party, account, site, address, state, statuses, payment terms, credit check and hold, credit limits, collector, warehouse, Taxpayer Id, tax registrations |
+
+Show active only stays at its default (Yes). Several operating units → one run each. Pass the
+exact name; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+## Pipeline
+1. **Extract — DELEGATE** to br-run-reports. Wait; touch nothing mid-run.
+2. **Build the check columns** next to the data on a helper sheet with formulas
+   (`references/checks.md`): normalised party name, PAN and GSTIN findings, state code against the
+   site&#x27;s state, missing values, credit consistency. One formula per column, filled down.
+3. **Duplicates** on `Duplicate_Groups`: different parties sharing a Taxpayer Id (or the PAN inside
+   their GSTINs) or a normalised name; then the near-identical names you find by comparison
+   (`references/party-name-normalisation.md`), marked as suspects with their evidence. One party
+   with a GSTIN per state is normal and never a duplicate.
+4. **Findings** on `Audit_Findings` per the shared contract, one row per finding, `Decision`
+   `Proposed`; a `Proposed Value` only where it is derived (the PAN of a valid GSTIN when Taxpayer
+   Id is blank) or the user gave it.
+5. **Scorecard** on `Customer_Audit` (first tab): per check the severity, the number of findings
+   and of accounts; the accounts with the most findings; the share of active accounts clean.
+   Cells sharing a format adjacent, one write per block.
+6. **Narrative** (≤5 bullets): the worst checks, the duplicate suspects, what the customer upload
+   can correct and what goes to the master data team. Offer br-ar-customer-master-fix for the
+   approved upload-fixable rows.
+
+## Hard rules
+- A finding states its evidence; a duplicate is a **suspect** until a person decides, and merging
+  parties is never proposed as an upload fix.
+- Never invent a correction value: no payment term, credit limit or tax number that the data or
+  the user did not give.
+- Policy checks run only with the user&#x27;s policy; without it they are skipped and said so.
+- Analysis only: never write to Oracle and never run an upload from this skill.
+
+## Degradation rules
+- No tax registrations in the data (GSTIN kept outside the standard tax registrations, as some
+  localisations do) → say the GST checks could not run, and run the rest.
+- A state the GST state list does not know → `State not checked`, never a mismatch.
+- A very large customer base → run with `Show trx count within x days=365` and audit the accounts
+  with transactions first, and say so.
+
+## Talk in the user&#x27;s language
+Customers, accounts, sites, tax numbers and fields — never `br_*` functions or helper sheets.</pre></section><section id='file-references-checks-md'><h3 class='fname'>references/checks.md</h3><pre class='md'># Checks of the customer master audit
+
+Columns are those of `AR Customers and Sites` (Level=Site Use). The report repeats account and
+party values on every site-use row: count a party- or account-level finding once per party or
+account, a site finding once per site. Inactive rows are out unless a check says otherwise.
+
+## Generic checks
+| Check | Severity | Test | Fix Route |
+|---|---|---|---|
+| Same tax id, different parties | Review | Taxpayer Id equal on two or more Party Numbers | Master data team |
+| Same name, different parties | Review | normalised Party Name equal on two or more Party Numbers (`party-name-normalisation.md`); near-identical names found by comparison are listed as suspects with their evidence | Master data team |
+| Payment terms missing | Error | active account whose Account Profile Payment Term is blank and whose bill-to site uses have no Site Use Payment Term either | Payment Terms |
+| No bill-to site | Error | active account without an active site use whose Site Use is Bill To | Master data team |
+| No primary bill-to | Review | active account with bill-to site uses, none of them Primary Flag = Yes | Master data team |
+| Address line too short | Error | Address1 shorter than 3 characters on an active site | Master data team |
+| Postal code missing | Review | Postal Code blank on an active site, in a country that uses postal codes | Master data team |
+| State missing | Error | State blank on an active site in a country with states (India) | Master data team |
+| Inactive party, active account | Error | Party Status inactive while Account Status is active | Master data team |
+| Credit check without a limit | Review | Credit Check = Yes and no Credit Limit (blank or 0) on the account profile | Credit Limit |
+| Limit without credit check | Review | Credit Limit &gt; 0 and Credit Check not Yes | Credit Check |
+| Credit limit on advance terms | Policy | Credit Limit &gt; 0 on an account whose payment term is in the user&#x27;s advance list | Credit Limit |
+| Collector missing | Policy | Collector Name blank on an active account (only when the user requires it) | Master data team |
+| Default warehouse missing | Policy | Warehouse blank on an active account (only when the user requires it) | Master data team |
+
+A missing value compares as an empty string: test it with `=LEN(TRIM(x))=0`, never `x=&quot;&quot;` on a
+number column, and score blanks as 0 in any ranking.
+
+## India checks (GSTIN and PAN)
+| Check | Severity | Test | Fix Route |
+|---|---|---|---|
+| GSTIN invalid | Error | GSTIN formula below gives `Length`, `Format`, `PAN entity type` or `Check digit` | Master data team |
+| GSTIN missing | Review | active Bill To or Ship To site in India without a GSTIN (the customer may be unregistered; the user decides) | Master data team |
+| GSTIN state mismatch | Error | the GSTIN&#x27;s first two digits differ from the GST state code of the site&#x27;s State | Master data team |
+| PAN invalid | Error | PAN formula below gives `Format` or `PAN entity type` on Taxpayer Id | Taxpayer Id, proposed value the PAN of the party&#x27;s valid GSTINs when they all carry the same one |
+| PAN missing | Review | Taxpayer Id blank | Taxpayer Id, proposed value as above |
+| PAN differs from GSTIN | Error | a valid GSTIN whose characters 3 to 12 are not the Taxpayer Id | Master data team (which of the two is right is a judgement) |
+
+GSTIN in A2 (result `OK`, `Missing`, `Length`, `Format`, `PAN entity type` or `Check digit`):
+```
+=LET(g,UPPER(TRIM(A2)),c,&quot;0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ&quot;,
+ IF(g=&quot;&quot;,&quot;Missing&quot;,IF(LEN(g)&lt;&gt;15,&quot;Length&quot;,
+ LET(ch,MID(g,SEQUENCE(15),1),cd,CODE(ch),dg,(cd&gt;=48)*(cd&lt;=57),lt,(cd&gt;=65)*(cd&lt;=90),
+  pat,{1;1;2;2;2;2;2;1;1;1;1;2;3;2;3},
+  okf,AND(IF(pat=1,dg,IF(pat=2,lt,dg+lt))=1,MID(g,13,1)&lt;&gt;&quot;0&quot;),
+  IF(NOT(okf),&quot;Format&quot;,IF(ISERROR(FIND(MID(g,6,1),&quot;ABCFGHJLPT&quot;)),&quot;PAN entity type&quot;,
+  LET(v,SEARCH(MID(g,SEQUENCE(14),1),c)-1,p,v*IF(ISODD(SEQUENCE(14)),1,2),s,SUM(QUOTIENT(p,36)+MOD(p,36)),
+   IF(MID(c,MOD(36-MOD(s,36),36)+1,1)=MID(g,15,1),&quot;OK&quot;,&quot;Check digit&quot;))))))))
+```
+PAN in A2 (result `OK`, `Missing`, `Format` or `PAN entity type`):
+```
+=LET(p,UPPER(TRIM(A2)),IF(p=&quot;&quot;,&quot;Missing&quot;,IF(LEN(p)&lt;&gt;10,&quot;Format&quot;,
+ LET(cd,CODE(MID(p,SEQUENCE(10),1)),pat,{2;2;2;2;2;1;1;1;1;2},
+  IF(NOT(AND(IF(pat=1,(cd&gt;=48)*(cd&lt;=57),(cd&gt;=65)*(cd&lt;=90))=1)),&quot;Format&quot;,
+  IF(ISERROR(FIND(MID(p,4,1),&quot;ABCFGHJLPT&quot;)),&quot;PAN entity type&quot;,&quot;OK&quot;))))))
+```
+The PAN inside a GSTIN is `MID(g,3,10)`.
+
+## GST state codes
+Write this table on the helper sheet and look the site&#x27;s State up in it (upper case, trimmed). A
+state that is not in the table is `State not checked`, never a mismatch.
+
+| Code | State (and spellings found in customer masters) |
+|---|---|
+| 01 | JAMMU AND KASHMIR |
+| 02 | HIMACHAL PRADESH |
+| 03 | PUNJAB |
+| 04 | CHANDIGARH |
+| 05 | UTTARAKHAND, UTTARANCHAL |
+| 06 | HARYANA |
+| 07 | DELHI, NEW DELHI |
+| 08 | RAJASTHAN |
+| 09 | UTTAR PRADESH |
+| 10 | BIHAR |
+| 11 | SIKKIM |
+| 12 | ARUNACHAL PRADESH |
+| 13 | NAGALAND |
+| 14 | MANIPUR |
+| 15 | MIZORAM |
+| 16 | TRIPURA |
+| 17 | MEGHALAYA |
+| 18 | ASSAM |
+| 19 | WEST BENGAL |
+| 20 | JHARKHAND |
+| 21 | ODISHA, ORISSA |
+| 22 | CHHATTISGARH |
+| 23 | MADHYA PRADESH |
+| 24 | GUJARAT |
+| 26 | DADRA AND NAGAR HAVELI AND DAMAN AND DIU, DADRA AND NAGAR HAVELI, DAMAN AND DIU (older GSTINs of Daman and Diu start with 25: accept both) |
+| 27 | MAHARASHTRA |
+| 29 | KARNATAKA |
+| 30 | GOA |
+| 31 | LAKSHADWEEP |
+| 32 | KERALA |
+| 33 | TAMIL NADU |
+| 34 | PUDUCHERRY, PONDICHERRY |
+| 35 | ANDAMAN AND NICOBAR ISLANDS |
+| 36 | TELANGANA |
+| 37 | ANDHRA PRADESH |
+| 38 | LADAKH (registrations made before Ladakh became a union territory start with 01: accept both) |
+| 97 | OTHER TERRITORY |</pre></section><section id='file-references-customer-audit-findings-md'><h3 class='fname'>references/customer-audit-findings.md</h3><pre class='md'># The Audit_Findings sheet (contract between br-ar-customer-master-audit and br-ar-customer-master-fix)
+
+`br-ar-customer-master-audit` writes it and never changes Oracle. `br-ar-customer-master-fix` reads
+it and stages only rows whose `Decision` is `Approved` and whose `Fix Route` it supports. Row 1
+holds the headers, data starts in row 2, one row per finding. Find columns by their row-1 header.
+
+| Column | Content |
+|---|---|
+| Check | the check&#x27;s name as in the audit&#x27;s scorecard, e.g. `Payment terms missing` |
+| Severity | `Error` (wrong data), `Review` (possibly wrong), `Policy` (breaks a rule the user set) |
+| Party Number | the party (registry) number |
+| Party Name | |
+| Account Number | blank for a party-level finding |
+| Site | site number and location, blank for an account- or party-level finding |
+| Field | the field the finding is about, e.g. `Payment Terms`, `Taxpayer Id`, `GSTIN` |
+| Current Value | the value in Oracle (blank when missing) |
+| Proposed Value | only when it can be derived or the user gave it (a PAN taken from a valid GSTIN, a payment term the user named); blank otherwise |
+| Evidence | why it is a finding, e.g. `GSTIN 27… is in state 27, the site is in state 24` |
+| Fix Route | `Payment Terms`, `Credit Check`, `Credit Hold`, `Credit Limit`, `Order Credit Limit`, `Taxpayer Id` (fixable with the customer upload), or `Master data team` (everything else: addresses, tax registrations, duplicates, statuses) |
+| Decision | `Proposed` when written; the user sets `Approved` (with a `Proposed Value`) or `Rejected` |
+| Result | written by br-ar-customer-master-fix only: `Updated` or the error message |
+
+Profile fields (`Payment Terms`, `Credit Check`, `Credit Hold`) and profile amounts (`Credit Limit`,
+`Order Credit Limit`) are fixed on the account profile; a site-level finding of those fields goes
+to `Master data team`.</pre></section><section id='file-references-party-name-normalisation-md'><h3 class='fname'>references/party-name-normalisation.md</h3><pre class='md'># Normalising a party name for comparison
+
+Two names are the same party name when their normalised forms are equal. The formula (Excel 365,
+the name in A2) upper-cases the name, cuts it at `(FORMERLY`, `(FORMALLY` or `(EARLIER`, removes
+`M/S`, turns `&amp;` into `AND`, drops apostrophes, turns `. , - / ( )` into spaces and drops the
+legal-form words:
+
+```
+=LET(s,&quot; &quot;&amp;UPPER(A2)&amp;&quot; &quot;,
+ t,IFERROR(TEXTBEFORE(s,{&quot;(FORMERLY&quot;,&quot;(FORMALLY&quot;,&quot;(EARLIER&quot;}),s),
+ r,{&quot; M/S.&quot;,&quot; &quot;;&quot; M/S &quot;,&quot; &quot;;&quot;&amp;&quot;,&quot; AND &quot;;&quot;.&quot;,&quot; &quot;;&quot;,&quot;,&quot; &quot;;&quot;-&quot;,&quot; &quot;;&quot;/&quot;,&quot; &quot;;&quot;(&quot;,&quot; &quot;;&quot;)&quot;,&quot; &quot;;&quot;&#x27;&quot;,&quot;&quot;},
+ c,REDUCE(t,SEQUENCE(ROWS(r)),LAMBDA(a,i,SUBSTITUTE(a,INDEX(r,i,1),INDEX(r,i,2)))),
+ w,TEXTSPLIT(TRIM(c),&quot; &quot;),
+ k,FILTER(w,ISNA(XMATCH(w,{&quot;PRIVATE&quot;,&quot;PVT&quot;,&quot;LIMITED&quot;,&quot;LTD&quot;,&quot;LLP&quot;,&quot;MS&quot;,&quot;MESSRS&quot;,&quot;THE&quot;,&quot;CO&quot;,&quot;COMPANY&quot;,&quot;CORPORATION&quot;,&quot;CORP&quot;,&quot;INC&quot;})),&quot;&quot;),
+ TEXTJOIN(&quot; &quot;,TRUE,k))
+```
+
+Examples: `M/S. Vision Electricals Pvt. Ltd.` → `VISION ELECTRICALS`; `Acme Cables (India) Pvt. Ltd.`
+→ `ACME CABLES INDIA`; `A&amp;B Traders Co.` → `A AND B TRADERS`.
+
+- INDIA stays in the name: it often tells two companies apart.
+- Two different parties with the same normalised name are never a match for each other; they are
+  candidates (in a duplicate check, a duplicate suspect).
+- Beyond equal names, compare the remaining ones yourself: shared distinctive words (not a city,
+  not a common word like INDUSTRIES or TRADERS), initials written out (`A B C` and `ABC`), a group
+  name with a division. Claude may score them in script: word overlap as 2 × shared ÷ (words of A
+  + words of B), and character similarity; 0.90 and clearly ahead of the next name is a
+  suggestion, 0.75 a candidate. Copilot compares the lists itself. A suggestion is shown with its
+  evidence and confirmed by the user, never applied on its own.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

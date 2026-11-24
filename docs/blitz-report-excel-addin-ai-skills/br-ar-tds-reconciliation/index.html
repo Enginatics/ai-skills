@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer TDS Reconciliation - Blitz Report Excel Add-in Skills</title><meta name="description" content="Reconcile the TDS that customers deducted from their payments (India, Form 26AS or AIS, any section such as 194Q, 194C or 194J) with the TDS booked in Oracle EBS Receivables: extract the TDS clearing account lines per customer with GL Account Analysis, map every deductor TAN of Form 26AS to a custom">
+<link rel="canonical" href="https://www.enginatics.com/ai-skills/br-ar-tds-reconciliation/"><meta property="og:type" content="website"><meta property="og:site_name" content="Enginatics AI Skills">
+<meta property="og:title" content="Customer TDS Reconciliation - Blitz Report Excel Add-in Skills"><meta property="og:description" content="Reconcile the TDS that customers deducted from their payments (India, Form 26AS or AIS, any section such as 194Q, 194C or 194J) with the TDS booked in Oracle EBS Receivables: extract the TDS clearing account lines per customer with GL Account Analysis, map every deductor TAN of Form 26AS to a custom"><meta property="og:url" content="https://www.enginatics.com/ai-skills/br-ar-tds-reconciliation/">
+<link rel="stylesheet" href="../../assets/site.css"></head>
+<body><header><div class="in"><a class="brand" href="../../">Enginatics AI Skills</a>
+<nav><a href="../../blitz-report-ai-skills/">Developers</a><a href="../../blitz-report-excel-addin-ai-skills/">Excel</a><a href="https://www.enginatics.com/">Blitz Report</a></nav></div></header>
+<main>
+<div data-src='https://github.com/enginatics/ai-skills/blob/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-reconciliation/'><p class='crumbs'><a href='../'>Blitz Report Excel Add-in Skills</a> / Receivables</p><h1>Customer TDS Reconciliation</h1><p class='name'>br-ar-tds-reconciliation</p><p class='lead'>Reconcile the TDS that customers deducted from their payments (India, Form 26AS or AIS, any section such as 194Q, 194C or 194J) with the TDS booked in Oracle EBS Receivables: extract the TDS clearing account lines per customer with GL Account Analysis, map every deductor TAN of Form 26AS to a customer, and show per customer and financial year what is matched, in Form 26AS but not booked, booked but missing from Form 26AS, or from an unidentified deductor. Proposes the claim journal, credit memos and customer follow-ups on a TDS_Actions sheet; changes nothing in Oracle.</p><h2>When to use</h2><p>Use when the user asks for a TDS reconciliation, 26AS reconciliation, TDS receivable or TDS credit tie-out, short-deducted or short-deposited TDS by customers. - tds-actions-sheet - party-name-normalisation</p><h2>Install</h2><p><a class='btn' href='https://github.com/enginatics/ai-skills/raw/main/plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-tds-reconciliation.zip'>Download br-ar-tds-reconciliation.zip</a></p><p>Claude in Excel: upload the zip under Customize &gt; Skills &gt; Create skill. Microsoft 365 Copilot in Excel: copy the <a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-reconciliation'>skill folder</a> into <code>Documents/Copilot/Microsoft Excel/Skills</code> in your OneDrive. Or install <code>blitz-report-excel-addin-ai-skills</code> in Claude Code and run <code>/blitz-report-excel-addin-ai-skills:excel-skills-setup</code>.</p><p>Requires Blitz Report and the Blitz Report Excel add-in, connected to your Oracle EBS instance.</p><h2>Blitz Reports used</h2><ul class='reports'><li><a href='https://www.enginatics.com/reports/ar-customers-and-sites/'>AR Customers and Sites</a></li><li><a href='https://www.enginatics.com/reports/gl-account-analysis/'>GL Account Analysis</a></li></ul><p><a href='https://github.com/enginatics/ai-skills/tree/main/plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-reconciliation'>View source on GitHub</a></p><h2>Skill contents</h2><p class='files'><a href='#file-skill-md'>SKILL.md</a><a href='#file-references-matching-md'>references/matching.md</a><a href='#file-references-party-name-normalisation-md'>references/party-name-normalisation.md</a><a href='#file-references-tds-actions-sheet-md'>references/tds-actions-sheet.md</a></p><section id='file-skill-md'><h3 class='fname'>SKILL.md</h3><pre class='md'># Customer TDS Reconciliation (br-ar-tds-reconciliation)
+
+&gt; 🚨 **Blitz data = Excel worksheet UDFs, not MCP tools/connectors.** Extract data only by writing `=br_...()` into a cell (via `execute_office_js`) and reading the spill — **never** `tool_search` for `br_*`, **never** `refresh_mcp_connectors`, and never conclude &quot;no Oracle EBS / Blitz connector is set up&quot; (the Blitz Report add-in is an Excel add-in, not an MCP connector, so it never appears in the connector list — its absence there is expected). Load the extraction mechanism first: `read_skill(&quot;br-run-reports&quot;)`.
+
+&gt; **Performance:** read `br-analytics-standards` at the start of every run. Read
+&gt; `references/matching.md` before the matching step and `references/tds-actions-sheet.md` before
+&gt; writing the actions.
+
+Customers who pay net of TDS leave two records: the TDS the company booked against them in Oracle,
+and the TDS they reported to the tax department, which appears in the company&#x27;s Form 26AS. This
+skill ties the two per customer and financial year. You own orchestration, matching and the
+verdict; br-run-reports does extraction. **Read-only:** the staging of memos and the journal is
+**br-ar-tds-adjustments**, after the user has approved the actions.
+
+## When to use
+&quot;Reconcile TDS with 26AS&quot;, &quot;which customers deducted TDS but did not deposit it&quot;, &quot;TDS receivable
+does not match the 26AS&quot;, &quot;TDS credits we never booked&quot;, quarterly or year-end TDS review.
+
+## Inputs (ask once, up front, in one question)
+- **Ledger** (required) and the **TDS account(s)**: the natural account value(s) on which TDS
+  deducted by customers is booked. Never guess them; if the user does not know, they are the
+  accounts their receipt write-off or TDS activity posts to.
+- **Financial year(s)**: April to March; default the last completed year and the current one.
+- **Form 26AS**: the user downloads it (or the AIS) from the income-tax portal and pastes Part I,
+  or the whole statement, into a sheet of this workbook. Ask for the sheet name. No 26AS → stop and
+  say what to download; never reconcile against the books alone.
+- *Optional:* which amount counts (default `TDS Deposited`), sections to include (default all),
+  tolerance per customer and year (default 1.00), customers to leave out (the user&#x27;s policy), an
+  existing `TDS_Deductor_Map` sheet from an earlier run.
+
+## Reports used (authoritative names — do NOT broad-search for them)
+| Report (exact name) | Run with | Role |
+|---|---|---|
+| `GL Account Analysis` | Ledger, `Period=` (empty), Period From, Period To (first and last period of the years), and the account segment parameter, named after the chart of accounts&#x27; account segment (e.g. `Account`), with the TDS account(s) comma-separated | the TDS booked: Accounting Date, Accounted Amount, Vendor Or Customer Number and Name, Transaction Number, Cash Receipt Number, Source Name, Concatenated Segments |
+| `AR Customers and Sites` | Level=Customer, `Operating Unit=` (empty: it does not apply at customer level, and older versions of the report return no customer when it is set), Show Tax Registrations=Yes | Party Number, Party Name, Account Number, Taxpayer Id, the tax registrations (a TAN held there matches exactly) |
+
+**Always pass `Period=` empty with Period From and Period To**: omitted, the add-in adds the latest
+period as Period and the run returns that one period, or nothing, instead of the years. Pass the
+exact names; fall back to a search only on `#BLITZ_REPORT_NOT_FOUND`.
+
+## Pipeline
+1. **Extract — DELEGATE** both reports to br-run-reports. Wait for each; touch nothing mid-run.
+2. **Read Form 26AS** into `TDS_26AS` with formulas (one row per deductor transaction; mapping,
+   status codes and the financial-year formula in `references/matching.md`). Rows whose booking
+   status is not final (`F`) are kept but never counted as credit; they get their own total.
+3. **Booked TDS** into `TDS_Booked`: one row per GL line with Party Number (through the account
+   number in the customer master), Financial Year of the Accounting Date and the Accounted Amount
+   (debit positive). A line without a customer number is **booked without customer** (a manual
+   journal, usually) — listed, never spread over customers.
+4. **Map deductors to customers** in the order of `references/matching.md`: the confirmed map
+   sheet, a TAN held as a tax registration, a unique exact normalised name; the rest you propose
+   from the two name lists and **the user confirms in one question**, largest amounts first.
+   Confirmed pairs go to `TDS_Deductor_Map` for the next run. An unconfirmed deductor stays
+   **unidentified** and is never netted into a customer.
+5. **Reconcile** per party and financial year on `TDS_By_Customer` (SUMIFS over the two tables):
+   TDS in 26AS, TDS booked, difference = 26AS − booked, class `Matched` (within the tolerance),
+   `In 26AS, not booked`, `Booked, not in 26AS`, plus the `Unidentified deductor` and `Booked
+   without customer` rows.
+6. **Propose actions** on `TDS_Actions` exactly as the shared contract describes, every row
+   `Proposed`, with the follow-up letter drafted for each `Follow up` row (customer, year, TDS
+   booked against them, credit in Form 26AS, the difference, a request to file a correction
+   statement or pay it by a date the user names). Never write a `Debit memo` row yourself.
+7. **Summary** on `TDS_Recon` (first tab): per financial year the 26AS credit, booked, matched,
+   not booked, booked not in 26AS, unidentified, booked without customer and not-final 26AS
+   amounts; the ten largest differences; cells sharing a format adjacent, one write per block.
+8. **Narrative** (≤5 bullets): matched share, largest gaps, the unidentified deductors to map,
+   what the actions would book. Then offer br-ar-tds-adjustments for the approved rows.
+
+## Hard rules
+- **Never assign a deductor on similarity alone.** Exact evidence (map, TAN registration, unique
+  exact normalised name) or the user&#x27;s confirmation; everything else stays unidentified.
+- The two totals survive: the class totals add back to the 26AS credit and to the TDS booked for
+  every year — check it before the summary and say so if they do not.
+- Never invent accounts, transaction types or a policy; the claim journal is proposed only where
+  the user books claims that way.
+- Analysis only: never write to Oracle and never run an upload from this skill.
+
+## Degradation rules
+- 26AS pasted without transaction dates (deductor totals only) → ask which financial year it is
+  and reconcile that year only.
+- No customer number on most GL lines (TDS booked by manual journals) → say the books cannot be
+  attributed, show the deductor totals against the account total, and stop at that level.
+- Customer master without TANs → matching by name only; say how many deductors that leaves open.
+
+## Talk in the user&#x27;s language
+Customers, TANs, financial years and rupee amounts — never `br_*` functions or helper sheets.</pre></section><section id='file-references-matching-md'><h3 class='fname'>references/matching.md</h3><pre class='md'># Form 26AS reading, deductor matching and the reconciliation classes
+
+## Reading Form 26AS (step 2)
+Part I of Form 26AS lists, per deductor, a summary line (Name of Deductor, TAN of Deductor, Total
+Amount Paid / Credited, Total Tax Deducted, Total TDS Deposited) followed by its transaction lines
+(Section, Transaction Date, Status of Booking, Date of Booking, Remarks, Amount Paid / Credited,
+Tax Deducted, TDS Deposited). A text export of the portal separates fields with `^`; an AIS export
+has one row per transaction with the deductor on every row. Map the columns by their header
+meaning, show the mapping once when a header is ambiguous, and build `TDS_26AS` with one row per
+transaction:
+
+`TAN | Deductor | Section | Transaction Date | Financial Year | Status | Amount Paid | Tax Deducted | TDS Deposited`
+
+- A deductor&#x27;s summary line is not a transaction: carry its TAN and name down to its transaction
+  lines and drop the summary line itself (else every deductor counts twice).
+- **Status of Booking:** only `F` (final) counts as credit. `U` (unmatched), `P` (provisional),
+  `O` (overbooked) and any other code are shown as *not final* per customer and year.
+- **Financial year** (April to March) of a date in A2:
+  `=LET(y,YEAR(A2)-(MONTH(A2)&lt;4),&quot;FY&quot;&amp;y&amp;&quot;-&quot;&amp;TEXT(MOD(y+1,100),&quot;00&quot;))`. Use the same formula for
+  the Accounting Date of the booked lines.
+- The amount that counts is `TDS Deposited` unless the user chose `Tax Deducted`; say which.
+- Keep the sections the user asked for (default all) and show the total per section.
+
+## Matching a deductor to a customer (step 4), in this order
+1. **Confirmed map**: `TDS_Deductor_Map` (`TAN | Deductor | Party Number | Party Name | Basis |
+   Confirmed On`) from an earlier run, or one the user pastes. A TAN found there is settled.
+2. **TAN registration**: a tax registration number in the customer master equal to the TAN.
+3. **Exact normalised name**, unique over the parties: normalise the deductor and party names with
+   the formula in `references/party-name-normalisation.md`. Two parties with the same normalised
+   name are not a match; they are candidates.
+4. **Suggestions for the rest**, by the comparison rules of the same reference: at most three
+   parties per deductor, each with its evidence. **A suggestion is never an assignment.**
+5. **Confirmation**, one question, largest 26AS amounts first: `Deductor (TAN) - amount - proposed
+   customer - evidence`, options to accept all shown, choose per line, or leave them unidentified.
+   Write accepted pairs to `TDS_Deductor_Map` with Basis `Confirmed` and the date.
+
+A deductor without a customer after step 5 is **Unidentified deductor**: its amount is shown on
+its own row per TAN and year and never added to a customer.
+
+## Classes per customer and financial year (step 5)
+| Class | Test (difference = 26AS - booked) | Proposed action |
+|---|---|---|
+| Matched | abs(difference) ≤ tolerance | Claim journal for the matched amount |
+| In 26AS, not booked | difference &gt; tolerance | Claim journal for the booked part, credit memo for the difference |
+| Booked, not in 26AS | difference &lt; -tolerance | Claim journal for the 26AS part, follow up for the difference |
+| Unidentified deductor | 26AS line without a customer | none until mapped |
+| Booked without customer | GL line without a customer | none: the user explains the journals |
+
+The class totals of every year add back to the 26AS credit and to the TDS booked. A customer the
+user excluded is reconciled and shown, but gets no action row.</pre></section><section id='file-references-party-name-normalisation-md'><h3 class='fname'>references/party-name-normalisation.md</h3><pre class='md'># Normalising a party name for comparison
+
+Two names are the same party name when their normalised forms are equal. The formula (Excel 365,
+the name in A2) upper-cases the name, cuts it at `(FORMERLY`, `(FORMALLY` or `(EARLIER`, removes
+`M/S`, turns `&amp;` into `AND`, drops apostrophes, turns `. , - / ( )` into spaces and drops the
+legal-form words:
+
+```
+=LET(s,&quot; &quot;&amp;UPPER(A2)&amp;&quot; &quot;,
+ t,IFERROR(TEXTBEFORE(s,{&quot;(FORMERLY&quot;,&quot;(FORMALLY&quot;,&quot;(EARLIER&quot;}),s),
+ r,{&quot; M/S.&quot;,&quot; &quot;;&quot; M/S &quot;,&quot; &quot;;&quot;&amp;&quot;,&quot; AND &quot;;&quot;.&quot;,&quot; &quot;;&quot;,&quot;,&quot; &quot;;&quot;-&quot;,&quot; &quot;;&quot;/&quot;,&quot; &quot;;&quot;(&quot;,&quot; &quot;;&quot;)&quot;,&quot; &quot;;&quot;&#x27;&quot;,&quot;&quot;},
+ c,REDUCE(t,SEQUENCE(ROWS(r)),LAMBDA(a,i,SUBSTITUTE(a,INDEX(r,i,1),INDEX(r,i,2)))),
+ w,TEXTSPLIT(TRIM(c),&quot; &quot;),
+ k,FILTER(w,ISNA(XMATCH(w,{&quot;PRIVATE&quot;,&quot;PVT&quot;,&quot;LIMITED&quot;,&quot;LTD&quot;,&quot;LLP&quot;,&quot;MS&quot;,&quot;MESSRS&quot;,&quot;THE&quot;,&quot;CO&quot;,&quot;COMPANY&quot;,&quot;CORPORATION&quot;,&quot;CORP&quot;,&quot;INC&quot;})),&quot;&quot;),
+ TEXTJOIN(&quot; &quot;,TRUE,k))
+```
+
+Examples: `M/S. Vision Electricals Pvt. Ltd.` → `VISION ELECTRICALS`; `Acme Cables (India) Pvt. Ltd.`
+→ `ACME CABLES INDIA`; `A&amp;B Traders Co.` → `A AND B TRADERS`.
+
+- INDIA stays in the name: it often tells two companies apart.
+- Two different parties with the same normalised name are never a match for each other; they are
+  candidates (in a duplicate check, a duplicate suspect).
+- Beyond equal names, compare the remaining ones yourself: shared distinctive words (not a city,
+  not a common word like INDUSTRIES or TRADERS), initials written out (`A B C` and `ABC`), a group
+  name with a division. Claude may score them in script: word overlap as 2 × shared ÷ (words of A
+  + words of B), and character similarity; 0.90 and clearly ahead of the next name is a
+  suggestion, 0.75 a candidate. Copilot compares the lists itself. A suggestion is shown with its
+  evidence and confirmed by the user, never applied on its own.</pre></section><section id='file-references-tds-actions-sheet-md'><h3 class='fname'>references/tds-actions-sheet.md</h3><pre class='md'># The TDS_Actions sheet (contract between br-ar-tds-reconciliation and br-ar-tds-adjustments)
+
+`br-ar-tds-reconciliation` writes it and never changes Oracle. `br-ar-tds-adjustments` reads it and
+stages only the rows whose `Decision` is `Approved`. Row 1 holds the headers, data starts in row 2,
+one row per customer and financial year and action. Find columns by their row-1 header text.
+
+| Column | Content |
+|---|---|
+| Action | `Claim journal`, `Credit memo`, `Follow up` or `Debit memo` |
+| Decision | `Proposed` when written; the user sets `Approved` (or `Rejected`). A `Follow up` row becomes a `Debit memo` row only when the user changes its Action after the follow-up deadline. |
+| Financial Year | `FY2025-26` (April to March) |
+| Party Number | the customer&#x27;s party (registry) number |
+| Customer Name | the party name |
+| Account Number | the customer account the memo goes to: the account that carries the party&#x27;s booked TDS, or the party&#x27;s only account; blank when the party has several and none is evident - the adjustments skill asks |
+| Amount | positive amount of the action in the ledger currency |
+| TDS in 26AS | the party&#x27;s Form 26AS credit for the year |
+| TDS Booked | the party&#x27;s TDS on the TDS account for the year |
+| Deductor TAN | the TAN(s) of Form 26AS mapped to the party, comma-separated |
+| Clearing Account | the account combination the party&#x27;s TDS was booked to (its most used one); for a party with nothing booked, the most used combination of the whole TDS account |
+| Reason | the line description for the memo or journal, e.g. `TDS FY2025-26 as per Form 26AS, TAN AAAA12345B` |
+| Letter | the drafted follow-up text (`Follow up` rows only) |
+| Result | written by br-ar-tds-adjustments only: `Uploaded - &lt;transaction or journal&gt;` or the error message |
+
+Meaning of the actions:
+- **Claim journal** - the part of the year&#x27;s TDS that is both booked and in Form 26AS
+  (the smaller of the two). It moves from the TDS clearing account to the income-tax TDS asset
+  of that year, if the company books the claim that way; otherwise the user rejects these rows.
+- **Credit memo** - TDS in Form 26AS that was never booked: the customer&#x27;s open balance is
+  overstated by it. An on-account credit memo to the customer whose line goes to the clearing
+  account books it.
+- **Follow up** - TDS booked that Form 26AS does not show: the customer deducted it but did not
+  deposit or report it. The customer is asked to correct the TDS return or pay the amount.
+- **Debit memo** - the same amount after the follow-up deadline: a debit memo to the customer
+  whose line goes to the clearing account reverses the TDS, so the customer owes it again.</pre></section></div>
+</main>
+<footer><div class="in">Enginatics AI skills for Oracle E-Business Suite and <a href="https://www.enginatics.com/">Blitz Report</a>. Feedback: <a href="mailto:support@enginatics.com">support@enginatics.com</a></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script><script src="../../assets/site.js"></script></body></html>

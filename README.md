@@ -59,9 +59,9 @@ Reports: AP Period Close Exceptions, AP Trial Balance, AR Unaccounted Transactio
 Skills: `br-po-close-readiness`  
 Reports: CST AP and PO Accrual Reconciliation, CST Uninvoiced Receipts, CAC Accounting Period Status
 
-**Subledger-to-GL reconciliation**: "Do AP, AR, inventory and assets tie to the ledger for this period?" · "Where does the AP trial balance differ from the GL liability account?" · "Reconcile the subledgers to the general ledger for last month."  
+**Subledger-to-GL reconciliation**: "Do AP, AR, inventory and assets tie to the ledger for this period?" · "Where does the AP trial balance differ from the GL liability account?" · "Why does the AR aging not match the receivable accounts, customer by customer?"  
 Skills: `br-subledger-gl-reconciliation`  
-Reports: AP Trial Balance, CST Period Close Subinventory Value, CST AP and PO Accrual Reconciliation, GL Trial Balance Detail
+Reports: AP Trial Balance, AR Aging to GL Reconciliation, CST Period Close Subinventory Value, CST AP and PO Accrual Reconciliation, GL Trial Balance Detail
 
 **Close-process health and bank reconciliation readiness**: "Are the close programs actually running clean, and is the bank reconciliation caught up?" · "Which concurrent programs failed or ran long during the close?" · "How many bank statement lines are still unreconciled, and how old are they?"  
 Skills: `br-close-process-monitor`, `br-ce-recon-readiness`  
@@ -125,6 +125,14 @@ Reports: IEX Collection Note Upload
 **Act on the payment optimization** (writes to EBS): "Defer what we agreed to defer, and give me the pay-now list for Payments." · "Put the invoices we decided to pay next week on a payment hold with the reason."  
 Skills: `br-ap-payment-actions`  
 Reports: AP Invoice Hold Upload
+
+**Customer TDS against Form 26AS** (writes to EBS): "Reconcile the TDS our customers deducted with the 26AS for last year." · "Which customers deducted TDS but did not deposit it?" · "Book the approved TDS credit memos and the claim journal."  
+Skills: `br-ar-tds-reconciliation`, `br-ar-tds-adjustments`  
+Reports: GL Account Analysis, AR Customers and Sites, AR Transaction Upload, GL Journal Upload
+
+**Customer master audit and corrections** (writes to EBS): "Audit our customer master: duplicates, missing payment terms, invalid GST numbers." · "Which customers have a credit limit on advance payment terms?" · "Apply the approved payment term and credit limit corrections."  
+Skills: `br-ar-customer-master-audit`, `br-ar-customer-master-fix`  
+Reports: AR Customers and Sites, AR Customer Upload
 
 **Account coding from the ledger's own history** (writes to EBS): "Which account does this belong to, and draft the reclass journal." · "Suggest the GL coding for these transactions based on how we coded them before." · "Find postings that look miscoded this quarter."  
 Skills: `br-gl-account-coder`  

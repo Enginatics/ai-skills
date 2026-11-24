@@ -19,6 +19,12 @@ Set B1:B5 to Text, then write:
 Every balance formula then takes `$B$1,$B$2,$B$3,$B$4,$B$5` as its first five arguments, so the
 user changes the period in one cell and refreshes. Leave one empty row under the block.
 
+Give the Period cell its list of values in the same operation: a data validation of type List whose
+source is the one text `PERIOD_NAME` (no `=`), with the in-cell dropdown on and the error alert off.
+The entry is a marker, not a restriction: when the user picks it from the dropdown or double-clicks
+the cell, the add-in opens the ledger's period list and writes the chosen period into the cell. A
+period cell that holds a formula gets none. Tell the user the list is there.
+
 ## One balance ("what was cash at the end of December?")
 
 1. Find the account: `=br_fsg_values_external("<Ledger>","Account","cash")`.

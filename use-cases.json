@@ -58,7 +58,7 @@
         "prompts": [
           "Do AP, AR, inventory and assets tie to the ledger for this period?",
           "Where does the AP trial balance differ from the GL liability account?",
-          "Reconcile the subledgers to the general ledger for last month."
+          "Why does the AR aging not match the receivable accounts, customer by customer?"
         ],
         "skills": [
           "br-subledger-gl-reconciliation"
@@ -66,6 +66,7 @@
         "slug": "subledger-to-gl-reconciliation",
         "reports": [
           "AP Trial Balance",
+          "AR Aging to GL Reconciliation",
           "CST Period Close Subinventory Value",
           "CST AP and PO Accrual Reconciliation",
           "GL Trial Balance Detail"
@@ -327,6 +328,46 @@
         "slug": "act-on-the-payment-optimization",
         "reports": [
           "AP Invoice Hold Upload"
+        ],
+        "note": "",
+        "writes": true
+      },
+      {
+        "title": "Customer TDS against Form 26AS",
+        "prompts": [
+          "Reconcile the TDS our customers deducted with the 26AS for last year.",
+          "Which customers deducted TDS but did not deposit it?",
+          "Book the approved TDS credit memos and the claim journal."
+        ],
+        "skills": [
+          "br-ar-tds-reconciliation",
+          "br-ar-tds-adjustments"
+        ],
+        "slug": "customer-tds-against-form-26as",
+        "reports": [
+          "GL Account Analysis",
+          "AR Customers and Sites",
+          "AR Transaction Upload",
+          "GL Journal Upload"
+        ],
+        "note": "Assigns a deductor to a customer only on exact evidence or the user's confirmation, and books only the rows the user approved.",
+        "writes": true
+      },
+      {
+        "title": "Customer master audit and corrections",
+        "prompts": [
+          "Audit our customer master: duplicates, missing payment terms, invalid GST numbers.",
+          "Which customers have a credit limit on advance payment terms?",
+          "Apply the approved payment term and credit limit corrections."
+        ],
+        "skills": [
+          "br-ar-customer-master-audit",
+          "br-ar-customer-master-fix"
+        ],
+        "slug": "customer-master-audit-and-corrections",
+        "reports": [
+          "AR Customers and Sites",
+          "AR Customer Upload"
         ],
         "note": "",
         "writes": true

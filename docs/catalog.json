@@ -930,9 +930,10 @@
     "title": "Subledger-to-GL Reconciliation",
     "type": "excel",
     "category": "Period Close",
-    "description": "Reconcile Oracle EBS subledgers to the General Ledger in Excel: have the br-run-reports skill extract AP, AR, Inventory and FA control balances and tie each to its GL control account, surfacing the variance per subledger with a red/amber/green verdict. Use when the user asks to reconcile AP/AR/INV/FA to GL, subledger-to-GL tie-out, or control account differences at period end.",
+    "description": "Reconcile Oracle EBS subledgers to the General Ledger in Excel: have the br-run-reports skill extract AP, AR, Inventory and FA control balances and tie each to its GL control account, surfacing the variance per subledger with a red/amber/green verdict. For receivables it also explains the difference between the aging and the receivable accounts per customer (manual journals, unaccounted or untransferred items, cross-customer applications, memos accounted elsewhere) on request. Use when the user asks to reconcile AP/AR/INV/FA to GL, subledger-to-GL tie-out, AR aging against the trial balance, or control account differences at period end.",
     "writes": false,
     "reports": [
+      "AR Aging to GL Reconciliation",
       "CST Period Close Subinventory Value",
       "FA Journal Entry Reserve Ledger"
     ],
@@ -941,7 +942,7 @@
     "prompts": [
       "Do AP, AR, inventory and assets tie to the ledger for this period?",
       "Where does the AP trial balance differ from the GL liability account?",
-      "Reconcile the subledgers to the general ledger for last month."
+      "Why does the AR aging not match the receivable accounts, customer by customer?"
     ]
   },
   {
@@ -1081,6 +1082,76 @@
       "Which customers are a credit risk, and why is our DSO rising?",
       "Which customers are close to or over their credit limit?",
       "Break down DSO by customer segment and show the biggest contributors."
+    ]
+  },
+  {
+    "name": "br-ar-customer-master-audit",
+    "title": "Customer Master Audit",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Audit the Oracle EBS customer master in Excel: duplicate customers (same tax id or same normalised name on different parties), missing payment terms, bill-to sites or address data, credit settings that contradict each other (a credit limit on advance-payment terms, credit check without a limit), inactive parties with active accounts, and, for India, GSTIN and PAN checks (length, format, check digit, state code against the site's state, PAN inside the GSTIN). Lists every finding with its evidence and the proposed correction on an Audit_Findings sheet; changes nothing in Oracle. Use when the user asks for a customer master audit, customer data quality, duplicate customers, GST number or PAN validation, or a correction list for the master data team. - customer-audit-findings - party-name-normalisation",
+    "writes": false,
+    "reports": [
+      "AR Customers and Sites"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-customer-master-audit.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-audit",
+    "prompts": [
+      "Audit our customer master: duplicates, missing payment terms, invalid GST numbers.",
+      "Which customers have a credit limit on advance payment terms?",
+      "Apply the approved payment term and credit limit corrections."
+    ]
+  },
+  {
+    "name": "br-ar-customer-master-fix",
+    "title": "Customer Master Corrections",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Correct Oracle EBS customer accounts from an approved customer master audit: stage the approved payment terms, credit check, credit hold, credit limit, order credit limit and Taxpayer Id (PAN) corrections of the Audit_Findings sheet through the \"AR Customer Upload\", one account at a time, validate them in Oracle, show exactly what will change and submit only on explicit confirmation. Use when the user asks to apply, upload or post the customer master corrections, fix the payment terms or credit limits the audit found, or update the PAN of customers. WRITES to Oracle EBS. - customer-audit-findings",
+    "writes": true,
+    "reports": [
+      "AR Customer Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-customer-master-fix.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-customer-master-fix",
+    "prompts": [
+      "Audit our customer master: duplicates, missing payment terms, invalid GST numbers."
+    ]
+  },
+  {
+    "name": "br-ar-tds-adjustments",
+    "title": "Customer TDS Adjustments",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Book the approved results of a customer TDS reconciliation in Oracle EBS from Excel: stage the credit memos (TDS in Form 26AS never booked) and debit memos (TDS the customer did not deposit, after the follow-up deadline) through the \"AR Transaction Upload\", and the TDS claim journal from the clearing account to the income-tax TDS asset through the \"GL Journal Upload\". Fills only the rows the user approved on the TDS_Actions sheet, validates in Oracle, shows exactly what will be booked and submits only on explicit confirmation. Use when the user asks to post, book or upload the TDS reconciliation adjustments, TDS credit notes or debit notes, or the TDS claim journal. WRITES to Oracle EBS. - tds-actions-sheet",
+    "writes": true,
+    "reports": [
+      "AR Transaction Upload",
+      "GL Journal Upload"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-tds-adjustments.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-adjustments",
+    "prompts": [
+      "Reconcile the TDS our customers deducted with the 26AS for last year."
+    ]
+  },
+  {
+    "name": "br-ar-tds-reconciliation",
+    "title": "Customer TDS Reconciliation",
+    "type": "excel",
+    "category": "Receivables",
+    "description": "Reconcile the TDS that customers deducted from their payments (India, Form 26AS or AIS, any section such as 194Q, 194C or 194J) with the TDS booked in Oracle EBS Receivables: extract the TDS clearing account lines per customer with GL Account Analysis, map every deductor TAN of Form 26AS to a customer, and show per customer and financial year what is matched, in Form 26AS but not booked, booked but missing from Form 26AS, or from an unidentified deductor. Proposes the claim journal, credit memos and customer follow-ups on a TDS_Actions sheet; changes nothing in Oracle. Use when the user asks for a TDS reconciliation, 26AS reconciliation, TDS receivable or TDS credit tie-out, short-deducted or short-deposited TDS by customers. - tds-actions-sheet - party-name-normalisation",
+    "writes": false,
+    "reports": [
+      "AR Customers and Sites",
+      "GL Account Analysis"
+    ],
+    "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-ar-tds-reconciliation.zip",
+    "path": "plugins/blitz-report-excel-addin-ai-skills/excel-skills/br-ar-tds-reconciliation",
+    "prompts": [
+      "Reconcile the TDS our customers deducted with the 26AS for last year.",
+      "Which customers deducted TDS but did not deposit it?",
+      "Book the approved TDS credit memos and the claim journal."
     ]
   },
   {
