@@ -127,7 +127,7 @@ Workflow for a new upload: `/analyze-form` (form analysis document, FAD, saved u
 
 ### H. UPLOAD_SQLS (Error SQL, Success SQL, Order By)
 
-- [ ] **H1. Error SQL row exists** — `<SQL_TYPE>Error SQL</SQL_TYPE>` with NO `<SQL_TEXT>` (auto-generated)
+- [ ] **H1. Error SQL row exists** — `<SQL_TYPE>Error SQL</SQL_TYPE>` with NO `<SQL_TEXT>` (auto-generated), unless the upload feeds an interface and reads the import program's errors back from the interface table or its error table (`mtl_transactions_interface.error_explanation`, `mtl_interface_errors`), which the generated Error SQL cannot show
 - [ ] **H2. Order By row exists** — `<SQL_TYPE>Order By</SQL_TYPE>` with column list. It also sorts the download, where `upload_row` is null, so write `upload_row, <key columns>`, never `upload_row` alone.
 - [ ] **H3. Success SQL row exists** — `<SQL_TYPE>Success SQL</SQL_TYPE>` with a proper SELECT that:
   - Includes the upload view in FROM (e.g. `xxen_module_upload_NNNN_u xu`)

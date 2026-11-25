@@ -314,18 +314,16 @@ class UploadLint:
             if t:
                 types_seen[t] = b
         # H1: Error SQL row exists with NO SQL_TEXT.
-        # Exception: uploads that submit a concurrent program (interface-driven —
-        # WIP Mass Load, RVCTP, AR Trx Import, FA Mass Additions Post, etc.) need
-        # to read errors from the relevant interface error tables. The framework's
-        # auto-generated Error SQL only reads xxen_upload_data.message_, which won't
-        # contain those concurrent-program errors. Detect via the Error SQL_TEXT
-        # referencing a `*_interface_errors` table.
+        # Exception: interface-driven uploads read the import program's errors from the
+        # interface table (mtl_transactions_interface.error_explanation, gl_interface.status)
+        # or its error table (mtl_interface_errors), which the auto-generated Error SQL
+        # (xxen_upload_data.message_ only) cannot show.
         if 'Error SQL' not in types_seen:
             self.add('H1', 'UPLOAD_SQLS row of SQL_TYPE=Error SQL not found')
         else:
             txt = self._get_inner(types_seen['Error SQL'], 'SQL_TEXT')
             if txt and txt.strip():
-                if not re.search(r'\w+_interface_errors\b', txt, re.IGNORECASE):
+                if not re.search(r'\w+_interface(_all|_errors)?\b', txt, re.IGNORECASE):
                     self.add('H1', 'Error SQL row should have NO SQL_TEXT (auto-generated)')
         # H2: Order By
         if 'Order By' not in types_seen:
