@@ -8,7 +8,8 @@ SHORT_NAME (the short name of the program the report replaces, the view name for
 optional DB_PACKAGE (the APPS package holding beforereport/afterreport),
 optional VALIDATE_FROM_LIST=True for a target build dated before 18-Oct-2026 (Build Date on the converter workbook's Parameters
 sheet), which validates a list only when the file says so and is ignored by later builds,
-optional TEMPLATES and DEFAULT_TEMPLATE (the name of the template every user gets without choosing one).
+optional TEMPLATES and DEFAULT_TEMPLATE (the name of the template every user gets without choosing one),
+optional VERSION_COMMENTS (stored with the version an import creates when the SQL text changes).
 
 PARAMS lists one dict per PARAMETERS_ROW, in order:
   name, anchor, sql       sql is the SQL_TEXT; omit it for a :bind anchor
@@ -217,7 +218,7 @@ def report_xml(rep, category):
     return f"""<!-- loader xml for Blitz Report: {e(rep['NAME'])} -->
  <REPORTS_ROW>
   <GUID>{rep['GUID']}</GUID>
-  <SQL_TEXT>{e(sql)}</SQL_TEXT>
+  <SQL_TEXT>{e(sql)}</SQL_TEXT>{chr(10) + '  <VERSION_COMMENTS>' + e(rep['VERSION_COMMENTS']) + '</VERSION_COMMENTS>' if rep.get('VERSION_COMMENTS') else ''}
   <NUMBER_FORMAT>{e(rep.get('NUMBER_FORMAT', '#,##0.00;[Red]-#,##0.00'))}</NUMBER_FORMAT>{chr(10) + '  <DB_PACKAGE>' + rep['DB_PACKAGE'] + '</DB_PACKAGE>' if rep.get('DB_PACKAGE') else ''}
   <REPORT_TRANSLATIONS>
    <REPORT_TRANSLATIONS_ROW>

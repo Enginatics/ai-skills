@@ -402,6 +402,8 @@ Pattern:
 
 **Put a dynamic-column lexical (`&category_columns`, `xxen_util.dff_columns`) in the outermost select, never inside an inline view read through `x.*`.** Generated names repeat whenever two Category Set parameters use the same flexfield structure or segment prompts (`Family`, `Class`). A top-level select list accepts that; an inline view fails every run, with or without a template, with `ORA-00918: column ambiguously defined` at `x.*`. When wrapping a report's SQL in an outer select, move the lexical out with it and pass `p_table_alias=>'x'`; the inline view must expose the item and organization id columns.
 
+`xxen_util.dff_columns` lists every enabled segment of an enabled context, displayed or not; with `p_regional_localization=>'Y'` it lists displayed segments only, as the hidden segments of the localization flexfields are Oracle's technical fields (ids, internal codes).
+
 **Uploads use static/hardcoded DFF columns** (`xu.attribute1`, `xu.attribute2`, etc.) because dynamic columns cannot be mapped to upload API package parameters.
 
 ## Report conversion testing
