@@ -144,6 +144,7 @@ Verify every suspect object/column against the 11i dictionary (`all_tab_columns`
 | `mtl_cross_references_b`/`_vl` | `mtl_cross_references` (no `start/end_date_active` — drop the effectivity predicates) |
 | MOAC (`mo_global.*`, `mo_glob_org_access_tmp`, `fnd_request.set_org_id`) | absent — `fnd_profile.value(&#x27;ORG_ID&#x27;)`; remove `set_org_id` |
 | `fnd_log_messages.callstack` | `to_char(null) callstack` (keep alias) |
+| `po_asl_documents_v.org_id` | absent on 11i: `po_headers_all.org_id` through `document_header_id` (the R12 view&#x27;s `org_id` is that column) |
 | `fnd_irep_classes` (ISG Integration Repository) | absent before EBS 12.1. Shared code running on both releases reaches it through `execute immediate` (swallow `-942`), never statically |
 | 12c+ dictionary columns (`oracle_maintained`, `editionable`, `con_id`, `sharing`) | literal/null |
 | OPM converged model (`gmd_recipe_validity_rules.inventory_item_id/organization_id`) | pre-convergence (`item_id`/`orgn_code`) — usually neutralise the OPM branch |
