@@ -87,6 +87,16 @@ Segment value syntax: one value `"1110"`, a range `"1110-1199"`, several `"1110;
 Always restrict the account segment: a balance restricted only on the balancing segment (company)
 nets to zero, as double entry does.
 
+Account type, in the account segment only: `"type:R"` keeps the accounts of one account type, by its
+code - `A` asset, `L` liability, `O` owners' equity, `R` revenue, `E` expense (`D` and `C` are the
+budgetary types). It applies together with the other entries of the argument: `"4000-4999;type:R"`
+is the revenue accounts of that range, `"type:R;type:E"` both types, `"~type:E"` leaves the expense
+accounts out. The account list shows the types as its first rows, with their names:
+`=br_fsg_values_external("<Ledger>","Account","type:")`. When it answers `(no values ...)` the server
+does not offer the filter - classify by account ranges or parent values instead. Only the code is a
+type: a name (`type:Revenue`), an unknown code, or a type in another segment answers
+`invalid (<segment>)`.
+
 Signs: balances are debit positive and credit negative, so revenue, liabilities and equity come
 back negative. Present them positive with multiplier `-1` on those rows, and say which convention
 the statement uses.
@@ -95,7 +105,7 @@ the statement uses.
 
 | Formula | Returns |
 |---|---|
-| `=br_segment_description("<Segment name>", <value>)` | the description of a segment value; the segment name exactly as the profile lists it, e.g. `"Account (3)"` |
+| `=br_segment_description("<Segment name>", <value>)` | the description of a segment value, or the name of an account type (`"type:R"` gives Revenue in the user's language); the segment name exactly as the profile lists it, e.g. `"Account (3)"` |
 | `=br_period_offset(<period>, <n>, , [adjustment])` | the period n periods before (negative) or after; `"Exclude"` as the 4th argument skips adjustment periods - use it for the same period last year (`-12`) |
 | `=br_period_name(<year>, <period number>)` | the name of a period by year and number |
 | `=br_daily_rate(<from currency>, <to currency>, <conversion type>, <date>)` | a daily exchange rate |
@@ -131,5 +141,6 @@ the statement uses.
 - `still without an answer: <cells>` lists cells showing `(pending)`, an error, or the add-in's own
   answer: `Error (Period)` / `(Amount Type)` / `(Currency)` / `(Currency Type)` / `(Balance Type)` -
   that argument is empty or unusable; `invalid (Period)` - no such period in the ledger;
-  `Error(Segment)` - the segment name of a description is not the profile's. A cell waiting on a
+  `invalid (<segment>)` - that segment's criterion is refused, such as an account type that is not
+  one of the codes; `Error(Segment)` - the segment name of a description is not the profile's. A cell waiting on a
   period cell that is still `(pending)` resolves on the next refresh.

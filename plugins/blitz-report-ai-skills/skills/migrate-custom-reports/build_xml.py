@@ -128,7 +128,10 @@ def check(rep, sql):
         # the framework injects an n=n parameter at EVERY occurrence of its anchor; a report that wants the
         # filters inside each union branch declares the intended count as REPEATED_ANCHOR (anchor -> count)
         expected = rep.get("REPEATED_ANCHOR", {}).get(a, 1)
-        if n == 0 or re.fullmatch(r"(\d+)=\1", a) and n != expected:
+        # a :bind anchor absent from the SQL is legitimate when it only fills the DB package's variable of that name,
+        # or belongs to a hidden helper whose value feeds other parameters' :$flex$ references
+        unused_bind = a.startswith(":") and (rep.get("DB_PACKAGE") or all(p.get("hidden") for p in rep["PARAMS"] if p["anchor"] == a))
+        if n == 0 and not unused_bind or re.fullmatch(r"(\d+)=\1", a) and n != expected:
             raise SystemExit(f"{rep['NAME']}: anchor {a} occurs {n} times in the SQL, expected {expected}")
     # the run form wraps a custom list as select null id, x.value, x.description from (<query>) x
     for p in rep["PARAMS"]:
@@ -152,13 +155,24 @@ def check(rep, sql):
 
 def template_rows(rep):
     """TEMPLATES_ROW per entry of the report's TEMPLATES list: NAME, GUID, COLUMNS (ordered column names),
-    PIVOT (list of (column, ROW|COLUMN|VALUE|FILTER[, aggregation])), optional DYNAMIC_COLUMNS (default N),
-    PIVOT_LAYOUT (T = tabular, no subtotals) and REPEAT_LABELS (Y = every row shows all its row field values),
+    PIVOT (list of (column, ROW|COLUMN|VALUE|FILTER[, aggregation of a VALUE field, or SUBTOTAL for a ROW or COLUMN field
+    that adds a subtotal line per value in the tabular layout])), optional DYNAMIC_COLUMNS (default N),
+    PIVOT_LAYOUT (T = tabular) and REPEAT_LABELS (Y = every row shows all its row field values),
     SHARED (default True: a Site sharing row, so every user of the report can pick it), DISTINCT (Y = one row per distinct
-    combination of the template's columns) and EXCLUDED_PARAMETERS (parameters hidden and not applied when the template is chosen).
+    combination of the template's columns), EXCLUDED_PARAMETERS (parameters hidden and not applied when the template is chosen),
+    DESCRIPTION, PARAMETER_DEFAULTS (list of (parameter, display value[, 'Y' = locked: fixed for the template's users])) and
+    WORKBOOK_XML (a file holding the workbook elements FILE_NAME ... TEMPLATE_STYLES of the template's TEMPLATES_ROW in an
+    xxen_api.export_report(<id>,null,null,null,'Y') export, taken after xxen_report.upload_excel_template registered the workbook).
     A layout on a NEW report ships inside its definition; the standalone template file is only for a shipped report."""
     out = []
     for t in rep.get("TEMPLATES", []):
+        unknown = {d[0] for d in t.get("PARAMETER_DEFAULTS", [])} - {p["name"] for p in rep["PARAMS"]}
+        if unknown:
+            raise SystemExit(f"{rep['NAME']}/{t['NAME']}: parameter defaults not in PARAMS: {sorted(unknown)}")
+        defaults = "".join(f"\n     <TEMPLATE_PARAMETER_DEFAULTS_ROW>\n      <PARAMETER_NAME>{e(d[0])}</PARAMETER_NAME>\n      <DEFAULT_VALUE>{e(d[1])}</DEFAULT_VALUE>"
+                           + (f"\n      <LOCKED>{d[2]}</LOCKED>" if len(d) > 2 else "") + "\n     </TEMPLATE_PARAMETER_DEFAULTS_ROW>" for d in t.get("PARAMETER_DEFAULTS", []))
+        defaults = f"\n    <TEMPLATE_PARAMETER_DEFAULTS>{defaults}\n    </TEMPLATE_PARAMETER_DEFAULTS>" if defaults else ""
+        workbook = "\n" + open(t["WORKBOOK_XML"], encoding="utf-8").read().strip("\n") if t.get("WORKBOOK_XML") else ""
         cols = "\n".join(f"     <TEMPLATE_COLUMNS_ROW>\n      <DISPLAY_SEQUENCE>{i}</DISPLAY_SEQUENCE>\n      <COLUMN_NAME>{e(c)}</COLUMN_NAME>\n     </TEMPLATE_COLUMNS_ROW>"
                          for i, c in enumerate(t["COLUMNS"], 1))
         seq = collections.Counter()
@@ -166,7 +180,9 @@ def template_rows(rep):
         for row in t.get("PIVOT", []):
             col, ftype = row[0], row[1]
             seq[ftype] += 1
-            agg = f"\n      <AGGREGATION>{row[2]}</AGGREGATION>" if len(row) > 2 else ""
+            if len(row) > 2 and row[2] == "SUBTOTAL" and (ftype not in ("ROW", "COLUMN") or t.get("PIVOT_LAYOUT") != "T"):
+                raise SystemExit(f"{rep['NAME']}/{t['NAME']}: SUBTOTAL needs a ROW or COLUMN field and PIVOT_LAYOUT T: {col}")
+            agg = "" if len(row) < 3 else "\n      <SUBTOTAL>Y</SUBTOTAL>" if row[2] == "SUBTOTAL" else f"\n      <AGGREGATION>{row[2]}</AGGREGATION>"
             piv.append(f"     <TEMPLATE_PIVOT_ROW>\n      <COLUMN_NAME>{e(col)}</COLUMN_NAME>\n      <FIELD_TYPE>{ftype}</FIELD_TYPE>\n      <DISPLAY_SEQUENCE>{seq[ftype]}</DISPLAY_SEQUENCE>{agg}\n     </TEMPLATE_PIVOT_ROW>")
         missing = {r[0] for r in t.get("PIVOT", [])} - set(t["COLUMNS"])
         if missing:
@@ -184,12 +200,12 @@ def template_rows(rep):
                    "      <LEVEL_VALUE>Site</LEVEL_VALUE>\n     </TEMPLATE_SHARING_ROW>\n    </TEMPLATE_SHARING>") if t.get("SHARED", True) else ""
         out.append(f"""   <TEMPLATES_ROW>
     <GUID>{t['GUID']}</GUID>
-    <TEMPLATE_NAME>{e(t['NAME'])}</TEMPLATE_NAME>{chr(10) + '    <DISTINCT_FLAG>Y</DISTINCT_FLAG>' if t.get('DISTINCT') == 'Y' else ''}
+    <TEMPLATE_NAME>{e(t['NAME'])}</TEMPLATE_NAME>{chr(10) + '    <DESCRIPTION>' + e(t['DESCRIPTION']) + '</DESCRIPTION>' if t.get('DESCRIPTION') else ''}{chr(10) + '    <DISTINCT_FLAG>Y</DISTINCT_FLAG>' if t.get('DISTINCT') == 'Y' else ''}
     <DYNAMIC_COLUMNS>{t.get('DYNAMIC_COLUMNS', 'N')}</DYNAMIC_COLUMNS>
     <OWNER>SYSADMIN</OWNER>
     <TEMPLATE_COLUMNS>
 {cols}
-    </TEMPLATE_COLUMNS>{pivot}{sharing}
+    </TEMPLATE_COLUMNS>{pivot}{defaults}{sharing}{workbook}
    </TEMPLATES_ROW>""")
     return out
 

@@ -100,7 +100,7 @@ an unrecognised customer naming convention is exactly how a customer package goe
 - `field_inventory.py &lt;program folder&gt; [&lt;PROG&gt;] [--out &lt;file&gt;]` writes the field inventory of step 2. It reads `_rdf.xml`, `.rex` (through `rex_parse.py`), data templates, RTF layouts and custom package bodies.
 - `rex_parse.py &lt;folder&gt; &lt;PROG&gt;` decodes a `.rex` text export when rwconverter fails, writing each query&#x27;s SQL and the PL/SQL units next to it.
 - `vs_parse.py` (run inside a program&#x27;s folder) prints every gathered value set: validation type, table, id and value columns, where clause. Use it to pick the shared LOV that matches each parameter.
-- `build_xml.py &lt;spec.py&gt; &lt;out.xml&gt;` writes the import XML. The spec defines `CATEGORY` and `REPORTS`, a list of report dicts (`NAME`, `DESCRIPTION`, `SQL` file, `GUID`, `ASSIGNMENTS` = the converter&#x27;s `_assignments.xml`, `PARAMS`, optional `DB_PACKAGE`, and `SHORT_NAME` and `PROGRAM` of the program the report replaces, written as the description&#x27;s last lines `Source:` and `Short Name:`), so one call writes the category deliverable with every report and all assignments; a single report at top level still works. A `PARAMS` row takes name, anchor, sql (omit for a `:bind` anchor), type `LOV`/`LOV Oracle`/`LOV custom`/`Date`/`Char`/`Number`, `lov` or `lov_query`, `required`, `default`, `matching`, `hidden`, and `sub` for a further anchor of the parameter above. Shared LOVs are copied with their fallback payload from the shipped report XMLs (`content/r12/reports` in the Blitz Report repository, or the folder named by the environment variable `BLITZ_CONTENT_DIR`, e.g. `xxen_api.export_report` exports of shipped reports using those LOVs); the build stops when a parameter has other than one display row or an `n=n` anchor is not unique in the SQL. Keep the spec and SQL files next to the category file so a re-issue rebuilds from them. Run this script in place, or set `BLITZ_CONTENT_DIR` for a copy: it finds the shipped reports relative to itself, and a copy stops with `shared LOV not found`.
+- `build_xml.py &lt;spec.py&gt; &lt;out.xml&gt;` writes the import XML. The spec defines `CATEGORY` and `REPORTS`, a list of report dicts (`NAME`, `DESCRIPTION`, `SQL` file, `GUID`, `ASSIGNMENTS` = the converter&#x27;s `_assignments.xml`, `PARAMS`, optional `DB_PACKAGE`, and `SHORT_NAME` and `PROGRAM` of the program the report replaces, written as the description&#x27;s last lines `Source:` and `Short Name:`), so one call writes the category deliverable with every report and all assignments; a single report at top level still works. A `PARAMS` row takes name, anchor, sql (omit for a `:bind` anchor), type `LOV`/`LOV Oracle`/`LOV custom`/`Date`/`Char`/`Number`, `lov` or `lov_query`, `required`, `default`, `matching`, `hidden`, and `sub` for a further anchor of the parameter above. A report&#x27;s `TEMPLATES` and `DEFAULT_TEMPLATE` take the keys listed in `template_rows` (columns, pivot, excluded parameters, parameter defaults with their lock, and `WORKBOOK_XML` for a template with an uploaded workbook). Shared LOVs are copied with their fallback payload from the shipped report XMLs (`content/r12/reports` in the Blitz Report repository, or the folder named by the environment variable `BLITZ_CONTENT_DIR`, e.g. `xxen_api.export_report` exports of shipped reports using those LOVs); the build stops when a parameter has other than one display row or an `n=n` anchor is not unique in the SQL. Keep the spec and SQL files next to the category file so a re-issue rebuilds from them. Run this script in place, or set `BLITZ_CONTENT_DIR` for a copy: it finds the shipped reports relative to itself, and a copy stops with `shared LOV not found`.
 - A report cloned from a shipped one (an aging, a trial balance) is built by transforming the shipped XML instead: new GUID, name, description (ending with the `Source:` and `Short Name:` lines), category and assignments, extra columns inserted at the level where their keys are, extra parameters appended. Invoice-level extras go into the detail lexical as `max(x1.col)` so summary mode is untouched.
 
 ### 4. Build / recommend per outcome
@@ -302,7 +302,10 @@ def check(rep, sql):
         # the framework injects an n=n parameter at EVERY occurrence of its anchor; a report that wants the
         # filters inside each union branch declares the intended count as REPEATED_ANCHOR (anchor -&gt; count)
         expected = rep.get(&quot;REPEATED_ANCHOR&quot;, {}).get(a, 1)
-        if n == 0 or re.fullmatch(r&quot;(\d+)=\1&quot;, a) and n != expected:
+        # a :bind anchor absent from the SQL is legitimate when it only fills the DB package&#x27;s variable of that name,
+        # or belongs to a hidden helper whose value feeds other parameters&#x27; :$flex$ references
+        unused_bind = a.startswith(&quot;:&quot;) and (rep.get(&quot;DB_PACKAGE&quot;) or all(p.get(&quot;hidden&quot;) for p in rep[&quot;PARAMS&quot;] if p[&quot;anchor&quot;] == a))
+        if n == 0 and not unused_bind or re.fullmatch(r&quot;(\d+)=\1&quot;, a) and n != expected:
             raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}: anchor {a} occurs {n} times in the SQL, expected {expected}&quot;)
     # the run form wraps a custom list as select null id, x.value, x.description from (&lt;query&gt;) x
     for p in rep[&quot;PARAMS&quot;]:
@@ -326,13 +329,24 @@ def check(rep, sql):
 
 def template_rows(rep):
     &quot;&quot;&quot;TEMPLATES_ROW per entry of the report&#x27;s TEMPLATES list: NAME, GUID, COLUMNS (ordered column names),
-    PIVOT (list of (column, ROW|COLUMN|VALUE|FILTER[, aggregation])), optional DYNAMIC_COLUMNS (default N),
-    PIVOT_LAYOUT (T = tabular, no subtotals) and REPEAT_LABELS (Y = every row shows all its row field values),
+    PIVOT (list of (column, ROW|COLUMN|VALUE|FILTER[, aggregation of a VALUE field, or SUBTOTAL for a ROW or COLUMN field
+    that adds a subtotal line per value in the tabular layout])), optional DYNAMIC_COLUMNS (default N),
+    PIVOT_LAYOUT (T = tabular) and REPEAT_LABELS (Y = every row shows all its row field values),
     SHARED (default True: a Site sharing row, so every user of the report can pick it), DISTINCT (Y = one row per distinct
-    combination of the template&#x27;s columns) and EXCLUDED_PARAMETERS (parameters hidden and not applied when the template is chosen).
+    combination of the template&#x27;s columns), EXCLUDED_PARAMETERS (parameters hidden and not applied when the template is chosen),
+    DESCRIPTION, PARAMETER_DEFAULTS (list of (parameter, display value[, &#x27;Y&#x27; = locked: fixed for the template&#x27;s users])) and
+    WORKBOOK_XML (a file holding the workbook elements FILE_NAME ... TEMPLATE_STYLES of the template&#x27;s TEMPLATES_ROW in an
+    xxen_api.export_report(&lt;id&gt;,null,null,null,&#x27;Y&#x27;) export, taken after xxen_report.upload_excel_template registered the workbook).
     A layout on a NEW report ships inside its definition; the standalone template file is only for a shipped report.&quot;&quot;&quot;
     out = []
     for t in rep.get(&quot;TEMPLATES&quot;, []):
+        unknown = {d[0] for d in t.get(&quot;PARAMETER_DEFAULTS&quot;, [])} - {p[&quot;name&quot;] for p in rep[&quot;PARAMS&quot;]}
+        if unknown:
+            raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}/{t[&#x27;NAME&#x27;]}: parameter defaults not in PARAMS: {sorted(unknown)}&quot;)
+        defaults = &quot;&quot;.join(f&quot;\n     &lt;TEMPLATE_PARAMETER_DEFAULTS_ROW&gt;\n      &lt;PARAMETER_NAME&gt;{e(d[0])}&lt;/PARAMETER_NAME&gt;\n      &lt;DEFAULT_VALUE&gt;{e(d[1])}&lt;/DEFAULT_VALUE&gt;&quot;
+                           + (f&quot;\n      &lt;LOCKED&gt;{d[2]}&lt;/LOCKED&gt;&quot; if len(d) &gt; 2 else &quot;&quot;) + &quot;\n     &lt;/TEMPLATE_PARAMETER_DEFAULTS_ROW&gt;&quot; for d in t.get(&quot;PARAMETER_DEFAULTS&quot;, []))
+        defaults = f&quot;\n    &lt;TEMPLATE_PARAMETER_DEFAULTS&gt;{defaults}\n    &lt;/TEMPLATE_PARAMETER_DEFAULTS&gt;&quot; if defaults else &quot;&quot;
+        workbook = &quot;\n&quot; + open(t[&quot;WORKBOOK_XML&quot;], encoding=&quot;utf-8&quot;).read().strip(&quot;\n&quot;) if t.get(&quot;WORKBOOK_XML&quot;) else &quot;&quot;
         cols = &quot;\n&quot;.join(f&quot;     &lt;TEMPLATE_COLUMNS_ROW&gt;\n      &lt;DISPLAY_SEQUENCE&gt;{i}&lt;/DISPLAY_SEQUENCE&gt;\n      &lt;COLUMN_NAME&gt;{e(c)}&lt;/COLUMN_NAME&gt;\n     &lt;/TEMPLATE_COLUMNS_ROW&gt;&quot;
                          for i, c in enumerate(t[&quot;COLUMNS&quot;], 1))
         seq = collections.Counter()
@@ -340,7 +354,9 @@ def template_rows(rep):
         for row in t.get(&quot;PIVOT&quot;, []):
             col, ftype = row[0], row[1]
             seq[ftype] += 1
-            agg = f&quot;\n      &lt;AGGREGATION&gt;{row[2]}&lt;/AGGREGATION&gt;&quot; if len(row) &gt; 2 else &quot;&quot;
+            if len(row) &gt; 2 and row[2] == &quot;SUBTOTAL&quot; and (ftype not in (&quot;ROW&quot;, &quot;COLUMN&quot;) or t.get(&quot;PIVOT_LAYOUT&quot;) != &quot;T&quot;):
+                raise SystemExit(f&quot;{rep[&#x27;NAME&#x27;]}/{t[&#x27;NAME&#x27;]}: SUBTOTAL needs a ROW or COLUMN field and PIVOT_LAYOUT T: {col}&quot;)
+            agg = &quot;&quot; if len(row) &lt; 3 else &quot;\n      &lt;SUBTOTAL&gt;Y&lt;/SUBTOTAL&gt;&quot; if row[2] == &quot;SUBTOTAL&quot; else f&quot;\n      &lt;AGGREGATION&gt;{row[2]}&lt;/AGGREGATION&gt;&quot;
             piv.append(f&quot;     &lt;TEMPLATE_PIVOT_ROW&gt;\n      &lt;COLUMN_NAME&gt;{e(col)}&lt;/COLUMN_NAME&gt;\n      &lt;FIELD_TYPE&gt;{ftype}&lt;/FIELD_TYPE&gt;\n      &lt;DISPLAY_SEQUENCE&gt;{seq[ftype]}&lt;/DISPLAY_SEQUENCE&gt;{agg}\n     &lt;/TEMPLATE_PIVOT_ROW&gt;&quot;)
         missing = {r[0] for r in t.get(&quot;PIVOT&quot;, [])} - set(t[&quot;COLUMNS&quot;])
         if missing:
@@ -358,12 +374,12 @@ def template_rows(rep):
                    &quot;      &lt;LEVEL_VALUE&gt;Site&lt;/LEVEL_VALUE&gt;\n     &lt;/TEMPLATE_SHARING_ROW&gt;\n    &lt;/TEMPLATE_SHARING&gt;&quot;) if t.get(&quot;SHARED&quot;, True) else &quot;&quot;
         out.append(f&quot;&quot;&quot;   &lt;TEMPLATES_ROW&gt;
     &lt;GUID&gt;{t[&#x27;GUID&#x27;]}&lt;/GUID&gt;
-    &lt;TEMPLATE_NAME&gt;{e(t[&#x27;NAME&#x27;])}&lt;/TEMPLATE_NAME&gt;{chr(10) + &#x27;    &lt;DISTINCT_FLAG&gt;Y&lt;/DISTINCT_FLAG&gt;&#x27; if t.get(&#x27;DISTINCT&#x27;) == &#x27;Y&#x27; else &#x27;&#x27;}
+    &lt;TEMPLATE_NAME&gt;{e(t[&#x27;NAME&#x27;])}&lt;/TEMPLATE_NAME&gt;{chr(10) + &#x27;    &lt;DESCRIPTION&gt;&#x27; + e(t[&#x27;DESCRIPTION&#x27;]) + &#x27;&lt;/DESCRIPTION&gt;&#x27; if t.get(&#x27;DESCRIPTION&#x27;) else &#x27;&#x27;}{chr(10) + &#x27;    &lt;DISTINCT_FLAG&gt;Y&lt;/DISTINCT_FLAG&gt;&#x27; if t.get(&#x27;DISTINCT&#x27;) == &#x27;Y&#x27; else &#x27;&#x27;}
     &lt;DYNAMIC_COLUMNS&gt;{t.get(&#x27;DYNAMIC_COLUMNS&#x27;, &#x27;N&#x27;)}&lt;/DYNAMIC_COLUMNS&gt;
     &lt;OWNER&gt;SYSADMIN&lt;/OWNER&gt;
     &lt;TEMPLATE_COLUMNS&gt;
 {cols}
-    &lt;/TEMPLATE_COLUMNS&gt;{pivot}{sharing}
+    &lt;/TEMPLATE_COLUMNS&gt;{pivot}{defaults}{sharing}{workbook}
    &lt;/TEMPLATES_ROW&gt;&quot;&quot;&quot;)
     return out
 

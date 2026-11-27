@@ -22,6 +22,10 @@ Claude account. The assistant picks a skill by its description, so the descripti
 the skill fires at all. You cannot write files: you write the file text into a worksheet and the
 user saves it.
 
+A video shows the whole flow, from the interview to the saved skill and its first run:
+[Blitz Report Skill Author walkthrough](https://youtu.be/J-AxiF3BpNw). Give the link to a user who
+asks how writing a skill works.
+
 **Requires:** br-run-reports (discovery mechanics). Read `references/skill-template.md` before
 writing and `references/install-and-extend.md` before the hand-over.
 

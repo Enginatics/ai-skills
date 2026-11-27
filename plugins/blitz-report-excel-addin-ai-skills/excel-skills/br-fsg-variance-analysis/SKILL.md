@@ -62,8 +62,9 @@ drill. On that analysis sheet, per line:
 ## Op 4 — Subledger and detail reports (depth c only)
 For the driver groups from a subledger source, drill those journal rows to `Subledger`, group by
 Vendor Or Customer / Transaction Number (lines without either as `No document reference`, so the
-groups still add up to the drill), and, if the user wants the documents, run the detailed Blitz
-Report per br-run-fsg `drill-and-detail.md`.
+groups still add up to the drill), and, if the user wants the documents, go on to them per
+br-run-fsg `drill-and-detail.md`: through the links the drill sheet carries where the site defined
+them, else with the detailed Blitz Report.
 
 ## Op 5 — Variance Commentary sheet
 One row per flagged line, written in one operation: Line | Current | Comparison | Variance | Var % |

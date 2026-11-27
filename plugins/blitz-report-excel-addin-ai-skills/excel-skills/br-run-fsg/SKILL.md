@@ -1,6 +1,6 @@
 ---
 name: br-run-fsg
-description: Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger transactions, then to a detailed Blitz Report of those transactions. Use when the user asks for a financial statement, P&L, balance sheet, a GL or account balance for a period ("what was cash at the end of December"), or to explain, drill, trace or tie out a balance. Read-only - never writes to Oracle EBS.
+description: Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period or by account type, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger transactions, then on to the invoices, purchase orders or payments behind them. Use when the user asks for a financial statement, P&L, balance sheet, a GL or account balance for a period ("what was cash at the end of December"), or to explain, drill, trace or tie out a balance. Read-only - never writes to Oracle EBS.
 ---
 
 # Financial statements in Excel (br-run-fsg)
@@ -22,7 +22,9 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
    names; if several fit, ask.
 2. **Ledger profile.** `=br_fsg_ledger_external("<Ledger>")` - functional currency, latest open
    period, the segments in display order with the balance formula argument each goes into, and
-   the ready balance formula pattern. Segment values: `=br_fsg_values_external("<Ledger>","<Segment>","<search>")`.
+   the ready balance formula pattern. Segment values: `=br_fsg_values_external("<Ledger>","<Segment>","<search>")`;
+   where the server offers them, the account list starts with the account types (`type:R` revenue,
+   `type:E` expense...), which restrict a balance without listing accounts.
 3. **Statement sheet.** `=br_fsg_new_statement_external("<Ledger>","<Sheet name>")` - a new sheet,
    or the user's own sheet claimed as it is. Write the formula and read its return in the SAME
    operation; in the next one replace that cell with plain text and read `=_blitz_run_status`
@@ -37,8 +39,9 @@ Drilling, analysing drilled lines and running detail reports: `references/drill-
    and refresh again.
 6. **Read and answer** from the cells. Never compute a balance yourself or invent one.
 7. **Explain a number** on request: `=br_fsg_drill_external("<cell>","Journals","<Sheet name>")`
-   puts the journal lines behind it on a new sheet; drill on to the subledger and run a detailed
-   Blitz Report of those transactions per `references/drill-and-detail.md`.
+   puts the journal lines behind it on a new sheet; drill on to the subledger, and from there to the
+   documents: follow the links the drill sheet carries where the site defined them, else run a
+   detailed Blitz Report of those transactions - both per `references/drill-and-detail.md`.
 
 ## Core rules
 

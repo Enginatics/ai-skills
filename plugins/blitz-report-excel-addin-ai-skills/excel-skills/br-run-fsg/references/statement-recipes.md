@@ -47,7 +47,9 @@ period cell that holds a formula gets none. Tell the user the list is there.
 
 1. Agree the structure with the user before building: which accounts or account ranges make up each
    line (revenue, cost of sales, operating expenses...; assets, liabilities, equity). Offer what the
-   chart already has: parent values (`Parent` = Yes in the segment list) are ready-made summary lines,
+   chart already has: its account types (next recipe) split it into assets, liabilities, equity,
+   revenue and expenses without any account list, and narrow a line to one type
+   (`5000-5999;type:E`); parent values (`Parent` = Yes in the segment list) are ready-made summary lines,
    and `=br_fsg_values_external("<Ledger>","Account",,"<parent>")` lists what one rolls up. Never
    guess the account classification silently - state it, the user confirms. Built from a parent,
    the statement carries EVERY detail value it rolls up: one that fits no section goes on an
@@ -62,6 +64,20 @@ period cell that holds a formula gets none. Tell the user the list is there.
 5. A `Check` row under the bottom line: the bottom line minus the balance of the parent itself (the
    parent value in the account slot, multiplier `-1` when profit shows positive). It reads 0 when no
    account is missing; anything else is an account left off - add it, never report around it.
+
+## By account type
+
+Needs the account types in the account list (mechanics, segment value syntax). One row per type:
+the type in column B as Text (`type:R`), its name in A with `=br_segment_description("Account (3)",$B8)`,
+the balance in C with `$B8` in the account slot.
+- Income statement (`PTD` or `YTD`): `type:R` with multiplier `-1`, `type:E`, and the result as
+  `=C8-C9`.
+- Balance sheet (`YTD`): `type:A`; `type:L` and `type:O` with multiplier `-1`; the result of the year
+  `type:R;type:E` with multiplier `-1`, part of equity until the year is closed. Assets equal the
+  other three lines together.
+- A finer line keeps the type and narrows it: `4000-4199;type:R`. A range the user calls revenue
+  holds accounts of another type when `4000-4999;~type:R` does not read 0 - show that line rather
+  than leaving it out.
 
 ## Columns per period
 

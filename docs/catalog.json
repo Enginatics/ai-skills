@@ -516,7 +516,7 @@
     "title": "Financial statements in Excel",
     "type": "excel",
     "category": "Getting Started",
-    "description": "Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger transactions, then to a detailed Blitz Report of those transactions. Use when the user asks for a financial statement, P&L, balance sheet, a GL or account balance for a period (\"what was cash at the end of December\"), or to explain, drill, trace or tie out a balance. Read-only - never writes to Oracle EBS.",
+    "description": "Build, refresh, read and drill Oracle EBS financial statements in Excel with Blitz FSG through the Blitz Report add-in - income statement, balance sheet, trial balance, account balances by period or by account type, actual vs budget - and explain a number by drilling it to account balances, journal lines and subledger transactions, then on to the invoices, purchase orders or payments behind them. Use when the user asks for a financial statement, P&L, balance sheet, a GL or account balance for a period (\"what was cash at the end of December\"), or to explain, drill, trace or tie out a balance. Read-only - never writes to Oracle EBS.",
     "writes": false,
     "reports": [],
     "download": "plugins/blitz-report-excel-addin-ai-skills/zips/br-run-fsg.zip",

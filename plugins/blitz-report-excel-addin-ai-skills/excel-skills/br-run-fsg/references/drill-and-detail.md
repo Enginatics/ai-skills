@@ -59,12 +59,47 @@ at the balance cells or the drill sheet's data rows instead.
    most of the movement.
 4. Report the findings with the cells or rows they come from.
 
-## A detailed Blitz Report of the subledger transactions
+## On to the documents: invoices, purchase orders, payments, assets
 
-When the user wants the documents themselves (invoice lines, receipts, assets), run a Blitz Report
-restricted to the transaction numbers on the subledger drill sheet, with the **br-run-reports**
-skill (inspect the report's parameters first - names can differ by version and setup). Run it with
-a responsibility of that subledger (a Payables one for invoices, `br_responsibilities_external()`):
+When the user wants the documents behind drilled lines, run a Blitz Report for them with the
+**br-run-reports** skill: the report the drill sheet's own links name where it has links, otherwise
+the report of the table further down.
+
+### The drill sheet's own links
+
+A site can define, for each drill level, the Blitz Report a column leads on to - the invoice report
+from the invoice or transaction number, the purchase order report from Purchase Order, and so on. A
+moment after the drill the add-in turns the cells of such a column into links: a cell still shows
+its value, and its formula names the report and what to pass to it:
+
+`br_run_report(br_drilldown("<value>","<report>","<template>",<n>),br_environment("<environment>","<responsibility>"),br_parameters("<parameter>",<source>,"<parameter>",<source>))`
+
+1. **Find them.** Read the formulas, not the values, of the drill sheet's data rows; where you can
+   read values only, `=FORMULATEXT('<drill sheet>'!A4:AZ40)` on `blitz_` lists them (an error for a
+   cell without a formula). A link's formula contains `br_run_report(br_drilldown(`, and a column
+   holds links only in the rows that show a value. None on the sheet: read once more, as they are
+   written just after the drill, then go by the table below.
+2. **Read one link of the column you follow**: report, template (often empty), environment,
+   responsibility, the number `<n>`, and the source of every parameter:
+
+   | Source in the formula | What to pass |
+   |---|---|
+   | `"$SELF"` | the values the link cells show |
+   | a cell reference (`K4`) | the values of that column in the same rows |
+   | `"$PARAM:Ledger"`, `"$PARAM:Period"`, `"$PARAM:Currency"` | the ledger, period or currency the sheet was drilled for (its row 2 names them) |
+   | any other quoted text | that text (`<null>` clears the report's own default) |
+3. **Run the report once for all the rows you explain**:
+   `=br_run_report_external("<report>","<parameter>=<v1>,<v2>; <parameter>=<value>; DRILLDOWN_ASSIGNMENT_ID=<n>","<template>","<environment>","<responsibility>")`
+   with the distinct values of those rows. `DRILLDOWN_ASSIGNMENT_ID=<n>` goes in when `<n>` is above
+   0: the run then also takes the values the site fixed for the report's other parameters, as a
+   click on the link does. Leave it out for 0 or a negative number.
+4. A link fed from two columns (invoice number and supplier) returns every combination of the
+   values passed: keep the report rows whose combination occurs on the drill rows.
+
+### Without links: the report by subledger
+
+Inspect the report's parameters first (names can differ by version and setup), and run it with a
+responsibility of that subledger (a Payables one for invoices, `br_responsibilities_external()`):
 after statement work the session is on the statement's General Ledger responsibility, under which a
 subledger report may not be available or may see other operating units.
 
@@ -78,10 +113,12 @@ subledger report may not be available or may see other operating units.
 | Purchasing | PO Headers and Lines | PO Number |
 | Receipts, Projects, Cash Management, anything else | no exact match - explain from the subledger lines | |
 
-- Take the distinct transaction numbers of one source from the drill sheet (a `UNIQUE` formula), and
-  pass them as one comma-separated parameter value. A long list goes into a helper cell on `blitz_`
-  that the run formula references (`=br_run_report_external("AP Invoices and Lines", B2)`), because a
-  formula's text is limited. A number containing `,` or `;` cannot be passed - say so and use the
-  drill lines for it instead.
-- The report lands on its own sheet; relate its rows back to the drill (same transaction numbers)
-  and say how many of the drill's transactions it covers.
+### Either way
+
+- Take the distinct numbers of the rows from the drill sheet (a `UNIQUE` formula) and pass them as
+  one comma-separated parameter value. A long list goes into a helper cell on `blitz_` that the run
+  formula references (`=br_run_report_external("AP Invoices and Lines", B2)`), because a formula's
+  text is limited. A number containing `,` or `;` cannot be passed - say so and use the drill lines
+  for it instead.
+- The report lands on its own sheet; relate its rows back to the drill (same numbers) and say how
+  many of the drill's transactions it covers.
